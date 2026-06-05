@@ -1,11 +1,11 @@
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{0B46FD05-B985-4F81-8BA9-F5EAF7608627}</ProjectGuid>
         <ProjectVersion>20.4</ProjectVersion>
         <FrameworkType>VCL</FrameworkType>
         <MainSource>VideoMiner.dpr</MainSource>
         <Base>True</Base>
-        <Config Condition="'$(Config)'==''">Debug</Config>
+        <Config Condition="'$(Config)'==''">Release</Config>
         <Platform Condition="'$(Platform)'==''">Win64</Platform>
         <TargetedPlatforms>2</TargetedPlatforms>
         <AppType>Application</AppType>
@@ -120,6 +120,9 @@
         <DCCReference Include="Source\App\VideoMinerSettings.pas"/>
         <DCCReference Include="Source\Lib\DropAgent\DropAgent.pas"/>
         <DCCReference Include="Source\FFmpeg\FFmpegApi.pas"/>
+        <DCCReference Include="Source\FFmpeg\FFmpegFrameConvert.pas"/>
+        <DCCReference Include="Source\FFmpeg\FFmpegQsvDecode.pas"/>
+        <DCCReference Include="Source\FFmpeg\FFmpegStreamInfo.pas"/>
         <DCCReference Include="Source\Decode\FFmpegAudioConvert.pas"/>
         <DCCReference Include="Source\Decode\FFmpegAudioOpen.pas"/>
         <DCCReference Include="Source\Decode\FFmpegDecoder.pas"/>
@@ -137,8 +140,7 @@
         <DCCReference Include="Source\Decode\FFmpegDecoderSeekI420.pas"/>
         <DCCReference Include="Source\Decode\FFmpegDecoderSeekYc48.pas"/>
         <DCCReference Include="Source\Decode\FFmpegDecoderSeekYuy2.pas"/>
-        <DCCReference Include="Source\Decode\FFmpegDecoderTypes.pas"/>        <DCCReference Include="Source\FFmpeg\FFmpegFrameConvert.pas"/>
-        <DCCReference Include="Source\FFmpeg\FFmpegStreamInfo.pas"/>
+        <DCCReference Include="Source\Decode\FFmpegDecoderTypes.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
@@ -222,5 +224,3 @@
     <Import Project="$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj" Condition="Exists('$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj')"/>
     <Import Project="$(MSBuildProjectName).deployproj" Condition="Exists('$(MSBuildProjectName).deployproj')"/>
 </Project>
-
-

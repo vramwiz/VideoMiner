@@ -1,11 +1,12 @@
-program VideoMiner;
+﻿program VideoMiner;
 
 uses
-  Vcl.Forms,
+  Winapi.Windows, Winapi.Messages, System.SysUtils, Vcl.Forms,
   VideoMinerMainForm in 'Source\App\VideoMinerMainForm.pas' {VideoMinerForm},
   VideoMinerSettings in 'Source\App\VideoMinerSettings.pas',
   DropAgent in 'Source\Lib\DropAgent\DropAgent.pas',
-  FFmpegApi in 'Source\FFmpeg\FFmpegApi.pas',  FFmpegFrameConvert in 'Source\FFmpeg\FFmpegFrameConvert.pas',
+  FFmpegApi in 'Source\FFmpeg\FFmpegApi.pas',
+  FFmpegFrameConvert in 'Source\FFmpeg\FFmpegFrameConvert.pas',
   FFmpegQsvDecode in 'Source\FFmpeg\FFmpegQsvDecode.pas',
   FFmpegStreamInfo in 'Source\FFmpeg\FFmpegStreamInfo.pas',
   FFmpegAudioConvert in 'Source\Decode\FFmpegAudioConvert.pas',
@@ -29,12 +30,68 @@ uses
 
 {$R *.res}
 
+const
+  SINGLE_INSTANCE_MUTEX = 'Local\VideoMiner.SingleInstance';
+  COPYDATA_OPEN_FILE = $564D0001;
+
+function SendCommandToExistingInstance: Boolean;
+var
+  TargetWindow: HWND;
+  CopyData: TCopyDataStruct;
+  FileName: string;
+  I: Integer;
 begin
+  Result := False;
+  for I := 0 to 49 do
+  begin
+    TargetWindow := FindWindow('TVideoMinerMainForm', nil);
+    if TargetWindow <> 0 then
+      Break;
+    Sleep(100);
+  end;
+
+  if TargetWindow = 0 then
+    Exit;
+
+  if ParamCount > 0 then
+    FileName := ParamStr(1)
+  else
+    FileName := '';
+
+  FillChar(CopyData, SizeOf(CopyData), 0);
+  CopyData.dwData := COPYDATA_OPEN_FILE;
+  CopyData.cbData := (Length(FileName) + 1) * SizeOf(Char);
+  CopyData.lpData := PChar(FileName);
+
+  SendMessage(TargetWindow, WM_COPYDATA, 0, LPARAM(@CopyData));
+  Result := True;
+end;
+
+var
+  InstanceMutex: THandle;
+  AlreadyRunning: Boolean;
+
+begin
+  InstanceMutex := CreateMutex(nil, True, PChar(SINGLE_INSTANCE_MUTEX));
+  AlreadyRunning := (InstanceMutex <> 0) and (GetLastError = ERROR_ALREADY_EXISTS);
+
+  if AlreadyRunning then
+  begin
+    SendCommandToExistingInstance;
+    if InstanceMutex <> 0 then
+      CloseHandle(InstanceMutex);
+    Halt(0);
+  end;
+
   Application.Initialize;
   Application.MainFormOnTaskbar := True;
   Application.CreateForm(TVideoMinerMainForm, VideoMinerForm);
   if ParamCount > 0 then
     VideoMinerForm.OpenAndPlayFile(ParamStr(1));
-  Application.Run;
+  try
+    Application.Run;
+  finally
+    if InstanceMutex <> 0 then
+      CloseHandle(InstanceMutex);
+  end;
 end.
-

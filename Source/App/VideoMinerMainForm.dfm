@@ -6,6 +6,7 @@ object VideoMinerMainForm: TVideoMinerMainForm
   ClientWidth = 720
   Color = clBtnFace
   DoubleBuffered = True
+  KeyPreview = True
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
   Font.Height = -11
@@ -13,6 +14,7 @@ object VideoMinerMainForm: TVideoMinerMainForm
   Font.Style = []
   OnCreate = FormCreate
   OnDestroy = FormDestroy
+  OnKeyDown = FormKeyDown
   TextHeight = 13
   object LabelInfo: TLabel
     Left = 16
@@ -58,13 +60,51 @@ object VideoMinerMainForm: TVideoMinerMainForm
     TabOrder = 2
     OnClick = ButtonStopClick
   end
+  object ButtonPrevious: TButton
+    Left = 282
+    Top = 16
+    Width = 75
+    Height = 25
+    Caption = 'Previous'
+    Enabled = False
+    TabOrder = 3
+    OnClick = ButtonPreviousClick
+  end
+  object ButtonNext: TButton
+    Left = 363
+    Top = 16
+    Width = 75
+    Height = 25
+    Caption = 'Next'
+    Enabled = False
+    TabOrder = 4
+    OnClick = ButtonNextClick
+  end
+  object ButtonSkipBackward: TButton
+    Left = 444
+    Top = 16
+    Width = 75
+    Height = 25
+    Caption = '-10s'
+    TabOrder = 5
+    OnClick = ButtonSkipBackwardClick
+  end
+  object ButtonSkipForward: TButton
+    Left = 525
+    Top = 16
+    Width = 75
+    Height = 25
+    Caption = '+10s'
+    TabOrder = 6
+    OnClick = ButtonSkipForwardClick
+  end
   object TrackBarSeek: TTrackBar
     Left = 8
     Top = 504
     Width = 688
     Height = 33
     Max = 0
-    TabOrder = 3
+    TabOrder = 7
     TickStyle = tsNone
     OnChange = TrackBarSeekChange
   end
