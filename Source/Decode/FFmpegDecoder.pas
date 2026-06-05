@@ -85,6 +85,8 @@ type
     function DecodeAudioPcm16Stereo48kUntil(TargetSampleCount: Integer; var Pcm: TBytes; var SampleCount: Integer; out Finished: Boolean; out ErrorMessage: string): Boolean;
     // σπ’‹ΛY‹
     function StartAudioPlayback(out ErrorMessage: string): Boolean;
+    function QueueAudioPcm16Stereo48k(const Pcm: TBytes; out ErrorMessage: string): Boolean;
+    procedure SetAudioOutputVolume(VolumePercent: Integer);
     // σπ’\bY‹
     procedure StopAudioPlayback;
     // δΈ€ζ™‚γƒ‡γ‚³γƒΌγƒ€γ§ε‹•η”»ζƒ…ε ±γ γ‘γ‚’θª­γ‚€
@@ -204,6 +206,17 @@ begin
   SyncContextFromFields;
   Result := FFmpegDecoderAudioPlayback.StartAudioPlayback(FContext, FWaveOut,
     FAudioPlaybackActive, FAudioBuffers, ErrorMessage);
+end;
+
+function TFFmpegDecoder.QueueAudioPcm16Stereo48k(const Pcm: TBytes; out ErrorMessage: string): Boolean;
+begin
+  Result := FFmpegDecoderAudioPlayback.QueueAudioPcm16Stereo48k(FWaveOut,
+    FAudioPlaybackActive, FAudioBuffers, Pcm, ErrorMessage);
+end;
+
+procedure TFFmpegDecoder.SetAudioOutputVolume(VolumePercent: Integer);
+begin
+  FFmpegDecoderAudioPlayback.SetAudioOutputVolume(FWaveOut, VolumePercent);
 end;
 
 // σπ’\bY‹

@@ -98,13 +98,33 @@ object VideoMinerMainForm: TVideoMinerMainForm
     TabOrder = 6
     OnClick = ButtonSkipForwardClick
   end
+  object TrackBarVolume: TTrackBar
+    Left = 608
+    Top = 8
+    Width = 96
+    Height = 25
+    Max = 100
+    Position = 100
+    TabOrder = 7
+    TickStyle = tsNone
+    OnChange = TrackBarVolumeChange
+  end
+  object CheckBoxMute: TCheckBox
+    Left = 608
+    Top = 31
+    Width = 80
+    Height = 17
+    Caption = 'Mute'
+    TabOrder = 8
+    OnClick = CheckBoxMuteClick
+  end
   object TrackBarSeek: TTrackBar
     Left = 8
     Top = 504
     Width = 688
     Height = 33
     Max = 0
-    TabOrder = 7
+    TabOrder = 9
     TickStyle = tsNone
     OnChange = TrackBarSeekChange
   end

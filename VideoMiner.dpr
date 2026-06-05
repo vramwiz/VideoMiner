@@ -2,6 +2,9 @@
 
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, Vcl.Forms,
+  VideoMinerAudioPlayback in 'Source\App\VideoMinerAudioPlayback.pas',
+  VideoMinerMediaList in 'Source\App\VideoMinerMediaList.pas',
+  VideoMinerVideoView in 'Source\App\VideoMinerVideoView.pas',
   VideoMinerMainForm in 'Source\App\VideoMinerMainForm.pas' {VideoMinerForm},
   VideoMinerSettings in 'Source\App\VideoMinerSettings.pas',
   DropAgent in 'Source\Lib\DropAgent\DropAgent.pas',

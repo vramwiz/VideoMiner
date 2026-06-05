@@ -4,8 +4,10 @@ interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
-  Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
-  Vcl.ExtCtrls, Vcl.ComCtrls, ActiveX, DropAgent, FFmpegDecoder, FFmpegDecoderTypes;
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
+  Vcl.ExtCtrls, Vcl.ComCtrls, ActiveX, DropAgent, FFmpegDecoder,
+  FFmpegDecoderTypes, VideoMinerAudioPlayback, VideoMinerMediaList,
+  VideoMinerVideoView;
 
 const
   WM_VM_OPEN_PENDING = WM_APP + 1;
@@ -19,6 +21,8 @@ type
     ButtonNext: TButton;
     ButtonSkipBackward: TButton;
     ButtonSkipForward: TButton;
+    TrackBarVolume: TTrackBar;
+    CheckBoxMute: TCheckBox;
     ImagePreview: TImage; // デコードしたフレームを表示する画像領域
     TrackBarSeek: TTrackBar; // 動画位置をミリ秒単位で扱うシークバー
     OpenDialogVideo: TOpenDialog; // 読み込む動画ファイルを選択するダイアログ
@@ -42,9 +46,14 @@ type
     procedure TimerPlaybackTimer(Sender: TObject);
     // シークバー操作に合わせて指定位置のフレームを表示する
     procedure TrackBarSeekChange(Sender: TObject);
+    procedure TrackBarVolumeChange(Sender: TObject);
+    procedure CheckBoxMuteClick(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
   private
     FDecoder: TFFmpegDecoder; // 開いた動画を保持するFFmpegデコーダ
+    FAudioPlayback: TVideoMinerAudioPlayback;
+    FMediaList: TVideoMinerMediaList;
+    FVideoView: TVideoMinerVideoView;
     FVideoFile: string; // 現在開いている動画ファイル名
     FVideoInfo: TVideoInfo; // 現在開いている動画の基本情報
     FUpdatingSeek: Boolean; // コードからのシークバー更新中かどうか
@@ -53,14 +62,10 @@ type
     FSeekGuardRemaining: Integer;
     FDropAgent: TDropAgent;
     FOleInitialized: Boolean;
-    FMediaFiles: TArray<string>;
-    FCurrentIndex: Integer;
     FPendingOpenFiles: TStringList;
     FProcessingOpenQueue: Boolean;
     function LoadVideoFile(const FileName: string; AutoPlay: Boolean): Boolean;
     procedure DropFiles(Sender: TObject; Control: TWinControl; const FileNames: TArray<string>);
-    procedure BuildMediaListForFile(const FileName: string);
-    function IsMediaFile(const FileName: string): Boolean;
     procedure UpdateNavigationButtons;
     procedure NavigateBy(Delta: Integer);
     procedure SeekToMs(PositionMs: Integer);
@@ -94,8 +99,12 @@ procedure TVideoMinerMainForm.FormCreate(Sender: TObject);
 begin
   FOleInitialized := OleInitialize(nil) >= 0;
   FDecoder := TFFmpegDecoder.Create;
+  FAudioPlayback := TVideoMinerAudioPlayback.Create;
+  FMediaList := TVideoMinerMediaList.Create;
+  FVideoView := TVideoMinerVideoView.Create(ImagePreview);
   FPendingOpenFiles := TStringList.Create;
-  FCurrentIndex := -1;
+  FAudioPlayback.VolumePercent := TrackBarVolume.Position;
+  FAudioPlayback.Muted := CheckBoxMute.Checked;
   FDropAgent := TDropAgent.Create;
   if FOleInitialized then
   begin
@@ -110,8 +119,12 @@ end;
 procedure TVideoMinerMainForm.FormDestroy(Sender: TObject);
 begin
   TimerPlayback.Enabled := False;
+  FAudioPlayback.Stop;
   FDropAgent.Free;
   FPendingOpenFiles.Free;
+  FVideoView.Free;
+  FMediaList.Free;
+  FAudioPlayback.Free;
   FDecoder.Free;
   if FOleInitialized then
     OleUninitialize;
@@ -120,23 +133,15 @@ end;
 // 指定ミリ秒位置のフレームを表示する
 procedure TVideoMinerMainForm.ShowFrameAtMs(const PositionMs: Integer);
 var
-  Bitmap: TBitmap;
   ErrorMessage: string;
 begin
   if (FVideoFile = '') or (FDecoder = nil) then
     Exit;
 
-  Bitmap := TBitmap.Create;
-  try
-    if not FDecoder.DecodeFrameToBitmap(PositionMs, Bitmap, ErrorMessage) then
-    begin
-      LabelInfo.Caption := 'Failed to decode frame: ' + ErrorMessage;
-      Exit;
-    end;
-
-    ImagePreview.Picture.Bitmap.Assign(Bitmap);
-  finally
-    Bitmap.Free;
+  if not FVideoView.ShowFrameAt(FDecoder, PositionMs, ErrorMessage) then
+  begin
+    LabelInfo.Caption := 'Failed to decode frame: ' + ErrorMessage;
+    Exit;
   end;
 
   UpdateInfoLabel;
@@ -165,7 +170,7 @@ begin
     AudioText := 'audio: none';
 
   LabelInfo.Caption := Format('%s  /  %d of %d  /  %dx%d  /  %.3f sec  /  %.3f fps'#13#10'%s',
-    [ExtractFileName(FVideoFile), FCurrentIndex + 1, Length(FMediaFiles),
+    [ExtractFileName(FVideoFile), FMediaList.CurrentIndex + 1, FMediaList.Count,
      FVideoInfo.Width, FVideoInfo.Height, FVideoInfo.DurationSec, FVideoInfo.Fps, AudioText]);
 end;
 
@@ -189,10 +194,10 @@ begin
   end;
 
   TimerPlayback.Enabled := False;
-  FDecoder.StopAudioPlayback;
+  FAudioPlayback.Stop;
   FSeeking := False;
   FSeekGuardRemaining := 0;
-  ImagePreview.Picture.Assign(nil);
+  FVideoView.Clear;
 
   FUpdatingSeek := True;
   try
@@ -205,17 +210,17 @@ begin
   if not FDecoder.Open(FileName, FVideoInfo, ErrorMessage) then
   begin
     FVideoFile := '';
-    FCurrentIndex := -1;
-    SetLength(FMediaFiles, 0);
+    FMediaList.Clear;
     Caption := 'VideoMiner';
     UpdateNavigationButtons;
     LabelInfo.Caption := 'Failed to open video: ' + ErrorMessage;
     Exit;
   end;
 
-  BuildMediaListForFile(FileName);
+  FMediaList.BuildForFile(FileName);
   FVideoFile := FileName;
-  Caption := Format('%s (%d/%d)', [ExtractFileName(FVideoFile), FCurrentIndex + 1, Length(FMediaFiles)]);
+  Caption := Format('%s (%d/%d)', [ExtractFileName(FVideoFile),
+    FMediaList.CurrentIndex + 1, FMediaList.Count]);
 
   FUpdatingSeek := True;
   try
@@ -271,7 +276,8 @@ begin
     ShowFrameAtMs(0);
   end;
 
-  if FVideoInfo.Audio.Present and not FDecoder.StartAudioPlayback(ErrorMessage) then
+  if not FAudioPlayback.StartAt(FVideoFile, FVideoInfo, TrackBarSeek.Position,
+    ErrorMessage) then
   begin
     LabelInfo.Caption := 'Failed to start audio playback: ' + ErrorMessage;
     Exit;
@@ -283,14 +289,13 @@ end;
 procedure TVideoMinerMainForm.ButtonStopClick(Sender: TObject);
 begin
   TimerPlayback.Enabled := False;
-  FDecoder.StopAudioPlayback;
+  FAudioPlayback.Stop;
   UpdateInfoLabel;
 end;
 
 // 再生中に次フレームを順方向デコードする
 procedure TVideoMinerMainForm.TimerPlaybackTimer(Sender: TObject);
 var
-  Bitmap: TBitmap;
   ErrorMessage: string;
   PositionMs: Integer;
 begin
@@ -303,57 +308,53 @@ begin
     Exit;
   end;
 
-  Bitmap := TBitmap.Create;
-  try
-    if not FDecoder.DecodeNextFrameToBitmap(Bitmap, PositionMs, ErrorMessage) then
+  if not FVideoView.ShowNextFrame(FDecoder, PositionMs, ErrorMessage) then
+  begin
+    TimerPlayback.Enabled := False;
+    FAudioPlayback.Stop;
+    if ErrorMessage <> 'End of stream.' then
+      LabelInfo.Caption := 'Failed to decode next frame: ' + ErrorMessage;
+    Exit;
+  end;
+
+  if (FSeekGuardRemaining > 0) and (PositionMs >= 0) then
+  begin
+    Dec(FSeekGuardRemaining);
+    if Abs(PositionMs - FSeekGuardTargetMs) > 1500 then
     begin
-      TimerPlayback.Enabled := False;
-      FDecoder.StopAudioPlayback;
-      if ErrorMessage <> 'End of stream.' then
-        LabelInfo.Caption := 'Failed to decode next frame: ' + ErrorMessage;
+      FSeeking := True;
+      try
+        FUpdatingSeek := True;
+        try
+          TrackBarSeek.Position := FSeekGuardTargetMs;
+        finally
+          FUpdatingSeek := False;
+        end;
+        ShowFrameAtMs(FSeekGuardTargetMs);
+      finally
+        FSeeking := False;
+      end;
       Exit;
     end;
+    FSeekGuardRemaining := 0;
+  end;
 
-    if (FSeekGuardRemaining > 0) and (PositionMs >= 0) then
-    begin
-      Dec(FSeekGuardRemaining);
-      if Abs(PositionMs - FSeekGuardTargetMs) > 1500 then
-      begin
-        FSeeking := True;
-        try
-          FUpdatingSeek := True;
-          try
-            TrackBarSeek.Position := FSeekGuardTargetMs;
-          finally
-            FUpdatingSeek := False;
-          end;
-          ShowFrameAtMs(FSeekGuardTargetMs);
-        finally
-          FSeeking := False;
-        end;
-        Exit;
-      end;
-      FSeekGuardRemaining := 0;
+  if PositionMs >= 0 then
+  begin
+    FUpdatingSeek := True;
+    try
+      if PositionMs > TrackBarSeek.Max then
+        TrackBarSeek.Position := TrackBarSeek.Max
+      else
+        TrackBarSeek.Position := PositionMs;
+    finally
+      FUpdatingSeek := False;
     end;
-
-    ImagePreview.Picture.Bitmap.Assign(Bitmap);
-    if PositionMs >= 0 then
-    begin
-      FUpdatingSeek := True;
-      try
-        if PositionMs > TrackBarSeek.Max then
-          TrackBarSeek.Position := TrackBarSeek.Max
-        else
-          TrackBarSeek.Position := PositionMs;
-      finally
-        FUpdatingSeek := False;
-      end;
-    end;
-  finally
-    Bitmap.Free;
   end;
 
   UpdateInfoLabel;
+  if not FAudioPlayback.Pump(ErrorMessage) then
+    LabelInfo.Caption := 'Failed to play audio: ' + ErrorMessage;
 end;
 // シークバー操作に合わせて指定位置のフレームを表示する
 procedure TVideoMinerMainForm.TrackBarSeekChange(Sender: TObject);
@@ -362,6 +363,16 @@ begin
     Exit;
 
   ShowFrameAtMs(TrackBarSeek.Position);
+end;
+
+procedure TVideoMinerMainForm.TrackBarVolumeChange(Sender: TObject);
+begin
+  FAudioPlayback.VolumePercent := TrackBarVolume.Position;
+end;
+
+procedure TVideoMinerMainForm.CheckBoxMuteClick(Sender: TObject);
+begin
+  FAudioPlayback.Muted := CheckBoxMute.Checked;
 end;
 
 procedure TVideoMinerMainForm.ButtonPreviousClick(Sender: TObject);
@@ -375,81 +386,24 @@ begin
 end;
 
 
-function TVideoMinerMainForm.IsMediaFile(const FileName: string): Boolean;
-var
-  Ext: string;
-begin
-  Ext := LowerCase(ExtractFileExt(FileName));
-  Result :=
-    (Ext = '.mp4') or (Ext = '.mov') or (Ext = '.mkv') or
-    (Ext = '.avi') or (Ext = '.wmv') or (Ext = '.m4v') or
-    (Ext = '.webm') or (Ext = '.mpg') or (Ext = '.mpeg') or
-    (Ext = '.ts') or (Ext = '.m2ts');
-end;
-
-procedure TVideoMinerMainForm.BuildMediaListForFile(const FileName: string);
-var
-  Folder: string;
-  SearchRec: TSearchRec;
-  Files: TStringList;
-  I: Integer;
-  Candidate: string;
-begin
-  Folder := IncludeTrailingPathDelimiter(ExtractFilePath(FileName));
-  Files := TStringList.Create;
-  try
-    Files.CaseSensitive := False;
-    Files.Sorted := True;
-    Files.Duplicates := dupIgnore;
-
-    if FindFirst(Folder + '*.*', faAnyFile, SearchRec) = 0 then
-    try
-      repeat
-        if (SearchRec.Attr and faDirectory) = 0 then
-        begin
-          Candidate := Folder + SearchRec.Name;
-          if IsMediaFile(Candidate) then
-            Files.Add(Candidate);
-        end;
-      until FindNext(SearchRec) <> 0;
-    finally
-      FindClose(SearchRec);
-    end;
-
-    if Files.IndexOf(FileName) < 0 then
-      Files.Add(FileName);
-
-    SetLength(FMediaFiles, Files.Count);
-    for I := 0 to Files.Count - 1 do
-      FMediaFiles[I] := Files[I];
-
-    FCurrentIndex := Files.IndexOf(FileName);
-  finally
-    Files.Free;
-  end;
-end;
-
 procedure TVideoMinerMainForm.UpdateNavigationButtons;
 begin
-  ButtonPrevious.Enabled := (FCurrentIndex > 0) and (FCurrentIndex < Length(FMediaFiles));
-  ButtonNext.Enabled := (FCurrentIndex >= 0) and (FCurrentIndex < Length(FMediaFiles) - 1);
+  ButtonPrevious.Enabled := FMediaList.CanNavigate(-1);
+  ButtonNext.Enabled := FMediaList.CanNavigate(1);
 end;
 
 procedure TVideoMinerMainForm.NavigateBy(Delta: Integer);
 var
-  NewIndex: Integer;
+  FileName: string;
 begin
-  if FCurrentIndex < 0 then
-    Exit;
-
-  NewIndex := FCurrentIndex + Delta;
-  if (NewIndex < 0) or (NewIndex >= Length(FMediaFiles)) then
+  FileName := FMediaList.NavigateFile(Delta);
+  if FileName = '' then
   begin
     UpdateNavigationButtons;
     Exit;
   end;
 
-  LoadVideoFile(FMediaFiles[NewIndex], True);
+  LoadVideoFile(FileName, True);
 end;
 
 procedure TVideoMinerMainForm.SeekToMs(PositionMs: Integer);
@@ -462,7 +416,7 @@ begin
 
   WasPlaying := TimerPlayback.Enabled;
   TimerPlayback.Enabled := False;
-  FDecoder.StopAudioPlayback;
+  FAudioPlayback.Stop;
 
   TargetMs := PositionMs;
   if TargetMs < 0 then

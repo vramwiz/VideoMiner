@@ -3,7 +3,7 @@
 interface
 
 uses
-  Winapi.MMSystem, System.Generics.Collections, System.SysUtils,
+  Winapi.Windows, Winapi.MMSystem, System.Generics.Collections, System.SysUtils,
   FFmpegApi, FFmpegDecoderContext, FFmpegDecoderTypes;
 
 function StartAudioPlayback(
@@ -20,7 +20,59 @@ procedure StopAudioPlayback(
   AudioBuffers: TList<PAudioWaveBuffer>
 );
 
+function QueueAudioPcm16Stereo48k(
+  WaveOut: HWAVEOUT;
+  AudioPlaybackActive: Boolean;
+  AudioBuffers: TList<PAudioWaveBuffer>;
+  const Pcm: TBytes;
+  out ErrorMessage: string
+): Boolean;
+
+procedure SetAudioOutputVolume(WaveOut: HWAVEOUT; VolumePercent: Integer);
+
 implementation
+
+procedure SetAudioOutputVolume(WaveOut: HWAVEOUT; VolumePercent: Integer);
+var
+  Volume: DWORD;
+  ChannelVolume: DWORD;
+begin
+  if WaveOut = 0 then
+    Exit;
+
+  if VolumePercent < 0 then
+    VolumePercent := 0
+  else if VolumePercent > 100 then
+    VolumePercent := 100;
+
+  ChannelVolume := DWORD(Round($FFFF * VolumePercent / 100));
+  Volume := ChannelVolume or (ChannelVolume shl 16);
+  waveOutSetVolume(WaveOut, Volume);
+end;
+
+procedure CleanupDoneBuffers(WaveOut: HWAVEOUT; AudioBuffers: TList<PAudioWaveBuffer>);
+var
+  I: Integer;
+  Buffer: PAudioWaveBuffer;
+begin
+  if (WaveOut = 0) or (AudioBuffers = nil) then
+    Exit;
+
+  I := AudioBuffers.Count - 1;
+  while I >= 0 do
+  begin
+    Buffer := AudioBuffers[I];
+    if (Buffer <> nil) and ((Buffer.Header.dwFlags and WHDR_DONE) <> 0) then
+    begin
+      waveOutUnprepareHeader(WaveOut, @Buffer.Header, SizeOf(Buffer.Header));
+      if Buffer.Data <> nil then
+        FreeMem(Buffer.Data);
+      Dispose(Buffer);
+      AudioBuffers.Delete(I);
+    end;
+    Dec(I);
+  end;
+end;
 
 function StartAudioPlayback(
   Context: TFFmpegDecoderContext;
@@ -74,6 +126,79 @@ begin
   Result := True;
 end;
 
+function QueueAudioPcm16Stereo48k(
+  WaveOut: HWAVEOUT;
+  AudioPlaybackActive: Boolean;
+  AudioBuffers: TList<PAudioWaveBuffer>;
+  const Pcm: TBytes;
+  out ErrorMessage: string
+): Boolean;
+var
+  Buffer: PAudioWaveBuffer;
+  Ret: MMRESULT;
+begin
+  ErrorMessage := '';
+  Result := False;
+
+  CleanupDoneBuffers(WaveOut, AudioBuffers);
+
+  if Length(Pcm) = 0 then
+  begin
+    Result := True;
+    Exit;
+  end;
+
+  if (WaveOut = 0) or (not AudioPlaybackActive) or (AudioBuffers = nil) then
+  begin
+    ErrorMessage := 'Audio playback is not active.';
+    Exit;
+  end;
+
+  New(Buffer);
+  FillChar(Buffer^, SizeOf(Buffer^), 0);
+  try
+    Buffer.Size := Length(Pcm);
+    GetMem(Buffer.Data, Buffer.Size);
+    Move(Pcm[0], Buffer.Data^, Buffer.Size);
+
+    Buffer.Header.lpData := Buffer.Data;
+    Buffer.Header.dwBufferLength := Buffer.Size;
+
+    Ret := waveOutPrepareHeader(WaveOut, @Buffer.Header, SizeOf(Buffer.Header));
+    if Ret <> MMSYSERR_NOERROR then
+    begin
+      ErrorMessage := Format('waveOutPrepareHeader failed: %d', [Ret]);
+      FreeMem(Buffer.Data);
+      Dispose(Buffer);
+      Exit;
+    end;
+
+    Ret := waveOutWrite(WaveOut, @Buffer.Header, SizeOf(Buffer.Header));
+    if Ret <> MMSYSERR_NOERROR then
+    begin
+      waveOutUnprepareHeader(WaveOut, @Buffer.Header, SizeOf(Buffer.Header));
+      ErrorMessage := Format('waveOutWrite failed: %d', [Ret]);
+      FreeMem(Buffer.Data);
+      Dispose(Buffer);
+      Exit;
+    end;
+
+    AudioBuffers.Add(Buffer);
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      if Buffer <> nil then
+      begin
+        if Buffer.Data <> nil then
+          FreeMem(Buffer.Data);
+        Dispose(Buffer);
+      end;
+      ErrorMessage := E.ClassName + ': ' + E.Message;
+    end;
+  end;
+end;
+
 procedure StopAudioPlayback(
   var WaveOut: HWAVEOUT;
   var AudioPlaybackActive: Boolean;
@@ -83,6 +208,9 @@ var
   Buffer: PAudioWaveBuffer;
 begin
   AudioPlaybackActive := False;
+
+  if WaveOut <> 0 then
+    SetAudioOutputVolume(WaveOut, 0);
 
   if WaveOut <> 0 then
     waveOutReset(WaveOut);

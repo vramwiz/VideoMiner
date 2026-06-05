@@ -117,6 +117,9 @@
             <Form>VideoMinerForm</Form>
             <FormType>dfm</FormType>
         </DCCReference>
+        <DCCReference Include="Source\App\VideoMinerAudioPlayback.pas"/>
+        <DCCReference Include="Source\App\VideoMinerMediaList.pas"/>
+        <DCCReference Include="Source\App\VideoMinerVideoView.pas"/>
         <DCCReference Include="Source\App\VideoMinerSettings.pas"/>
         <DCCReference Include="Source\Lib\DropAgent\DropAgent.pas"/>
         <DCCReference Include="Source\FFmpeg\FFmpegApi.pas"/>
