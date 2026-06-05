@@ -59,6 +59,12 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
 D:\DelphiProg\test\VideoMiner\Win64\Debug\VideoMiner.exe
 ```
 
+## FFmpeg DLL について
+
+開発時は FFmpeg の DLL を `Win64\Debug` や `Win64\Release` に配置して動作確認します。
+
+ただし、このリポジトリには FFmpeg の DLL や配布バイナリを同梱しません。必要な DLL は利用者が別途用意する方針です。
+
 ## メモ
 
 詳細な作業メモや今後の設計方針は `note.md` に記載しています。
