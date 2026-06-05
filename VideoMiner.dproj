@@ -1,4 +1,4 @@
-﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{0B46FD05-B985-4F81-8BA9-F5EAF7608627}</ProjectGuid>
         <ProjectVersion>20.4</ProjectVersion>
@@ -117,6 +117,8 @@
             <Form>VideoMinerForm</Form>
             <FormType>dfm</FormType>
         </DCCReference>
+        <DCCReference Include="Source\App\VideoMinerSettings.pas"/>
+        <DCCReference Include="Source\Lib\DropAgent\DropAgent.pas"/>
         <DCCReference Include="Source\FFmpeg\FFmpegApi.pas"/>
         <DCCReference Include="Source\Decode\FFmpegAudioConvert.pas"/>
         <DCCReference Include="Source\Decode\FFmpegAudioOpen.pas"/>
@@ -135,23 +137,8 @@
         <DCCReference Include="Source\Decode\FFmpegDecoderSeekI420.pas"/>
         <DCCReference Include="Source\Decode\FFmpegDecoderSeekYc48.pas"/>
         <DCCReference Include="Source\Decode\FFmpegDecoderSeekYuy2.pas"/>
-        <DCCReference Include="Source\Decode\FFmpegDecoderTypes.pas"/>
-        <DCCReference Include="Source\FFmpeg\FFmpegDecodeStats.pas"/>
-        <DCCReference Include="Source\FFmpeg\FFmpegFrameConvert.pas"/>
-        <DCCReference Include="Source\Encode\FFmpegOutputApiTypes.pas"/>
-        <DCCReference Include="Source\Encode\FFmpegOutputConfig.pas"/>
-        <DCCReference Include="Source\Encode\FFmpegOutputEncoder.pas"/>
-        <DCCReference Include="Source\Encode\FFmpegOutputPerfLog.pas"/>
-        <DCCReference Include="Source\Encode\FFmpegOutputTest.pas"/>
-        <DCCReference Include="Source\Encode\FFmpegOutputSettingsDialog.pas"/>
-        <DCCReference Include="Source\Encode\FFmpegOutputSettingsStorage.pas"/>
-        <DCCReference Include="Source\Encode\FFmpegOutputVideoInput.pas"/>
+        <DCCReference Include="Source\Decode\FFmpegDecoderTypes.pas"/>        <DCCReference Include="Source\FFmpeg\FFmpegFrameConvert.pas"/>
         <DCCReference Include="Source\FFmpeg\FFmpegStreamInfo.pas"/>
-        <DCCReference Include="Source\PluginInput\PluginAudioInputReader.pas"/>
-        <DCCReference Include="Source\PluginInput\PluginInputBase.pas"/>
-        <DCCReference Include="Source\PluginInput\PluginInputSettings.pas"/>
-        <DCCReference Include="Source\AviUtl\AviUtl2InputTypes.pas"/>
-        <DCCReference Include="Source\AviUtl\AviUtl2OutputTypes.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

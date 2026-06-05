@@ -16,39 +16,8 @@ function DecodeFrameToI420(
 implementation
 
 uses
-  System.Diagnostics, System.SysUtils, Winapi.Windows,
-  FFmpegApi, FFmpegDecodeStats, FFmpegFrameConvert, FFmpegStreamInfo;
+  System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegStreamInfo;
 
-const
-{$IFDEF DEBUG}
-  DECODE_TRACE_ENABLED = True;
-{$ELSE}
-  DECODE_TRACE_ENABLED = False;
-{$ENDIF}
-
-procedure DecodeTrace(const Msg: string);
-var
-  F: TextFile;
-  LogFileName: string;
-  Line: string;
-begin
-  if not DECODE_TRACE_ENABLED then
-    Exit;
-
-  Line := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) + ' [FFmpegDecoder] ' + Msg;
-  OutputDebugString(PChar(Line));
-  LogFileName := IncludeTrailingPathDelimiter(GetEnvironmentVariable('TEMP')) + 'VW_Media_Input_decode.log';
-  AssignFile(F, LogFileName);
-  try
-    if FileExists(LogFileName) then
-      Append(F)
-    else
-      Rewrite(F);
-    Writeln(F, Line);
-  finally
-    CloseFile(F);
-  end;
-end;
 
 function DecodeFrameToI420(
   Context: TFFmpegDecoderContext;
@@ -65,13 +34,6 @@ var
   Stream: PAVStream;
   Ret: Integer;
   TargetTs: Int64;
-{$IFDEF DEBUG}
-  Stopwatch: TStopwatch;
-  TotalStopwatch: TStopwatch;
-  ReadPacketCount: Integer;
-  VideoPacketCount: Integer;
-  DecodedFrameCount: Integer;
-{$ENDIF}
 begin
   ErrorMessage := '';
   Result := False;
@@ -95,18 +57,6 @@ begin
   end;
 
   try
-{$IFDEF DEBUG}
-    if DECODE_TRACE_ENABLED then
-    begin
-      ReadPacketCount := 0;
-      VideoPacketCount := 0;
-      DecodedFrameCount := 0;
-    end;
-{$ENDIF}
-{$IFDEF DEBUG}
-    if DECODE_TRACE_ENABLED then
-      TotalStopwatch := TStopwatch.StartNew;
-{$ENDIF}
     TargetTs := StreamTimestampFromMs(Stream, PositionMs);
     Ret := TFFmpegApi.av_seek_frame(FormatContext, Context.StreamIndex, TargetTs, AVSEEK_FLAG_BACKWARD);
     if Ret < 0 then
@@ -120,56 +70,25 @@ begin
 
     while TFFmpegApi.av_read_frame(FormatContext, Packet) >= 0 do
     begin
-{$IFDEF DEBUG}
-      if DECODE_TRACE_ENABLED then
-        Inc(ReadPacketCount);
-{$ENDIF}
       try
         if Packet.stream_index = Context.StreamIndex then
         begin
-{$IFDEF DEBUG}
-          if DECODE_TRACE_ENABLED then
-            Inc(VideoPacketCount);
-{$ENDIF}
         end;
 
         if Packet.stream_index <> Context.StreamIndex then
           Continue;
 
-{$IFDEF DEBUG}
-        if DECODE_TRACE_ENABLED then
-          Stopwatch := TStopwatch.StartNew;
-{$ENDIF}
         Ret := TFFmpegApi.avcodec_send_packet(CodecContext, Packet);
         if Ret < 0 then
           Continue;
 
         while TFFmpegApi.avcodec_receive_frame(CodecContext, Frame) = 0 do
         begin
-{$IFDEF DEBUG}
-          if DECODE_TRACE_ENABLED then
-            Inc(DecodedFrameCount);
-{$ENDIF}
           if (Frame.pts = AV_NOPTS_VALUE) or (Frame.pts >= TargetTs) then
           begin
             CopyFrameToI420Buffer(Frame, Buffer, BufferStride,
               Context.DirectSwsContext, Context.DirectSwsSrcWidth, Context.DirectSwsSrcHeight,
               Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat);
-{$IFDEF DEBUG}
-            if DECODE_TRACE_ENABLED then
-            begin
-              Stopwatch.Stop;
-              TotalStopwatch.Stop;
-              FFmpegDecodeStats.UpdateVideoLoadStats(Context.DecodeStats, Stopwatch.Elapsed.TotalMilliseconds);
-            end;
-{$ENDIF}
-{$IFDEF DEBUG}
-            if DECODE_TRACE_ENABLED then
-              DecodeTrace(Format('seek_decode_i420 file="%s" pos_ms=%d target_ts=%d frame_pts=%d read_packets=%d video_packets=%d decoded_frames=%d src_fmt=%d dst_fmt=%d elapsed_ms=%.3f convert_ms=%.3f',
-                [Context.FileName, PositionMs, TargetTs, Frame.pts, ReadPacketCount, VideoPacketCount, DecodedFrameCount,
-                 Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat,
-                 TotalStopwatch.Elapsed.TotalMilliseconds, Stopwatch.Elapsed.TotalMilliseconds]));
-{$ENDIF}
             Result := True;
             Exit;
           end;
@@ -179,16 +98,6 @@ begin
       end;
     end;
 
-{$IFDEF DEBUG}
-    if DECODE_TRACE_ENABLED then
-      TotalStopwatch.Stop;
-{$ENDIF}
-{$IFDEF DEBUG}
-    if DECODE_TRACE_ENABLED then
-      DecodeTrace(Format('seek_decode_i420_failed file="%s" pos_ms=%d target_ts=%d read_packets=%d video_packets=%d decoded_frames=%d elapsed_ms=%.3f',
-        [Context.FileName, PositionMs, TargetTs, ReadPacketCount, VideoPacketCount, DecodedFrameCount,
-         TotalStopwatch.Elapsed.TotalMilliseconds]));
-{$ENDIF}
     ErrorMessage := 'Frame could not be decoded.';
   except
     on E: Exception do

@@ -1,55 +1,51 @@
-unit VideoMinerMainForm;
+ï»¿unit VideoMinerMainForm;
 
 interface
 
 uses
   Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
-  Vcl.ExtCtrls, Vcl.ComCtrls, FFmpegDecoder, FFmpegDecoderTypes,
-  FFmpegOutputConfig, FFmpegOutputTest, FFmpegOutputSettingsDialog;
+  Vcl.ExtCtrls, Vcl.ComCtrls, ActiveX, DropAgent, FFmpegDecoder, FFmpegDecoderTypes;
 
 type
   TVideoMinerMainForm = class(TForm)
-    ButtonOpen: TButton; // “®‰æƒtƒ@ƒCƒ‹‚ğŠJ‚­ƒ{ƒ^ƒ“
-    ButtonPlay: TButton; // ‡•ûŒüƒfƒR[ƒhÄ¶‚ğŠJn‚·‚éƒ{ƒ^ƒ“
-    ButtonStop: TButton; // Ä¶ƒ^ƒCƒ}[‚ğ’â~‚·‚éƒ{ƒ^ƒ“
-    ImagePreview: TImage; // ƒfƒR[ƒh‚µ‚½ƒtƒŒ[ƒ€‚ğ•\¦‚·‚é‰æ‘œ—Ìˆæ
-    TrackBarSeek: TTrackBar; // “®‰æˆÊ’u‚ğƒ~ƒŠ•b’PˆÊ‚Åˆµ‚¤ƒV[ƒNƒo[
-    OpenDialogVideo: TOpenDialog; // “Ç‚İ‚Ş“®‰æƒtƒ@ƒCƒ‹‚ğ‘I‘ğ‚·‚éƒ_ƒCƒAƒƒO
-    LabelInfo: TLabel; // “Ç‚İ‚ñ‚¾“®‰æî•ñ‚âƒGƒ‰[‚ğ•\¦‚·‚éƒ‰ƒxƒ‹
-    TimerPlayback: TTimer; // Ä¶’†‚ÉŸƒtƒŒ[ƒ€‚ğ“Ç‚Ş‚½‚ß‚Ìƒ^ƒCƒ}[
-    ButtonOutput: TButton; // “Ç‚İ‚İÏ‚İ“®‰æ‚ğo—Í‚·‚éƒeƒXƒgƒ{ƒ^ƒ“
-    // ƒtƒH[ƒ€¶¬‚ÉƒfƒR[ƒ_‚ğ—pˆÓ‚·‚é
+    ButtonOpen: TButton; // å‹•ç”»ãƒ•ã‚¡ã‚¤ãƒ«ã‚’é–‹ããƒœã‚¿ãƒ³
+    ButtonPlay: TButton; // é †æ–¹å‘ãƒ‡ã‚³ãƒ¼ãƒ‰å†ç”Ÿã‚’é–‹å§‹ã™ã‚‹ãƒœã‚¿ãƒ³
+    ButtonStop: TButton; // å†ç”Ÿã‚¿ã‚¤ãƒãƒ¼ã‚’åœæ­¢ã™ã‚‹ãƒœã‚¿ãƒ³
+    ImagePreview: TImage; // ãƒ‡ã‚³ãƒ¼ãƒ‰ã—ãŸãƒ•ãƒ¬ãƒ¼ãƒ ã‚’è¡¨ç¤ºã™ã‚‹ç”»åƒé ˜åŸŸ
+    TrackBarSeek: TTrackBar; // å‹•ç”»ä½ç½®ã‚’ãƒŸãƒªç§’å˜ä½ã§æ‰±ã†ã‚·ãƒ¼ã‚¯ãƒãƒ¼
+    OpenDialogVideo: TOpenDialog; // èª­ã¿è¾¼ã‚€å‹•ç”»ãƒ•ã‚¡ã‚¤ãƒ«ã‚’é¸æŠã™ã‚‹ãƒ€ã‚¤ã‚¢ãƒ­ã‚°
+    LabelInfo: TLabel; // èª­ã¿è¾¼ã‚“ã å‹•ç”»æƒ…å ±ã‚„ã‚¨ãƒ©ãƒ¼ã‚’è¡¨ç¤ºã™ã‚‹ãƒ©ãƒ™ãƒ«
+    TimerPlayback: TTimer; // å†ç”Ÿä¸­ã«æ¬¡ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’èª­ã‚€ãŸã‚ã®ã‚¿ã‚¤ãƒãƒ¼
+    // ãƒ•ã‚©ãƒ¼ãƒ ç”Ÿæˆæ™‚ã«ãƒ‡ã‚³ãƒ¼ãƒ€ã‚’ç”¨æ„ã™ã‚‹
     procedure FormCreate(Sender: TObject);
-    // ƒtƒH[ƒ€”jŠü‚ÉƒfƒR[ƒ_‚ğ‰ğ•ú‚·‚é
+    // ãƒ•ã‚©ãƒ¼ãƒ ç ´æ£„æ™‚ã«ãƒ‡ã‚³ãƒ¼ãƒ€ã‚’è§£æ”¾ã™ã‚‹
     procedure FormDestroy(Sender: TObject);
-    // “®‰æƒtƒ@ƒCƒ‹‚ğŠJ‚¢‚Äæ“ªƒtƒŒ[ƒ€‚ğ•\¦‚·‚é
+    // å‹•ç”»ãƒ•ã‚¡ã‚¤ãƒ«ã‚’é–‹ã„ã¦å…ˆé ­ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’è¡¨ç¤ºã™ã‚‹
     procedure ButtonOpenClick(Sender: TObject);
-    // ‡•ûŒüƒfƒR[ƒhÄ¶‚ğŠJn‚·‚é
+    // é †æ–¹å‘ãƒ‡ã‚³ãƒ¼ãƒ‰å†ç”Ÿã‚’é–‹å§‹ã™ã‚‹
     procedure ButtonPlayClick(Sender: TObject);
-    // Ä¶‚ğ’â~‚·‚é
+    // å†ç”Ÿã‚’åœæ­¢ã™ã‚‹
     procedure ButtonStopClick(Sender: TObject);
-    // Ä¶’†‚ÉŸƒtƒŒ[ƒ€‚ğ‡•ûŒüƒfƒR[ƒh‚·‚é
+    // å†ç”Ÿä¸­ã«æ¬¡ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’é †æ–¹å‘ãƒ‡ã‚³ãƒ¼ãƒ‰ã™ã‚‹
     procedure TimerPlaybackTimer(Sender: TObject);
-    // ƒV[ƒNƒo[‘€ì‚É‡‚í‚¹‚Äw’èˆÊ’u‚ÌƒtƒŒ[ƒ€‚ğ•\¦‚·‚é
+    // ã‚·ãƒ¼ã‚¯ãƒãƒ¼æ“ä½œã«åˆã‚ã›ã¦æŒ‡å®šä½ç½®ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’è¡¨ç¤ºã™ã‚‹
     procedure TrackBarSeekChange(Sender: TObject);
-    // o—Íƒvƒ‰ƒOƒCƒ“‘Š“–‚ÌƒR[ƒ‹ƒoƒbƒNŒo—R‚ÅMP4‚ğ‘‚«o‚·
-    procedure ButtonOutputClick(Sender: TObject);
   private
-    FDecoder: TFFmpegDecoder; // ŠJ‚¢‚½“®‰æ‚ğ•Û‚·‚éFFmpegƒfƒR[ƒ_
-    FVideoFile: string; // Œ»İŠJ‚¢‚Ä‚¢‚é“®‰æƒtƒ@ƒCƒ‹–¼
-    FVideoInfo: TVideoInfo; // Œ»İŠJ‚¢‚Ä‚¢‚é“®‰æ‚ÌŠî–{î•ñ
-    FUpdatingSeek: Boolean; // ƒR[ƒh‚©‚ç‚ÌƒV[ƒNƒo[XV’†‚©‚Ç‚¤‚©
-    FOutputActive: Boolean; // o—Íˆ—’†‚©‚Ç‚¤‚©
-    // w’èƒ~ƒŠ•bˆÊ’u‚ÌƒtƒŒ[ƒ€‚ğ•\¦‚·‚é
+    FDecoder: TFFmpegDecoder; // é–‹ã„ãŸå‹•ç”»ã‚’ä¿æŒã™ã‚‹FFmpegãƒ‡ã‚³ãƒ¼ãƒ€
+    FVideoFile: string; // ç¾åœ¨é–‹ã„ã¦ã„ã‚‹å‹•ç”»ãƒ•ã‚¡ã‚¤ãƒ«å
+    FVideoInfo: TVideoInfo; // ç¾åœ¨é–‹ã„ã¦ã„ã‚‹å‹•ç”»ã®åŸºæœ¬æƒ…å ±
+    FUpdatingSeek: Boolean; // ã‚³ãƒ¼ãƒ‰ã‹ã‚‰ã®ã‚·ãƒ¼ã‚¯ãƒãƒ¼æ›´æ–°ä¸­ã‹ã©ã†ã‹
+    FDropAgent: TDropAgent;
+    FOleInitialized: Boolean;
+    function LoadVideoFile(const FileName: string; AutoPlay: Boolean): Boolean;
+    procedure DropFiles(Sender: TObject; Control: TWinControl; const FileNames: TArray<string>);
+    // æŒ‡å®šãƒŸãƒªç§’ä½ç½®ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’è¡¨ç¤ºã™ã‚‹
     procedure ShowFrameAtMs(const PositionMs: Integer);
-    // “®‰æî•ñƒ‰ƒxƒ‹‚ğXV‚·‚é
+    // å‹•ç”»æƒ…å ±ãƒ©ãƒ™ãƒ«ã‚’æ›´æ–°ã™ã‚‹
     procedure UpdateInfoLabel;
-    // o—Í’†‚Ìi’»‚ğ•\¦‚·‚é
-    procedure OutputProgress(Current, Total: Integer; CurrentFps, AverageFps,
-      MinFps, MaxFps: Double);
   public
-    { Public declarations }
+    function OpenAndPlayFile(const FileName: string): Boolean;
   end;
 
 var
@@ -59,21 +55,32 @@ implementation
 
 {$R *.dfm}
 
-// ƒtƒH[ƒ€¶¬‚ÉƒfƒR[ƒ_‚ğ—pˆÓ‚·‚é
+// ãƒ•ã‚©ãƒ¼ãƒ ç”Ÿæˆæ™‚ã«ãƒ‡ã‚³ãƒ¼ãƒ€ã‚’ç”¨æ„ã™ã‚‹
 procedure TVideoMinerMainForm.FormCreate(Sender: TObject);
 begin
+  FOleInitialized := OleInitialize(nil) >= 0;
   FDecoder := TFFmpegDecoder.Create;
+  FDropAgent := TDropAgent.Create;
+  if FOleInitialized then
+  begin
+    FDropAgent.AcceptKinds := [dakFiles];
+    FDropAgent.OnDropFiles := DropFiles;
+    FDropAgent.Attach(Self);
+  end;
   LabelInfo.Caption := 'No video loaded';
 end;
 
-// ƒtƒH[ƒ€”jŠü‚ÉƒfƒR[ƒ_‚ğ‰ğ•ú‚·‚é
+// ãƒ•ã‚©ãƒ¼ãƒ ç ´æ£„æ™‚ã«ãƒ‡ã‚³ãƒ¼ãƒ€ã‚’è§£æ”¾ã™ã‚‹
 procedure TVideoMinerMainForm.FormDestroy(Sender: TObject);
 begin
   TimerPlayback.Enabled := False;
+  FDropAgent.Free;
   FDecoder.Free;
+  if FOleInitialized then
+    OleUninitialize;
 end;
 
-// w’èƒ~ƒŠ•bˆÊ’u‚ÌƒtƒŒ[ƒ€‚ğ•\¦‚·‚é
+// æŒ‡å®šãƒŸãƒªç§’ä½ç½®ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’è¡¨ç¤ºã™ã‚‹
 procedure TVideoMinerMainForm.ShowFrameAtMs(const PositionMs: Integer);
 var
   Bitmap: TBitmap;
@@ -98,16 +105,10 @@ begin
   UpdateInfoLabel;
 end;
 
-// “®‰æî•ñƒ‰ƒxƒ‹‚ğXV‚·‚é
+// å‹•ç”»æƒ…å ±ãƒ©ãƒ™ãƒ«ã‚’æ›´æ–°ã™ã‚‹
 procedure TVideoMinerMainForm.UpdateInfoLabel;
 var
   AudioText: string;
-  AudioStats: TAudioPlaybackStats;
-  AudioStatsText: string;
-  DecodeStats: TDecodeLoadStats;
-  VideoLoadText: string;
-  AudioLoadText: string;
-  VideoLoadPercent: Double;
 begin
   if FVideoFile = '' then
   begin
@@ -117,63 +118,41 @@ begin
 
   if FVideoInfo.Audio.Present then
   begin
-    AudioText := Format('audio: %d Hz / %d ch / %s / %.3f sec',
+    AudioText := Format('audio: %d Hz / %d ch / %s',
       [FVideoInfo.Audio.SampleRate, FVideoInfo.Audio.Channels,
-       FVideoInfo.Audio.SampleFormatName, FVideoInfo.Audio.DurationSec]);
+       FVideoInfo.Audio.SampleFormatName]);
     if FVideoInfo.Audio.OpenError <> '' then
       AudioText := AudioText + ' / open: ' + FVideoInfo.Audio.OpenError;
   end
   else
     AudioText := 'audio: none';
 
-  if Assigned(FDecoder) and FVideoInfo.Audio.Present then
-  begin
-    AudioStats := FDecoder.AudioStats;
-    AudioStatsText := Format('audio decode: packets %d / frames %d / samples %d / pts %d ms / peak %d / rms %.1f / non-zero %.1f%% / queued %d / send err %d / conv err %d',
-      [AudioStats.AudioPackets, AudioStats.DecodedFrames, AudioStats.DecodedSamples,
-       AudioStats.LastPtsMs, AudioStats.Peak, AudioStats.Rms, AudioStats.NonZeroPercent,
-       AudioStats.QueuedBuffers, AudioStats.SendErrors, AudioStats.ConvertErrors]);
-  end
-  else
-    AudioStatsText := 'audio decode: none';
-
-  if Assigned(FDecoder) then
-    DecodeStats := FDecoder.DecodeStats
-  else
-    FillChar(DecodeStats, SizeOf(DecodeStats), 0);
-
-  if TimerPlayback.Interval > 0 then
-    VideoLoadPercent := DecodeStats.VideoAverageMs * 100.0 / TimerPlayback.Interval
-  else
-    VideoLoadPercent := 0;
-  VideoLoadText := Format('video load: last %.2f ms / avg %.2f ms / max %.2f ms / %.1f%% of %d ms / frames %d',
-    [DecodeStats.VideoLastMs, DecodeStats.VideoAverageMs, DecodeStats.VideoMaxMs,
-     VideoLoadPercent, TimerPlayback.Interval, DecodeStats.VideoFrames]);
-  VideoLoadText := VideoLoadText + Format(#13#10'video split: decode %.2f / %.2f / %.2f ms, transfer %.2f / %.2f / %.2f ms, convert %.2f / %.2f / %.2f ms',
-    [DecodeStats.VideoDecodeLastMs, DecodeStats.VideoDecodeAverageMs, DecodeStats.VideoDecodeMaxMs,
-     DecodeStats.VideoTransferLastMs, DecodeStats.VideoTransferAverageMs, DecodeStats.VideoTransferMaxMs,
-     DecodeStats.VideoConvertLastMs, DecodeStats.VideoConvertAverageMs, DecodeStats.VideoConvertMaxMs]);
-  AudioLoadText := Format('audio packet load: last %.2f ms / avg %.2f ms / max %.2f ms / packets %d',
-    [DecodeStats.AudioLastMs, DecodeStats.AudioAverageMs, DecodeStats.AudioMaxMs,
-     DecodeStats.AudioPackets]);
-
-  LabelInfo.Caption := Format('%s  /  %dx%d  /  %.3f sec  /  %.3f fps'#13#10'%s'#13#10'%s'#13#10'%s'#13#10'%s',
+  LabelInfo.Caption := Format('%s  /  %dx%d  /  %.3f sec  /  %.3f fps'#13#10'%s',
     [ExtractFileName(FVideoFile), FVideoInfo.Width, FVideoInfo.Height,
-     FVideoInfo.DurationSec, FVideoInfo.Fps, AudioText, AudioStatsText, VideoLoadText, AudioLoadText]);
+     FVideoInfo.DurationSec, FVideoInfo.Fps, AudioText]);
 end;
 
-// “®‰æƒtƒ@ƒCƒ‹‚ğŠJ‚¢‚Äæ“ªƒtƒŒ[ƒ€‚ğ•\¦‚·‚é
+// å‹•ç”»ãƒ•ã‚¡ã‚¤ãƒ«ã‚’é–‹ã„ã¦å…ˆé ­ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’è¡¨ç¤ºã™ã‚‹
 procedure TVideoMinerMainForm.ButtonOpenClick(Sender: TObject);
+begin
+  if OpenDialogVideo.Execute then
+    LoadVideoFile(OpenDialogVideo.FileName, False);
+end;
+
+function TVideoMinerMainForm.LoadVideoFile(const FileName: string; AutoPlay: Boolean): Boolean;
 var
   ErrorMessage: string;
-  NewFileName: string;
 begin
-  if not OpenDialogVideo.Execute then
+  Result := False;
+
+  if (FileName = '') or (not FileExists(FileName)) then
+  begin
+    LabelInfo.Caption := 'File not found: ' + FileName;
     Exit;
+  end;
 
   TimerPlayback.Enabled := False;
   FDecoder.StopAudioPlayback;
-  NewFileName := OpenDialogVideo.FileName;
   ImagePreview.Picture.Assign(nil);
 
   FUpdatingSeek := True;
@@ -184,15 +163,15 @@ begin
     FUpdatingSeek := False;
   end;
 
-  if not FDecoder.Open(NewFileName, FVideoInfo, ErrorMessage) then
+  if not FDecoder.Open(FileName, FVideoInfo, ErrorMessage) then
   begin
     FVideoFile := '';
-    Caption := 'FFmpeg Decode Test';
+    Caption := 'VideoMiner';
     LabelInfo.Caption := 'Failed to open video: ' + ErrorMessage;
     Exit;
   end;
 
-  FVideoFile := NewFileName;
+  FVideoFile := FileName;
   Caption := ExtractFileName(FVideoFile);
 
   FUpdatingSeek := True;
@@ -202,6 +181,7 @@ begin
   finally
     FUpdatingSeek := False;
   end;
+
   if FVideoInfo.Fps > 0 then
     TimerPlayback.Interval := Round(1000 / FVideoInfo.Fps)
   else
@@ -211,9 +191,24 @@ begin
 
   UpdateInfoLabel;
   ShowFrameAtMs(0);
+
+  if AutoPlay then
+    ButtonPlayClick(Self);
+
+  Result := True;
 end;
 
-// ‡•ûŒüƒfƒR[ƒhÄ¶‚ğŠJn‚·‚é
+function TVideoMinerMainForm.OpenAndPlayFile(const FileName: string): Boolean;
+begin
+  Result := LoadVideoFile(FileName, True);
+end;
+
+procedure TVideoMinerMainForm.DropFiles(Sender: TObject; Control: TWinControl; const FileNames: TArray<string>);
+begin
+  if Length(FileNames) > 0 then
+    OpenAndPlayFile(FileNames[0]);
+end;
+
 procedure TVideoMinerMainForm.ButtonPlayClick(Sender: TObject);
 var
   ErrorMessage: string;
@@ -240,7 +235,7 @@ begin
 
   TimerPlayback.Enabled := True;
 end;
-// Ä¶‚ğ’â~‚·‚é
+// å†ç”Ÿã‚’åœæ­¢ã™ã‚‹
 procedure TVideoMinerMainForm.ButtonStopClick(Sender: TObject);
 begin
   TimerPlayback.Enabled := False;
@@ -248,7 +243,7 @@ begin
   UpdateInfoLabel;
 end;
 
-// Ä¶’†‚ÉŸƒtƒŒ[ƒ€‚ğ‡•ûŒüƒfƒR[ƒh‚·‚é
+// å†ç”Ÿä¸­ã«æ¬¡ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’é †æ–¹å‘ãƒ‡ã‚³ãƒ¼ãƒ‰ã™ã‚‹
 procedure TVideoMinerMainForm.TimerPlaybackTimer(Sender: TObject);
 var
   Bitmap: TBitmap;
@@ -291,67 +286,13 @@ begin
 
   UpdateInfoLabel;
 end;
-// ƒV[ƒNƒo[‘€ì‚É‡‚í‚¹‚Äw’èˆÊ’u‚ÌƒtƒŒ[ƒ€‚ğ•\¦‚·‚é
+// ã‚·ãƒ¼ã‚¯ãƒãƒ¼æ“ä½œã«åˆã‚ã›ã¦æŒ‡å®šä½ç½®ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’è¡¨ç¤ºã™ã‚‹
 procedure TVideoMinerMainForm.TrackBarSeekChange(Sender: TObject);
 begin
   if FUpdatingSeek then
     Exit;
 
   ShowFrameAtMs(TrackBarSeek.Position);
-end;
-
-// o—Í’†‚Ìi’»‚ğ•\¦‚·‚é
-procedure TVideoMinerMainForm.OutputProgress(Current, Total: Integer; CurrentFps, AverageFps,
-  MinFps, MaxFps: Double);
-begin
-  LabelInfo.Caption := Format(
-    'Output MP4: %d / %d frames'#13#10'fps current %.2f / avg %.2f / min %.2f / max %.2f',
-    [Current, Total, CurrentFps, AverageFps, MinFps, MaxFps]);
-  Application.ProcessMessages;
-end;
-
-// o—Íƒvƒ‰ƒOƒCƒ“‘Š“–‚ÌƒR[ƒ‹ƒoƒbƒNŒo—R‚ÅMP4‚ğ‘‚«o‚·
-procedure TVideoMinerMainForm.ButtonOutputClick(Sender: TObject);
-var
-  ErrorMessage: string;
-  Settings: TOutputTestSettings;
-begin
-  if FOutputActive then
-  begin
-    RequestOutputAbort;
-    ButtonOutput.Caption := 'Stopping...';
-    ButtonOutput.Enabled := False;
-    Exit;
-  end;
-
-  if FVideoFile = '' then
-  begin
-    LabelInfo.Caption := 'Open a video before output.';
-    Exit;
-  end;
-
-  TimerPlayback.Enabled := False;
-  FDecoder.StopAudioPlayback;
-  InitDefaultOutputSettings(Settings);
-  Settings.SaveFileName := ChangeFileExt(FVideoFile, '_output.mp4');
-  if not ExecuteOutputSettingsDialog(Handle, Settings) then
-    Exit;
-
-  FOutputActive := True;
-  ButtonOutput.Caption := 'Stop Output';
-  try
-    if ExportVideoWithOutputCallbacks(FVideoFile, Settings, FVideoInfo,
-      OutputProgress, ErrorMessage) then
-      LabelInfo.Caption := 'Output complete: ' + Settings.SaveFileName
-    else if Pos('Output was stopped.', ErrorMessage) = 1 then
-      LabelInfo.Caption := ErrorMessage + ' ' + Settings.SaveFileName
-    else
-      LabelInfo.Caption := 'Output failed: ' + ErrorMessage;
-  finally
-    FOutputActive := False;
-    ButtonOutput.Caption := 'Output MP4';
-    ButtonOutput.Enabled := True;
-  end;
 end;
 
 end.

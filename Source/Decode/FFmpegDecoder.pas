@@ -1,13 +1,13 @@
 ﻿unit FFmpegDecoder;
 
 // FFmpegを使って動画/音声ファイルを開き、映像フレームやPCM音声を読み出すデコーダ本体ユニット。
-// AviUtl2入力プラグイン側から使う高レベルなopen/read/seek処理を担当する。
+// High-level open/read/seek operations used by the viewer.
 
 interface
 
 uses
   Winapi.Windows, Winapi.MMSystem, System.SysUtils, System.Generics.Collections,
-  System.Diagnostics, Vcl.Graphics, FFmpegDecoderTypes, FFmpegDecoderContext;
+  Vcl.Graphics, FFmpegDecoderTypes, FFmpegDecoderContext;
 
 type
   // FFmpegデコード処理で発生した例外を表すクラス。
@@ -26,11 +26,9 @@ type
     FAudioStreamIndex    : Integer;                 // 対象の音声ストリーム番号
     FAudioFrame          : Pointer;                 // 音声デコードに再利用するAVFrame
     FSwrContext          : Pointer;                 // PCM変換用swresampleコンテキスト
-    FWaveOut             : HWAVEOUT;                // デバッグ用音声出力
+    FWaveOut             : HWAVEOUT;                // audio output handle
     FAudioPlaybackActive : Boolean;                 // 音声出力中かどうか
     FAudioBuffers        : TList<PAudioWaveBuffer>; // waveOut完了待ちのPCMバッファ
-    FAudioStats          : TAudioPlaybackStats;     // 音声デコード確認用の数値
-    FDecodeStats         : TDecodeLoadStats;        // デコード負荷確認用の数値
     FPacket              : Pointer;                 // 読み込みに再利用するAVPacket
     FFrame               : Pointer;                 // デコードに再利用するAVFrame
     FTransferFrame       : Pointer;                 // QSVなどのHW frameをCPUへ転送するAVFrame
@@ -38,7 +36,7 @@ type
     FVideoDecoderName    : string;                  // 実際に開いた映像デコーダ名
     FVideoUsesQsv        : Boolean;                 // QSV decoderを使っているかどうか
     FInfo                : TVideoInfo;              // 現在開いている動画の基本情報
-    FDirectSwsContext    : Pointer;                 // AviUtl2バッファ直接出力用の色変換コンテキスト
+    FDirectSwsContext    : Pointer;                 // VideoMinerバッファ直接出力用の色変換コンテキスト
     FDirectSwsSrcWidth   : Integer;                 // 直接出力用swsの入力幅
     FDirectSwsSrcHeight  : Integer;                 // 直接出力用swsの入力高さ
     FDirectSwsSrcFormat  : Integer;                 // 直接出力用swsの入力ピクセル形式
@@ -48,10 +46,6 @@ type
     procedure SyncContextFromFields;
     // Context側で解放/更新されたリソースポインタをフィールドへ戻す
     procedure SyncFieldsFromContext;
-    // 映像デコード負荷の統計を更新する
-    procedure UpdateVideoLoadStats(ElapsedMs: Double);
-    // 映像処理時間をdecode/transfer/convertへ分けて統計更新する
-    procedure UpdateVideoStageStats(TotalMs, DecodeMs, TransferMs, ConvertMs: Double);
   public
     // デコーダインスタンスを初期化する
     constructor Create;
@@ -89,60 +83,27 @@ type
     function DecodeNextFrameToYc48Optional(Buffer: Pointer; BufferStride: Integer; ConvertFrame: Boolean; out PositionMs: Integer; out ErrorMessage: string): Boolean;
     // 開いているファイルの音声を指定サンプル数までPCM16 stereo 48kHzへ順次デコードする
     function DecodeAudioPcm16Stereo48kUntil(TargetSampleCount: Integer; var Pcm: TBytes; var SampleCount: Integer; out Finished: Boolean; out ErrorMessage: string): Boolean;
-    // デバッグ用の音声再生を開始する
+    // ������Y�
     function StartAudioPlayback(out ErrorMessage: string): Boolean;
-    // デバッグ用の音声再生を停止する
+    // ����\bY�
     procedure StopAudioPlayback;
     // 一時デコーダで動画情報だけを読む
     class function ReadVideoInfo(const FileName: string; out Info: TVideoInfo; out ErrorMessage: string): Boolean; static;
     // 一時デコーダで指定位置のフレームだけを読む
     class function DecodeFrameToBitmap(const FileName: string; PositionMs: Integer; Bitmap: TBitmap; out ErrorMessage: string): Boolean; overload; static;
     property Info: TVideoInfo read FInfo;
-    property AudioStats: TAudioPlaybackStats read FAudioStats;
-    property DecodeStats: TDecodeLoadStats read FDecodeStats;
     property FileName: string read FFileName;
   end;
 
 implementation
 
 uses
-  FFmpegApi, FFmpegAudioOpen, FFmpegDecoderAudioPlayback, FFmpegDecoderAudioRead,
-  FFmpegDecodeStats, FFmpegDecoderNextBgr24, FFmpegDecoderNextBgrx32,
+  FFmpegApi, FFmpegAudioOpen, FFmpegDecoderAudioPlayback, FFmpegDecoderAudioRead, FFmpegDecoderNextBgr24, FFmpegDecoderNextBgrx32,
   FFmpegDecoderNextI420, FFmpegDecoderNextYuy2, FFmpegDecoderNextYc48,
   FFmpegDecoderResources, FFmpegDecoderSeekBgr24, FFmpegDecoderSeekBgrx32,
   FFmpegDecoderSeekI420, FFmpegDecoderSeekYuy2, FFmpegDecoderSeekYc48,
-  FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo, PluginInputSettings;
+  FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo, VideoMinerSettings;
 
-const
-{$IFDEF DEBUG}
-  DECODE_TRACE_ENABLED = True;
-{$ELSE}
-  DECODE_TRACE_ENABLED = False;
-{$ENDIF}
-
-procedure DecodeTrace(const Msg: string);
-var
-  F: TextFile;
-  LogFileName: string;
-  Line: string;
-begin
-  if not DECODE_TRACE_ENABLED then
-    Exit;
-
-  Line := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) + ' [FFmpegDecoder] ' + Msg;
-  OutputDebugString(PChar(Line));
-  LogFileName := IncludeTrailingPathDelimiter(GetEnvironmentVariable('TEMP')) + 'VW_Media_Input_decode.log';
-  AssignFile(F, LogFileName);
-  try
-    if FileExists(LogFileName) then
-      Append(F)
-    else
-      Rewrite(F);
-    Writeln(F, Line);
-  finally
-    CloseFile(F);
-  end;
-end;
 
 // デコーダインスタンスを初期化する
 constructor TFFmpegDecoder.Create;
@@ -188,7 +149,6 @@ begin
   FContext.VideoDecoderName := FVideoDecoderName;
   FContext.VideoUsesQsv := FVideoUsesQsv;
   FContext.Info := FInfo;
-  FContext.DecodeStats := FDecodeStats;
 end;
 
 procedure TFFmpegDecoder.SyncFieldsFromContext;
@@ -215,7 +175,6 @@ begin
   FVideoDecoderName := FContext.VideoDecoderName;
   FVideoUsesQsv := FContext.VideoUsesQsv;
   FInfo := FContext.Info;
-  FDecodeStats := FContext.DecodeStats;
 end;
 
 // 保持しているFFmpegリソースを解放する
@@ -235,37 +194,23 @@ begin
   FAudioStream := nil;
   FAudioStreamIndex := -1;
   FillChar(FInfo, SizeOf(FInfo), 0);
-  FillChar(FAudioStats, SizeOf(FAudioStats), 0);
-  FillChar(FDecodeStats, SizeOf(FDecodeStats), 0);
-  FAudioStats.LastPtsMs := -1;
 end;
 
-// 映像デコード負荷の統計を更新する
-procedure TFFmpegDecoder.UpdateVideoLoadStats(ElapsedMs: Double);
-begin
-  FFmpegDecodeStats.UpdateVideoLoadStats(FDecodeStats, ElapsedMs);
-end;
 
-// 映像処理時間をdecode/transfer/convertへ分けて統計更新する
-procedure TFFmpegDecoder.UpdateVideoStageStats(TotalMs, DecodeMs,
-  TransferMs, ConvertMs: Double);
-begin
-  FFmpegDecodeStats.UpdateVideoStageStats(FDecodeStats, TotalMs, DecodeMs, TransferMs, ConvertMs);
-end;
 
-// デバッグ用の音声再生を開始する
+// ������Y�
 function TFFmpegDecoder.StartAudioPlayback(out ErrorMessage: string): Boolean;
 begin
   SyncContextFromFields;
   Result := FFmpegDecoderAudioPlayback.StartAudioPlayback(FContext, FWaveOut,
-    FAudioPlaybackActive, FAudioBuffers, FAudioStats, ErrorMessage);
+    FAudioPlaybackActive, FAudioBuffers, ErrorMessage);
 end;
 
-// デバッグ用の音声再生を停止する
+// ����\bY�
 procedure TFFmpegDecoder.StopAudioPlayback;
 begin
   FFmpegDecoderAudioPlayback.StopAudioPlayback(FWaveOut, FAudioPlaybackActive,
-    FAudioBuffers, FAudioStats);
+    FAudioBuffers);
 end;
 
 // 動画を開いてデコード可能な状態にする
@@ -381,8 +326,6 @@ begin
         begin
           if not Assigned(Codec) then
             QsvErrorMessage := 'QSV decoder was not found.';
-          DecodeTrace(Format('qsv_fallback file="%s" decode_mode=%s attempted_backend=qsv attempted_gpu="Intel Quick Sync" nvidia_nvdec_supported=False decoder="%s" reason="%s"',
-            [FileName, VideoDecoderModeToText(DecoderMode), string(QsvDecoderName), QsvErrorMessage]));
           if DecoderMode = vdmQsv then
           begin
             ErrorMessage := QsvErrorMessage;
@@ -426,8 +369,6 @@ begin
       begin
         if OpenedWithQsv then
         begin
-          DecodeTrace(Format('qsv_fallback file="%s" decode_mode=%s attempted_backend=qsv attempted_gpu="Intel Quick Sync" nvidia_nvdec_supported=False decoder="%s" reason="%s"',
-            [FileName, VideoDecoderModeToText(DecoderMode), VideoDecoderName, TFFmpegApi.ErrorText(Ret)]));
           if DecoderMode = vdmQsv then
           begin
             ErrorMessage := TFFmpegApi.ErrorText(Ret);
@@ -492,10 +433,6 @@ begin
         DecodeBackend := 'software';
         GpuInferred := 'none';
       end;
-
-      DecodeTrace(Format('video_decoder file="%s" decode_mode=%s decode_backend=%s gpu_inferred="%s" nvidia_nvdec_supported=False decoder="%s" qsv=%s codec_id=%d',
-        [FileName, VideoDecoderModeToText(DecoderMode), DecodeBackend, GpuInferred,
-         VideoDecoderName, BoolToStr(OpenedWithQsv, True), CodecPar.codec_id]));
 
       Info.Width := CodecPar.width;
       Info.Height := CodecPar.height;
@@ -591,7 +528,6 @@ var
   Stream: PAVStream; // 対象の映像ストリーム
   Ret: Integer; // FFmpeg APIの戻り値
   TargetTs: Int64; // 目的位置のストリーム時間軸PTS
-  Stopwatch: TStopwatch; // デコード負荷測定用タイマー
 begin
   ErrorMessage := '';
   Result := False;
@@ -625,8 +561,6 @@ begin
       try
         if Packet.stream_index <> FStreamIndex then
           Continue;
-
-        Stopwatch := TStopwatch.StartNew;
         Ret := TFFmpegApi.avcodec_send_packet(CodecContext, Packet);
         if Ret < 0 then
           Continue;
@@ -636,8 +570,6 @@ begin
           if (Frame.pts = AV_NOPTS_VALUE) or (Frame.pts >= TargetTs) then
           begin
             CopyFrameToBitmap(Frame, Bitmap);
-            Stopwatch.Stop;
-            UpdateVideoLoadStats(Stopwatch.Elapsed.TotalMilliseconds);
             Result := True;
             Exit;
           end;
@@ -708,7 +640,6 @@ var
   Frame: PAVFrame; // デコード結果を受け取るAVFrame
   Stream: PAVStream; // 対象の映像ストリーム
   Ret: Integer; // FFmpeg APIの戻り値
-  Stopwatch: TStopwatch; // デコード負荷測定用タイマー
 begin
   ErrorMessage := '';
   PositionMs := -1;
@@ -737,8 +668,6 @@ begin
 
         if Packet.stream_index <> FStreamIndex then
           Continue;
-
-        Stopwatch := TStopwatch.StartNew;
         Ret := TFFmpegApi.avcodec_send_packet(CodecContext, Packet);
         if Ret < 0 then
           Continue;
@@ -746,8 +675,6 @@ begin
         while TFFmpegApi.avcodec_receive_frame(CodecContext, Frame) = 0 do
         begin
           CopyFrameToBitmap(Frame, Bitmap);
-          Stopwatch.Stop;
-          UpdateVideoLoadStats(Stopwatch.Elapsed.TotalMilliseconds);
           PositionMs := StreamTimestampToMs(Stream, Frame.pts);
           Result := True;
           Exit;

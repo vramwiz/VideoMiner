@@ -1,4 +1,4 @@
-# VideoMiner
+﻿# VideoMiner
 
 VideoMiner は、動画や画像を快適に確認するための Windows/VCL アプリです。
 
@@ -26,7 +26,7 @@ VideoMiner は、動画や画像を快適に確認するための Windows/VCL �
 
 ## 現在の状態
 
-現在は、既存の動画表示テストをベースに `VideoMiner` アプリとして再構成している段階です。
+現在は、`VideoMiner` アプリとして動画ビューア機能を整理している段階です。
 
 プロジェクト名は `VideoMiner` に変更済みで、ソースは `Source` 配下に整理しています。
 
@@ -35,12 +35,8 @@ VideoMiner は、動画や画像を快適に確認するための Windows/VCL �
 - `VideoMiner.dpr`
 - `VideoMiner.dproj`
 - `Source\App`
-- `Source\AviUtl`
 - `Source\Decode`
-- `Source\Encode`
 - `Source\FFmpeg`
-- `Source\PluginInput`
-- `note.md`
 
 ## ビルド
 

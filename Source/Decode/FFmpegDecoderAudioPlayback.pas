@@ -11,54 +11,22 @@ function StartAudioPlayback(
   var WaveOut: HWAVEOUT;
   var AudioPlaybackActive: Boolean;
   AudioBuffers: TList<PAudioWaveBuffer>;
-  var AudioStats: TAudioPlaybackStats;
   out ErrorMessage: string
 ): Boolean;
 
 procedure StopAudioPlayback(
   var WaveOut: HWAVEOUT;
   var AudioPlaybackActive: Boolean;
-  AudioBuffers: TList<PAudioWaveBuffer>;
-  var AudioStats: TAudioPlaybackStats
+  AudioBuffers: TList<PAudioWaveBuffer>
 );
 
 implementation
-
-procedure CleanupAudioBuffers(
-  WaveOut: HWAVEOUT;
-  AudioBuffers: TList<PAudioWaveBuffer>;
-  var AudioStats: TAudioPlaybackStats
-);
-var
-  I: Integer;
-  Buffer: PAudioWaveBuffer;
-begin
-  if AudioBuffers = nil then
-    Exit;
-
-  for I := AudioBuffers.Count - 1 downto 0 do
-  begin
-    Buffer := AudioBuffers[I];
-    if (WaveOut = 0) or ((Buffer.Header.dwFlags and WHDR_DONE) <> 0) then
-    begin
-      if WaveOut <> 0 then
-        waveOutUnprepareHeader(WaveOut, @Buffer.Header, SizeOf(Buffer.Header));
-      if Buffer.Data <> nil then
-        FreeMem(Buffer.Data);
-      Dispose(Buffer);
-      AudioBuffers.Delete(I);
-    end;
-  end;
-
-  AudioStats.QueuedBuffers := AudioBuffers.Count;
-end;
 
 function StartAudioPlayback(
   Context: TFFmpegDecoderContext;
   var WaveOut: HWAVEOUT;
   var AudioPlaybackActive: Boolean;
   AudioBuffers: TList<PAudioWaveBuffer>;
-  var AudioStats: TAudioPlaybackStats;
   out ErrorMessage: string
 ): Boolean;
 var
@@ -68,7 +36,7 @@ begin
   ErrorMessage := '';
   Result := False;
 
-  StopAudioPlayback(WaveOut, AudioPlaybackActive, AudioBuffers, AudioStats);
+  StopAudioPlayback(WaveOut, AudioPlaybackActive, AudioBuffers);
 
   if (Context = nil) or (not Context.Info.Audio.Present) or
      (Context.AudioCodecContext = nil) or (Context.AudioStream = nil) or
@@ -102,8 +70,6 @@ begin
     Exit;
   end;
 
-  FillChar(AudioStats, SizeOf(AudioStats), 0);
-  AudioStats.LastPtsMs := -1;
   AudioPlaybackActive := True;
   Result := True;
 end;
@@ -111,8 +77,7 @@ end;
 procedure StopAudioPlayback(
   var WaveOut: HWAVEOUT;
   var AudioPlaybackActive: Boolean;
-  AudioBuffers: TList<PAudioWaveBuffer>;
-  var AudioStats: TAudioPlaybackStats
+  AudioBuffers: TList<PAudioWaveBuffer>
 );
 var
   Buffer: PAudioWaveBuffer;
@@ -141,8 +106,6 @@ begin
     waveOutClose(WaveOut);
     WaveOut := 0;
   end;
-
-  AudioStats.QueuedBuffers := 0;
 end;
 
 end.

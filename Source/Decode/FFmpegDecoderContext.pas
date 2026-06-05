@@ -30,7 +30,6 @@ type
     VideoDecoderName    : string;
     VideoUsesQsv        : Boolean;
     Info                : TVideoInfo;
-    DecodeStats         : TDecodeLoadStats;
   end;
 
 implementation

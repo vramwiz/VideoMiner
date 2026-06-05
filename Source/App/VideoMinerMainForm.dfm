@@ -1,4 +1,4 @@
-object VideoMinerForm: TVideoMinerMainForm
+object VideoMinerMainForm: TVideoMinerMainForm
   Left = 0
   Top = 0
   Caption = 'VideoMiner'
@@ -58,22 +58,13 @@ object VideoMinerForm: TVideoMinerMainForm
     TabOrder = 2
     OnClick = ButtonStopClick
   end
-  object ButtonOutput: TButton
-    Left = 282
-    Top = 16
-    Width = 96
-    Height = 25
-    Caption = 'Output MP4'
-    TabOrder = 3
-    OnClick = ButtonOutputClick
-  end
   object TrackBarSeek: TTrackBar
     Left = 8
     Top = 504
     Width = 688
     Height = 33
     Max = 0
-    TabOrder = 4
+    TabOrder = 3
     TickStyle = tsNone
     OnChange = TrackBarSeekChange
   end
@@ -94,5 +85,3 @@ object VideoMinerForm: TVideoMinerMainForm
     Top = 48
   end
 end
-
-

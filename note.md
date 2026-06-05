@@ -62,26 +62,18 @@ VideoMiner は、素材確認・動画確認・画像確認を軽く行えるビ
 
 - `Source\App`
   - アプリ本体、メインフォーム。
-- `Source\AviUtl`
-  - 既存コード由来の AviUtl 型定義。
 - `Source\Decode`
   - 既存のメディア処理ユニット。
-- `Source\Encode`
-  - 既存コード由来の補助ユニット。
-  - VideoMiner の主目的は閲覧なので、今後必要性を見直す。
 - `Source\FFmpeg`
-  - FFmpeg API、変換、統計、ストリーム情報などの共通部分。
-- `Source\PluginInput`
-  - 既存入力プラグイン由来の補助ユニット。
-  - VideoMiner のアプリ本体で必要な範囲だけ残す。
+  - FFmpeg API、変換、ストリーム情報などの共通部分。
 
 ## 現在の状態
 
 - プロジェクト名は `VideoMiner`。
 - メインフォームは `VideoMinerMainForm`。
 - ルート直下に多数あった `.pas` は `Source` 配下へ移動済み。
-- 現時点では、既存の動画表示テストをベースにしている。
-- 出力系の処理は残っているが、VideoMiner の主仕様には含めない。
+- 現時点では、VideoMiner アプリ本体として動画表示機能を整理している。
+- 出力系、AviUtl 連携、入力プラグイン由来の処理は削除済み。
 
 ## ビルド
 

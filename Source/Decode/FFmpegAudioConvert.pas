@@ -1,6 +1,6 @@
 unit FFmpegAudioConvert;
 
-// FFmpegの音声フレームをAviUtl2側で扱いやすいPCM形式へ変換する補助ユニット。
+// FFmpegの音声フレームをPCM形式へ変換する補助ユニット。
 // swr_convertの呼び出しと出力バッファサイズ調整をここに集約する。
 
 interface

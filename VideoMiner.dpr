@@ -3,11 +3,9 @@ program VideoMiner;
 uses
   Vcl.Forms,
   VideoMinerMainForm in 'Source\App\VideoMinerMainForm.pas' {VideoMinerForm},
-  AviUtl2InputTypes in 'Source\AviUtl\AviUtl2InputTypes.pas',
-  AviUtl2OutputTypes in 'Source\AviUtl\AviUtl2OutputTypes.pas',
-  FFmpegApi in 'Source\FFmpeg\FFmpegApi.pas',
-  FFmpegDecodeStats in 'Source\FFmpeg\FFmpegDecodeStats.pas',
-  FFmpegFrameConvert in 'Source\FFmpeg\FFmpegFrameConvert.pas',
+  VideoMinerSettings in 'Source\App\VideoMinerSettings.pas',
+  DropAgent in 'Source\Lib\DropAgent\DropAgent.pas',
+  FFmpegApi in 'Source\FFmpeg\FFmpegApi.pas',  FFmpegFrameConvert in 'Source\FFmpeg\FFmpegFrameConvert.pas',
   FFmpegQsvDecode in 'Source\FFmpeg\FFmpegQsvDecode.pas',
   FFmpegStreamInfo in 'Source\FFmpeg\FFmpegStreamInfo.pas',
   FFmpegAudioConvert in 'Source\Decode\FFmpegAudioConvert.pas',
@@ -27,18 +25,7 @@ uses
   FFmpegDecoderSeekI420 in 'Source\Decode\FFmpegDecoderSeekI420.pas',
   FFmpegDecoderSeekYc48 in 'Source\Decode\FFmpegDecoderSeekYc48.pas',
   FFmpegDecoderSeekYuy2 in 'Source\Decode\FFmpegDecoderSeekYuy2.pas',
-  FFmpegDecoderTypes in 'Source\Decode\FFmpegDecoderTypes.pas',
-  FFmpegOutputApiTypes in 'Source\Encode\FFmpegOutputApiTypes.pas',
-  FFmpegOutputConfig in 'Source\Encode\FFmpegOutputConfig.pas',
-  FFmpegOutputEncoder in 'Source\Encode\FFmpegOutputEncoder.pas',
-  FFmpegOutputPerfLog in 'Source\Encode\FFmpegOutputPerfLog.pas',
-  FFmpegOutputSettingsDialog in 'Source\Encode\FFmpegOutputSettingsDialog.pas',
-  FFmpegOutputSettingsStorage in 'Source\Encode\FFmpegOutputSettingsStorage.pas',
-  FFmpegOutputTest in 'Source\Encode\FFmpegOutputTest.pas',
-  FFmpegOutputVideoInput in 'Source\Encode\FFmpegOutputVideoInput.pas',
-  PluginAudioInputReader in 'Source\PluginInput\PluginAudioInputReader.pas',
-  PluginInputBase in 'Source\PluginInput\PluginInputBase.pas',
-  PluginInputSettings in 'Source\PluginInput\PluginInputSettings.pas';
+  FFmpegDecoderTypes in 'Source\Decode\FFmpegDecoderTypes.pas';
 
 {$R *.res}
 
@@ -46,6 +33,8 @@ begin
   Application.Initialize;
   Application.MainFormOnTaskbar := True;
   Application.CreateForm(TVideoMinerMainForm, VideoMinerForm);
+  if ParamCount > 0 then
+    VideoMinerForm.OpenAndPlayFile(ParamStr(1));
   Application.Run;
 end.
 
