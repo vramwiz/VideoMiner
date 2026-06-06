@@ -36,6 +36,7 @@ begin
   Context.DirectSwsSrcHeight := 0;
   Context.DirectSwsSrcFormat := 0;
   Context.DirectSwsDstFormat := 0;
+  Context.AudioDiscardUntilSample := -1;
 
   TypedPacket := PAVPacket(Context.Packet);
   if Assigned(TypedPacket) then

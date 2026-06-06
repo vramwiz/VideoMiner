@@ -3,13 +3,14 @@ unit VideoMinerAudioPlayback;
 interface
 
 uses
-  System.SysUtils, Vcl.Graphics, FFmpegDecoder, FFmpegDecoderTypes;
+  System.Diagnostics, System.SysUtils, FFmpegDecoder, FFmpegDecoderTypes,
+  VideoMinerDebugLog;
 
 type
   TVideoMinerAudioPlayback = class
   private const
     AUDIO_OUTPUT_SAMPLE_RATE = 48000;
-    AUDIO_TARGET_QUEUE_MS = 240;
+    AUDIO_TARGET_QUEUE_MS = 1000;
     AUDIO_FADE_IN_MS = 12;
   private
     FDecoder: TFFmpegDecoder;
@@ -19,7 +20,12 @@ type
     FVolumePercent: Integer;
     FMuted: Boolean;
     FApplyFadeInNext: Boolean;
-    procedure ApplyVolume(var Pcm: TBytes);
+    FPlaybackClock: TStopwatch;
+    FPlaybackClockActive: Boolean;
+    FPlaybackBaseMs: Integer;
+    procedure ApplyFadeIn(var Pcm: TBytes);
+    procedure ApplyOutputVolume;
+    function PlaybackSamplePosition: Int64;
     procedure SetMuted(Value: Boolean);
     procedure SetVolumePercent(Value: Integer);
   public
@@ -46,6 +52,8 @@ begin
   FDecoder := TFFmpegDecoder.Create;
   FFinished := True;
   FVolumePercent := 100;
+  FPlaybackClockActive := False;
+  FPlaybackBaseMs := 0;
 end;
 
 destructor TVideoMinerAudioPlayback.Destroy;
@@ -59,7 +67,10 @@ function TVideoMinerAudioPlayback.StartAt(const FileName: string;
   const VideoInfo: TVideoInfo; PositionMs: Integer; out ErrorMessage: string): Boolean;
 var
   AudioInfo: TVideoInfo;
-  Bitmap: TBitmap;
+  Pcm: TBytes;
+  SampleCount: Integer;
+  TargetSampleCount: Integer;
+  Finished: Boolean;
 begin
   ErrorMessage := '';
   Result := True;
@@ -76,14 +87,7 @@ begin
     Exit;
   end;
 
-  Bitmap := TBitmap.Create;
-  try
-    FDecoder.DecodeFrameToBitmap(PositionMs, Bitmap, ErrorMessage);
-  finally
-    Bitmap.Free;
-  end;
-
-  if not FDecoder.StartAudioPlayback(ErrorMessage) then
+  if not FDecoder.SeekAudioToMs(PositionMs, ErrorMessage) then
   begin
     FDecoder.Close;
     Result := False;
@@ -94,7 +98,51 @@ begin
   FStartSamples := Round(PositionMs * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
   FQueuedSamples := FStartSamples;
   FApplyFadeInNext := True;
-  Result := Pump(ErrorMessage) and Pump(ErrorMessage);
+  FPlaybackBaseMs := PositionMs;
+  FPlaybackClockActive := False;
+
+  Pcm := nil;
+  SampleCount := FQueuedSamples;
+  TargetSampleCount := FQueuedSamples +
+    Round(AUDIO_TARGET_QUEUE_MS * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
+  if not FDecoder.DecodeAudioPcm16Stereo48kUntil(TargetSampleCount, Pcm,
+    SampleCount, Finished, ErrorMessage) then
+  begin
+    FDecoder.Close;
+    FFinished := True;
+    Result := False;
+    Exit;
+  end;
+
+  FQueuedSamples := SampleCount;
+  FFinished := Finished;
+  ApplyFadeIn(Pcm);
+
+  if not FDecoder.StartAudioPlayback(ErrorMessage) then
+  begin
+    FDecoder.Close;
+    FFinished := True;
+    Result := False;
+    Exit;
+  end;
+  ApplyOutputVolume;
+
+  if (Length(Pcm) > 0) and
+     (not FDecoder.QueueAudioPcm16Stereo48k(Pcm, ErrorMessage)) then
+  begin
+    Stop;
+    Result := False;
+  end;
+
+  if Result then
+  begin
+    FPlaybackClock := TStopwatch.StartNew;
+    FPlaybackClockActive := True;
+    WriteVideoMinerDebugLog(Format(
+      'audio_start pos_ms=%d start_samples=%d queued_samples=%d initial_pcm_bytes=%d finished=%s',
+      [PositionMs, FStartSamples, FQueuedSamples, Length(Pcm),
+       BoolToStr(FFinished, True)]));
+  end;
 end;
 
 procedure TVideoMinerAudioPlayback.Stop;
@@ -108,11 +156,25 @@ begin
   FStartSamples := 0;
   FQueuedSamples := 0;
   FApplyFadeInNext := False;
+  FPlaybackClockActive := False;
+  FPlaybackBaseMs := 0;
+end;
+
+function TVideoMinerAudioPlayback.PlaybackSamplePosition: Int64;
+begin
+  if not FPlaybackClockActive then
+    Exit(FStartSamples);
+
+  Result := Round(Int64(PlaybackPositionMs) * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
 end;
 
 procedure TVideoMinerAudioPlayback.SetMuted(Value: Boolean);
 begin
+  if FMuted = Value then
+    Exit;
+
   FMuted := Value;
+  ApplyOutputVolume;
 end;
 
 procedure TVideoMinerAudioPlayback.SetVolumePercent(Value: Integer);
@@ -122,37 +184,56 @@ begin
   else if Value > 100 then
     Value := 100;
 
+  if FVolumePercent = Value then
+    Exit;
+
   FVolumePercent := Value;
+  ApplyOutputVolume;
 end;
 
-procedure TVideoMinerAudioPlayback.ApplyVolume(var Pcm: TBytes);
+procedure TVideoMinerAudioPlayback.ApplyOutputVolume;
+var
+  EffectiveVolume: Integer;
+begin
+  if FDecoder = nil then
+    Exit;
+
+  if FMuted then
+    EffectiveVolume := 0
+  else
+    EffectiveVolume := FVolumePercent;
+
+  FDecoder.SetAudioOutputVolume(EffectiveVolume);
+end;
+
+procedure TVideoMinerAudioPlayback.ApplyFadeIn(var Pcm: TBytes);
 var
   SampleCount: Integer;
   FrameIndex: Integer;
   ChannelIndex: Integer;
   FadeFrames: Integer;
-  Scale: Double;
   FadeScale: Double;
   Value: Integer;
   Samples: PSmallIntArray;
 begin
-  if Length(Pcm) = 0 then
+  if (Length(Pcm) = 0) or (not FApplyFadeInNext) then
     Exit;
-
-  if FMuted then
-    Scale := 0
-  else
-    Scale := FVolumePercent / 100;
 
   SampleCount := Length(Pcm) div SizeOf(SmallInt);
   Samples := PSmallIntArray(@Pcm[0]);
   FadeFrames := Round(AUDIO_FADE_IN_MS * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
+  if FadeFrames <= 0 then
+  begin
+    FApplyFadeInNext := False;
+    Exit;
+  end;
 
   for FrameIndex := 0 to (SampleCount div 2) - 1 do
   begin
-    FadeScale := Scale;
-    if FApplyFadeInNext and (FadeFrames > 0) and (FrameIndex < FadeFrames) then
-      FadeScale := FadeScale * FrameIndex / FadeFrames;
+    if FrameIndex >= FadeFrames then
+      Break;
+
+    FadeScale := FrameIndex / FadeFrames;
 
     for ChannelIndex := 0 to 1 do
     begin
@@ -172,27 +253,51 @@ function TVideoMinerAudioPlayback.Pump(out ErrorMessage: string): Boolean;
 var
   Pcm: TBytes;
   SampleCount: Integer;
-  PlayedSampleCount: Integer;
+  PlaybackSampleCount: Int64;
+  RawQueuedSampleCount: Int64;
   QueuedSampleCount: Integer;
   TargetQueuedSampleCount: Integer;
   TargetSampleCount: Integer;
   Finished: Boolean;
+  QueuedBeforeMs: Int64;
+  SkipReason: string;
 begin
   ErrorMessage := '';
   Result := True;
 
   if (FDecoder = nil) or FFinished then
+  begin
+    if FDecoder = nil then
+      SkipReason := 'decoder_nil'
+    else
+      SkipReason := 'finished';
+    WriteVideoMinerDebugLog(Format(
+      'audio_pump_skip reason="%s" playback_ms=%d queued_samples=%d start_samples=%d finished=%s',
+      [SkipReason, PlaybackPositionMs,
+       FQueuedSamples, FStartSamples, BoolToStr(FFinished, True)]));
     Exit;
+  end;
 
   Pcm := nil;
   SampleCount := FQueuedSamples;
-  PlayedSampleCount := FDecoder.PlayedAudioSampleCount;
-  QueuedSampleCount := FQueuedSamples - FStartSamples - PlayedSampleCount;
-  if QueuedSampleCount < 0 then
-    QueuedSampleCount := 0;
+  PlaybackSampleCount := PlaybackSamplePosition;
+  RawQueuedSampleCount := Int64(FQueuedSamples) - Int64(PlaybackSampleCount);
+  if RawQueuedSampleCount < 0 then
+    QueuedSampleCount := 0
+  else if RawQueuedSampleCount > High(Integer) then
+    QueuedSampleCount := High(Integer)
+  else
+    QueuedSampleCount := Integer(RawQueuedSampleCount);
+  QueuedBeforeMs := Round(Int64(QueuedSampleCount) * 1000 / AUDIO_OUTPUT_SAMPLE_RATE);
   TargetQueuedSampleCount := Round(AUDIO_TARGET_QUEUE_MS * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
   if QueuedSampleCount >= TargetQueuedSampleCount then
+  begin
+    WriteVideoMinerDebugLog(Format(
+      'audio_pump_skip reason="queue_full" playback_ms=%d raw_queued_samples=%d queued_ms=%d target_ms=%d queued_samples=%d',
+      [PlaybackPositionMs, RawQueuedSampleCount, QueuedBeforeMs,
+       AUDIO_TARGET_QUEUE_MS, FQueuedSamples]));
     Exit;
+  end;
 
   TargetSampleCount := FQueuedSamples + (TargetQueuedSampleCount - QueuedSampleCount);
 
@@ -207,7 +312,7 @@ begin
   FQueuedSamples := SampleCount;
   FFinished := Finished;
 
-  ApplyVolume(Pcm);
+  ApplyFadeIn(Pcm);
 
   if (Length(Pcm) > 0) and
      (not FDecoder.QueueAudioPcm16Stereo48k(Pcm, ErrorMessage)) then
@@ -215,15 +320,21 @@ begin
     Stop;
     Result := False;
   end;
+
+  WriteVideoMinerDebugLog(Format(
+    'audio_pump playback_ms=%d raw_queued_before_samples=%d queued_before_ms=%d queued_after_ms=%d pcm_bytes=%d sample_count=%d finished=%s result=%s err="%s"',
+    [PlaybackPositionMs, RawQueuedSampleCount, QueuedBeforeMs,
+     Round((Int64(FQueuedSamples) - PlaybackSamplePosition) * 1000 / AUDIO_OUTPUT_SAMPLE_RATE),
+     Length(Pcm), FQueuedSamples, BoolToStr(FFinished, True),
+     BoolToStr(Result, True), ErrorMessage]));
 end;
 
 function TVideoMinerAudioPlayback.PlaybackPositionMs: Integer;
 begin
-  if (FDecoder = nil) or FFinished then
+  if (FDecoder = nil) or (FQueuedSamples <= 0) or (not FPlaybackClockActive) then
     Exit(-1);
 
-  Result := Round((FStartSamples + FDecoder.PlayedAudioSampleCount) * 1000 /
-    AUDIO_OUTPUT_SAMPLE_RATE);
+  Result := FPlaybackBaseMs + Round(FPlaybackClock.Elapsed.TotalMilliseconds);
 end;
 
 end.

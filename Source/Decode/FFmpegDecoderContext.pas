@@ -17,6 +17,7 @@ type
     AudioStream         : Pointer;
     AudioStreamIndex    : Integer;
     AudioFrame          : Pointer;
+    AudioDiscardUntilSample: Integer;
     SwrContext          : Pointer;
     Packet              : Pointer;
     Frame               : Pointer;

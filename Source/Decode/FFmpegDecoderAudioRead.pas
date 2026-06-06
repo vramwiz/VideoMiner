@@ -14,10 +14,50 @@ function DecodeAudioPcm16Stereo48kUntil(
   out ErrorMessage: string
 ): Boolean;
 
+function SeekAudioToMs(
+  Context: TFFmpegDecoderContext;
+  PositionMs: Integer;
+  out ErrorMessage: string
+): Boolean;
+
 implementation
 
 uses
   FFmpegAudioConvert, FFmpegAudioOpen;
+
+function SeekAudioToMs(
+  Context: TFFmpegDecoderContext;
+  PositionMs: Integer;
+  out ErrorMessage: string
+): Boolean;
+var
+  Ret: Integer;
+  TargetTs: Int64;
+begin
+  ErrorMessage := '';
+  Result := False;
+
+  if (Context = nil) or (Context.FormatContext = nil) or
+     (Context.AudioCodecContext = nil) or (Context.AudioStream = nil) or
+     (Context.AudioStreamIndex < 0) then
+  begin
+    ErrorMessage := 'Audio decoder is not open.';
+    Exit;
+  end;
+
+  TargetTs := StreamTimestampFromMs(PAVStream(Context.AudioStream), PositionMs);
+  Ret := TFFmpegApi.av_seek_frame(PAVFormatContext(Context.FormatContext),
+    Context.AudioStreamIndex, TargetTs, AVSEEK_FLAG_BACKWARD);
+  if Ret < 0 then
+  begin
+    ErrorMessage := TFFmpegApi.ErrorText(Ret);
+    Exit;
+  end;
+
+  TFFmpegApi.avcodec_flush_buffers(PAVCodecContext(Context.AudioCodecContext));
+  Context.AudioDiscardUntilSample := Round(PositionMs * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
+  Result := True;
+end;
 
 function DecodeAudioPcm16Stereo48kUntil(
   Context: TFFmpegDecoderContext;
@@ -32,6 +72,11 @@ var
   Chunk: TBytes;
   ChunkSampleCount: Integer;
   OldBytes: Integer;
+  FrameStartMs: Integer;
+  FrameStartSample: Integer;
+  DiscardUntilSample: Integer;
+  TrimSampleCount: Integer;
+  TrimByteCount: Integer;
 
   function EnsureAudioResamplerForFrame: Boolean;
   var
@@ -78,16 +123,55 @@ var
   end;
 
   function AppendDecodedAudioFrame: Boolean;
+  var
+    AudioFrame: PAVFrame;
+    AudioStream: PAVStream;
   begin
     Result := False;
+    AudioFrame := PAVFrame(Context.AudioFrame);
+    AudioStream := PAVStream(Context.AudioStream);
 
     if not EnsureAudioResamplerForFrame then
       Exit;
 
-    if not ConvertAudioFrameToPcm16Stereo48k(PAVFrame(Context.AudioFrame),
+    if not ConvertAudioFrameToPcm16Stereo48k(AudioFrame,
       PSwrContext(Context.SwrContext), Context.Info.Audio.SampleRate, Chunk,
       ChunkSampleCount) then
       Exit;
+
+    if (Context.AudioDiscardUntilSample >= 0) and (ChunkSampleCount > 0) then
+    begin
+      DiscardUntilSample := Context.AudioDiscardUntilSample;
+      FrameStartMs := StreamTimestampToMs(AudioStream, AudioFrame.pts);
+      if FrameStartMs < 0 then
+        Context.AudioDiscardUntilSample := -1
+      else
+      begin
+        FrameStartSample := Round(FrameStartMs * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
+        if FrameStartSample + ChunkSampleCount <= DiscardUntilSample then
+        begin
+          Result := True;
+          Exit;
+        end;
+
+        if FrameStartSample < DiscardUntilSample then
+        begin
+          TrimSampleCount := DiscardUntilSample - FrameStartSample;
+          if TrimSampleCount > ChunkSampleCount then
+            TrimSampleCount := ChunkSampleCount;
+          TrimByteCount := TrimSampleCount * AUDIO_OUTPUT_CHANNELS * SizeOf(SmallInt);
+          if TrimByteCount > 0 then
+          begin
+            if TrimByteCount < Length(Chunk) then
+              Move(Chunk[TrimByteCount], Chunk[0], Length(Chunk) - TrimByteCount);
+            SetLength(Chunk, Length(Chunk) - TrimByteCount);
+            Dec(ChunkSampleCount, TrimSampleCount);
+          end;
+          SampleCount := DiscardUntilSample;
+        end;
+        Context.AudioDiscardUntilSample := -1;
+      end;
+    end;
 
     OldBytes := Length(Pcm);
     SetLength(Pcm, OldBytes + Length(Chunk));

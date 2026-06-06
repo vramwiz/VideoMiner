@@ -83,6 +83,7 @@ type
     function DecodeNextFrameToYc48Optional(Buffer: Pointer; BufferStride: Integer; ConvertFrame: Boolean; out PositionMs: Integer; out ErrorMessage: string): Boolean;
     // 開いているファイルの音声を指定サンプル数までPCM16 stereo 48kHzへ順次デコードする
     function DecodeAudioPcm16Stereo48kUntil(TargetSampleCount: Integer; var Pcm: TBytes; var SampleCount: Integer; out Finished: Boolean; out ErrorMessage: string): Boolean;
+    function SeekAudioToMs(PositionMs: Integer; out ErrorMessage: string): Boolean;
     // ������Y�
     function StartAudioPlayback(out ErrorMessage: string): Boolean;
     function QueueAudioPcm16Stereo48k(const Pcm: TBytes; out ErrorMessage: string): Boolean;
@@ -118,6 +119,7 @@ begin
   FWaveOut := 0;
   FAudioBuffers := TList<PAudioWaveBuffer>.Create;
   FContext := TFFmpegDecoderContext.Create;
+  FContext.AudioDiscardUntilSample := -1;
 end;
 
 // 開いている動画を閉じてインスタンスを破棄する
@@ -595,7 +597,9 @@ begin
 
         while TFFmpegApi.avcodec_receive_frame(CodecContext, Frame) = 0 do
         begin
-          CopyFrameToBitmap(Frame, Bitmap);
+          CopyFrameToBitmapCached(Frame, Bitmap, FDirectSwsContext,
+            FDirectSwsSrcWidth, FDirectSwsSrcHeight, FDirectSwsSrcFormat,
+            FDirectSwsDstFormat);
           DecodedAny := True;
           if (Frame.pts = AV_NOPTS_VALUE) or (Frame.pts >= TargetTs) then
           begin
@@ -709,7 +713,9 @@ begin
 
         while TFFmpegApi.avcodec_receive_frame(CodecContext, Frame) = 0 do
         begin
-          CopyFrameToBitmap(Frame, Bitmap);
+          CopyFrameToBitmapCached(Frame, Bitmap, FDirectSwsContext,
+            FDirectSwsSrcWidth, FDirectSwsSrcHeight, FDirectSwsSrcFormat,
+            FDirectSwsDstFormat);
           PositionMs := StreamTimestampToMs(Stream, Frame.pts);
           Result := True;
           Exit;
@@ -788,6 +794,13 @@ begin
 end;
 
 // 一時デコーダで動画情報だけを読む
+function TFFmpegDecoder.SeekAudioToMs(PositionMs: Integer; out ErrorMessage: string): Boolean;
+begin
+  SyncContextFromFields;
+  Result := FFmpegDecoderAudioRead.SeekAudioToMs(FContext, PositionMs, ErrorMessage);
+  SyncFieldsFromContext;
+end;
+
 class function TFFmpegDecoder.ReadVideoInfo(const FileName: string; out Info: TVideoInfo; out ErrorMessage: string): Boolean;
 var
   Decoder: TFFmpegDecoder; // 情報取得だけに使う一時デコーダ

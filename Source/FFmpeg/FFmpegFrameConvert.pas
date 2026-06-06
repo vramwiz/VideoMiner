@@ -61,6 +61,15 @@ procedure CopyFrameToYc48Buffer(
 );
 
 procedure CopyFrameToBitmap(Frame: PAVFrame; Bitmap: TBitmap);
+procedure CopyFrameToBitmapCached(
+  Frame: PAVFrame;
+  Bitmap: TBitmap;
+  var ScaleContext: Pointer;
+  var CachedSrcWidth: Integer;
+  var CachedSrcHeight: Integer;
+  var CachedSrcFormat: Integer;
+  var CachedDstFormat: Integer
+);
 
 implementation
 
@@ -468,6 +477,48 @@ begin
   finally
     TFFmpegApi.sws_freeContext(ScaleContext);
   end;
+end;
+
+procedure CopyFrameToBitmapCached(
+  Frame: PAVFrame;
+  Bitmap: TBitmap;
+  var ScaleContext: Pointer;
+  var CachedSrcWidth: Integer;
+  var CachedSrcHeight: Integer;
+  var CachedSrcFormat: Integer;
+  var CachedDstFormat: Integer
+);
+var
+  DstData: array[0..3] of PByte;
+  DstLinesize: array[0..3] of Integer;
+  Stride: NativeInt;
+  DstFormat: Integer;
+begin
+  if (Frame = nil) or (Frame.width <= 0) or (Frame.height <= 0) then
+    raise Exception.Create('Decoded frame has invalid size.');
+
+  if Bitmap.PixelFormat <> pf32bit then
+    Bitmap.PixelFormat := pf32bit;
+  if (Bitmap.Width <> Frame.width) or (Bitmap.Height <> Frame.height) then
+    Bitmap.SetSize(Frame.width, Frame.height);
+
+  FillChar(DstData, SizeOf(DstData), 0);
+  FillChar(DstLinesize, SizeOf(DstLinesize), 0);
+
+  DstData[0] := Bitmap.ScanLine[0];
+  if Frame.height > 1 then
+    Stride := NativeInt(Bitmap.ScanLine[1]) - NativeInt(Bitmap.ScanLine[0])
+  else
+    Stride := Frame.width * 4;
+  DstLinesize[0] := Integer(Stride);
+
+  DstFormat := AV_PIX_FMT_BGRA;
+  EnsureSwsContext(Frame, DstFormat, ScaleContext, CachedSrcWidth, CachedSrcHeight,
+    CachedSrcFormat, CachedDstFormat);
+
+  if TFFmpegApi.sws_scale(PSwsContext(ScaleContext), @Frame.data[0], @Frame.linesize[0], 0,
+    Frame.height, @DstData[0], @DstLinesize[0]) <= 0 then
+    raise Exception.Create('sws_scale failed.');
 end;
 
 end.

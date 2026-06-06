@@ -3,6 +3,7 @@
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, Vcl.Forms,
   VideoMinerAudioPlayback in 'Source\App\VideoMinerAudioPlayback.pas',
+  VideoMinerDebugLog in 'Source\App\VideoMinerDebugLog.pas',
   VideoMinerMediaList in 'Source\App\VideoMinerMediaList.pas',
   VideoMinerVideoSurface in 'Source\App\VideoMinerVideoSurface.pas',
   VideoMinerVideoView in 'Source\App\VideoMinerVideoView.pas',

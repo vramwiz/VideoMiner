@@ -4,10 +4,11 @@ interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
+  System.Diagnostics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
   Vcl.ExtCtrls, Vcl.ComCtrls, ActiveX, DropAgent, FFmpegDecoder,
   FFmpegDecoderTypes, VideoMinerAudioPlayback, VideoMinerMediaList,
-  VideoMinerVideoView;
+  VideoMinerDebugLog, VideoMinerVideoView;
 
 const
   WM_VM_OPEN_PENDING = WM_APP + 1;
@@ -56,6 +57,7 @@ type
     FVideoView: TVideoMinerVideoView;
     FVideoFile: string; // 現在開いている動画ファイル名
     FVideoInfo: TVideoInfo; // 現在開いている動画の基本情報
+    FCurrentVideoPositionMs: Integer;
     FUpdatingSeek: Boolean; // コードからのシークバー更新中かどうか
     FSeeking: Boolean;
     FSeekGuardTargetMs: Integer;
@@ -64,6 +66,9 @@ type
     FOleInitialized: Boolean;
     FPendingOpenFiles: TStringList;
     FProcessingOpenQueue: Boolean;
+    FPendingRestartPlayback: Boolean;
+    FPendingRestartMs: Integer;
+    FRestartPlaybackTimer: TTimer;
     function LoadVideoFile(const FileName: string; AutoPlay: Boolean): Boolean;
     procedure DropFiles(Sender: TObject; Control: TWinControl; const FileNames: TArray<string>);
     procedure UpdateNavigationButtons;
@@ -72,6 +77,8 @@ type
     procedure SeekByMs(DeltaMs: Integer);
     procedure SeekToFirstFrame;
     procedure SeekToLastFrame;
+    procedure StartPlaybackAtMs(PositionMs: Integer);
+    procedure RestartPlaybackTimer(Sender: TObject);
     function SyncVideoToAudio(var PositionMs: Integer; out ErrorMessage: string): Boolean;
     procedure FinishPlaybackAtEnd;
     procedure QueueOpenAndPlayFile(const FileName: string);
@@ -93,20 +100,31 @@ implementation
 
 const
   COPYDATA_OPEN_FILE = $564D0001;
-  VIDEO_AUDIO_SYNC_LAG_MS = 200;
+  VIDEO_AUDIO_SYNC_LAG_MS = 60;
+  VIDEO_AUDIO_SEEK_LAG_MS = 120;
   VIDEO_END_TOLERANCE_MS = 1500;
+  VIDEO_DROP_FRAME_MAX = 90;
+  VIDEO_DROP_FRAME_BUDGET_MS = 25;
 
 {$R *.dfm}
 
 // フォーム生成時にデコーダを用意する
 procedure TVideoMinerMainForm.FormCreate(Sender: TObject);
 begin
+  ClearVideoMinerDebugLog('form_create');
   FOleInitialized := OleInitialize(nil) >= 0;
   FDecoder := TFFmpegDecoder.Create;
   FAudioPlayback := TVideoMinerAudioPlayback.Create;
   FMediaList := TVideoMinerMediaList.Create;
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
   FPendingOpenFiles := TStringList.Create;
+  FRestartPlaybackTimer := TTimer.Create(Self);
+  FRestartPlaybackTimer.Enabled := False;
+  FRestartPlaybackTimer.Interval := 120;
+  FRestartPlaybackTimer.OnTimer := RestartPlaybackTimer;
+  FCurrentVideoPositionMs := -1;
+  FPendingRestartPlayback := False;
+  FPendingRestartMs := -1;
   FAudioPlayback.VolumePercent := TrackBarVolume.Position;
   FAudioPlayback.Muted := CheckBoxMute.Checked;
   FDropAgent := TDropAgent.Create;
@@ -123,6 +141,7 @@ end;
 procedure TVideoMinerMainForm.FormDestroy(Sender: TObject);
 begin
   TimerPlayback.Enabled := False;
+  FRestartPlaybackTimer.Enabled := False;
   FAudioPlayback.Stop;
   FDropAgent.Free;
   FPendingOpenFiles.Free;
@@ -148,6 +167,7 @@ begin
     Exit;
   end;
 
+  FCurrentVideoPositionMs := PositionMs;
   UpdateInfoLabel;
 end;
 
@@ -198,8 +218,12 @@ begin
   end;
 
   TimerPlayback.Enabled := False;
+  FRestartPlaybackTimer.Enabled := False;
   FAudioPlayback.Stop;
   FSeeking := False;
+  FPendingRestartPlayback := False;
+  FPendingRestartMs := -1;
+  FCurrentVideoPositionMs := -1;
   FSeekGuardRemaining := 0;
   FVideoView.Clear;
 
@@ -263,8 +287,6 @@ begin
 end;
 
 procedure TVideoMinerMainForm.ButtonPlayClick(Sender: TObject);
-var
-  ErrorMessage: string;
 begin
   if FVideoFile = '' then
     Exit;
@@ -280,19 +302,15 @@ begin
     ShowFrameAtMs(0);
   end;
 
-  if not FAudioPlayback.StartAt(FVideoFile, FVideoInfo, TrackBarSeek.Position,
-    ErrorMessage) then
-  begin
-    LabelInfo.Caption := 'Failed to start audio playback: ' + ErrorMessage;
-    Exit;
-  end;
-
-  TimerPlayback.Enabled := True;
+  StartPlaybackAtMs(TrackBarSeek.Position);
 end;
 // 再生を停止する
 procedure TVideoMinerMainForm.ButtonStopClick(Sender: TObject);
 begin
   TimerPlayback.Enabled := False;
+  FPendingRestartPlayback := False;
+  FPendingRestartMs := -1;
+  FRestartPlaybackTimer.Enabled := False;
   FAudioPlayback.Stop;
   UpdateInfoLabel;
 end;
@@ -302,7 +320,21 @@ procedure TVideoMinerMainForm.TimerPlaybackTimer(Sender: TObject);
 var
   ErrorMessage: string;
   PositionMs: Integer;
+  AudioPositionMs: Integer;
+  LagMs: Integer;
+  DropCount: Integer;
+  DropWatch: TStopwatch;
+  TotalWatch: TStopwatch;
+  StepWatch: TStopwatch;
+  PumpMs: Double;
+  DecodeMs: Double;
+  SyncMs: Double;
+  ConvertFrame: Boolean;
+  DidSeekToAudio: Boolean;
 begin
+  TotalWatch := TStopwatch.StartNew;
+  DecodeMs := 0;
+
   if FSeeking then
     Exit;
 
@@ -312,28 +344,82 @@ begin
     Exit;
   end;
 
+  StepWatch := TStopwatch.StartNew;
   if not FAudioPlayback.Pump(ErrorMessage) then
   begin
     LabelInfo.Caption := 'Failed to play audio: ' + ErrorMessage;
     Exit;
   end;
+  PumpMs := StepWatch.Elapsed.TotalMilliseconds;
 
-  if not FVideoView.ShowNextFrame(FDecoder, PositionMs, ErrorMessage) then
-  begin
-    TimerPlayback.Enabled := False;
-    FAudioPlayback.Stop;
-    if ErrorMessage = 'End of stream.' then
-      FinishPlaybackAtEnd
-    else
-      LabelInfo.Caption := 'Failed to decode next frame: ' + ErrorMessage;
-    Exit;
-  end;
+  AudioPositionMs := FAudioPlayback.PlaybackPositionMs;
+  if AudioPositionMs > TrackBarSeek.Max then
+    AudioPositionMs := TrackBarSeek.Max;
 
-  if not SyncVideoToAudio(PositionMs, ErrorMessage) then
+  PositionMs := -1;
+  DropCount := 0;
+  DropWatch := TStopwatch.StartNew;
+  DidSeekToAudio := False;
+  repeat
+    ConvertFrame := True;
+    if (AudioPositionMs >= 0) and (FCurrentVideoPositionMs >= 0) and
+       (FCurrentVideoPositionMs < AudioPositionMs - VIDEO_AUDIO_SYNC_LAG_MS) then
+    begin
+      if (DropCount < VIDEO_DROP_FRAME_MAX) and
+         (DropWatch.ElapsedMilliseconds < VIDEO_DROP_FRAME_BUDGET_MS) then
+      begin
+        ConvertFrame := False;
+        Inc(DropCount);
+      end
+      else
+      begin
+        if FVideoView.ShowFrameAt(FDecoder, AudioPositionMs, ErrorMessage) then
+        begin
+          PositionMs := AudioPositionMs;
+          FCurrentVideoPositionMs := AudioPositionMs;
+          DidSeekToAudio := True;
+          Break;
+        end;
+
+        if TrackBarSeek.Max - AudioPositionMs <= VIDEO_END_TOLERANCE_MS then
+        begin
+          ErrorMessage := '';
+          PositionMs := AudioPositionMs;
+          FCurrentVideoPositionMs := AudioPositionMs;
+          DidSeekToAudio := True;
+          Break;
+        end;
+
+        LabelInfo.Caption := 'Failed to sync video: ' + ErrorMessage;
+        Exit;
+      end;
+    end;
+
+    StepWatch := TStopwatch.StartNew;
+    if not FVideoView.DecodeNextFrame(FDecoder, ConvertFrame, PositionMs,
+      ErrorMessage) then
+    begin
+      TimerPlayback.Enabled := False;
+      FAudioPlayback.Stop;
+      if ErrorMessage = 'End of stream.' then
+        FinishPlaybackAtEnd
+      else
+        LabelInfo.Caption := 'Failed to decode next frame: ' + ErrorMessage;
+      Exit;
+    end;
+    DecodeMs := DecodeMs + StepWatch.Elapsed.TotalMilliseconds;
+
+    if PositionMs >= 0 then
+      FCurrentVideoPositionMs := PositionMs;
+  until ConvertFrame;
+
+  StepWatch := TStopwatch.StartNew;
+  if (not DidSeekToAudio) and (not SyncVideoToAudio(PositionMs, ErrorMessage)) then
   begin
     LabelInfo.Caption := 'Failed to sync video: ' + ErrorMessage;
     Exit;
   end;
+  SyncMs := StepWatch.Elapsed.TotalMilliseconds;
 
   if (FSeekGuardRemaining > 0) and (PositionMs >= 0) then
   begin
@@ -370,7 +456,16 @@ begin
     end;
   end;
 
-  UpdateInfoLabel;
+  AudioPositionMs := FAudioPlayback.PlaybackPositionMs;
+  if (AudioPositionMs >= 0) and (PositionMs >= 0) then
+    LagMs := AudioPositionMs - PositionMs
+  else
+    LagMs := 0;
+  WriteVideoMinerDebugLog(Format(
+    'playback_tick file="%s" audio_ms=%d video_ms=%d lag_ms=%d drop_count=%d seek_to_audio=%s pump_ms=%.3f decode_ms=%.3f sync_ms=%.3f total_ms=%.3f timer_interval=%d',
+    [ExtractFileName(FVideoFile), AudioPositionMs, PositionMs, LagMs, DropCount,
+     BoolToStr(DidSeekToAudio, True), PumpMs, DecodeMs, SyncMs,
+     TotalWatch.Elapsed.TotalMilliseconds, TimerPlayback.Interval]));
 end;
 // シークバー操作に合わせて指定位置のフレームを表示する
 procedure TVideoMinerMainForm.TrackBarSeekChange(Sender: TObject);
@@ -378,7 +473,11 @@ begin
   if FUpdatingSeek then
     Exit;
 
-  ShowFrameAtMs(TrackBarSeek.Position);
+  if TimerPlayback.Enabled or FPendingRestartPlayback or
+     ((FRestartPlaybackTimer <> nil) and FRestartPlaybackTimer.Enabled) then
+    SeekToMs(TrackBarSeek.Position)
+  else
+    ShowFrameAtMs(TrackBarSeek.Position);
 end;
 
 procedure TVideoMinerMainForm.TrackBarVolumeChange(Sender: TObject);
@@ -430,8 +529,12 @@ begin
   if (FVideoFile = '') or (TrackBarSeek.Max <= 0) then
     Exit;
 
-  WasPlaying := TimerPlayback.Enabled;
+  WasPlaying := TimerPlayback.Enabled or FPendingRestartPlayback or
+    ((FRestartPlaybackTimer <> nil) and FRestartPlaybackTimer.Enabled);
   TimerPlayback.Enabled := False;
+  FRestartPlaybackTimer.Enabled := False;
+  FPendingRestartPlayback := False;
+  FPendingRestartMs := -1;
   FAudioPlayback.Stop;
 
   TargetMs := PositionMs;
@@ -439,6 +542,9 @@ begin
     TargetMs := 0
   else if TargetMs > TrackBarSeek.Max then
     TargetMs := TrackBarSeek.Max;
+
+  WriteVideoMinerDebugLog(Format('seek target_ms=%d was_playing=%s',
+    [TargetMs, BoolToStr(WasPlaying, True)]));
 
   FSeeking := True;
   try
@@ -457,7 +563,12 @@ begin
   end;
 
   if WasPlaying and (TargetMs < TrackBarSeek.Max) then
-    ButtonPlayClick(Self);
+  begin
+    FPendingRestartPlayback := True;
+    FPendingRestartMs := TargetMs;
+    FRestartPlaybackTimer.Enabled := False;
+    FRestartPlaybackTimer.Enabled := True;
+  end;
 end;
 
 procedure TVideoMinerMainForm.SeekByMs(DeltaMs: Integer);
@@ -473,6 +584,35 @@ end;
 procedure TVideoMinerMainForm.SeekToLastFrame;
 begin
   SeekToMs(TrackBarSeek.Max);
+end;
+
+procedure TVideoMinerMainForm.StartPlaybackAtMs(PositionMs: Integer);
+var
+  ErrorMessage: string;
+  TargetMs: Integer;
+begin
+  if FVideoFile = '' then
+    Exit;
+
+  TargetMs := PositionMs;
+  if TargetMs < 0 then
+    TargetMs := 0
+  else if TargetMs > TrackBarSeek.Max then
+    TargetMs := TrackBarSeek.Max;
+
+  WriteVideoMinerDebugLog(Format('start_playback file="%s" requested_ms=%d target_ms=%d',
+    [ExtractFileName(FVideoFile), PositionMs, TargetMs]));
+
+  if not FAudioPlayback.StartAt(FVideoFile, FVideoInfo, TargetMs,
+    ErrorMessage) then
+  begin
+    LabelInfo.Caption := 'Failed to start audio playback: ' + ErrorMessage;
+    Exit;
+  end;
+
+  FSeekGuardRemaining := 0;
+  TimerPlayback.Enabled := True;
+  TimerPlaybackTimer(TimerPlayback);
 end;
 
 function TVideoMinerMainForm.SyncVideoToAudio(var PositionMs: Integer;
@@ -493,17 +633,21 @@ begin
   if AudioPositionMs > TrackBarSeek.Max then
     AudioPositionMs := TrackBarSeek.Max;
 
-  if AudioPositionMs - PositionMs <= VIDEO_AUDIO_SYNC_LAG_MS then
+  if AudioPositionMs - PositionMs <= VIDEO_AUDIO_SEEK_LAG_MS then
     Exit;
 
   Result := FVideoView.ShowFrameAt(FDecoder, AudioPositionMs, ErrorMessage);
   if Result then
+  begin
     PositionMs := AudioPositionMs;
+    FCurrentVideoPositionMs := AudioPositionMs;
+  end;
   if (not Result) and
      (TrackBarSeek.Max - AudioPositionMs <= VIDEO_END_TOLERANCE_MS) then
   begin
     ErrorMessage := '';
     PositionMs := AudioPositionMs;
+    FCurrentVideoPositionMs := AudioPositionMs;
     Result := True;
   end;
 end;
@@ -581,6 +725,26 @@ procedure TVideoMinerMainForm.WMOpenPending(var Message: TMessage);
 begin
   ProcessOpenQueue;
   Message.Result := 1;
+end;
+
+procedure TVideoMinerMainForm.RestartPlaybackTimer(Sender: TObject);
+var
+  TargetMs: Integer;
+begin
+  FRestartPlaybackTimer.Enabled := False;
+
+  if not FPendingRestartPlayback then
+    Exit;
+
+  FPendingRestartPlayback := False;
+  TargetMs := FPendingRestartMs;
+  FPendingRestartMs := -1;
+
+  if (FVideoFile = '') or (TargetMs < 0) or (TargetMs >= TrackBarSeek.Max) then
+    Exit;
+
+  WriteVideoMinerDebugLog(Format('restart_playback target_ms=%d', [TargetMs]));
+  StartPlaybackAtMs(TargetMs);
 end;
 
 procedure TVideoMinerMainForm.WMCopyData(var Message: TWMCopyData);
