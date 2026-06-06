@@ -55,7 +55,7 @@ begin
   end;
 
   TFFmpegApi.avcodec_flush_buffers(PAVCodecContext(Context.AudioCodecContext));
-  Context.AudioDiscardUntilSample := Round(PositionMs * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
+  Context.AudioDiscardUntilSample := (Int64(PositionMs) * AUDIO_OUTPUT_SAMPLE_RATE + 500) div 1000;
   Result := True;
 end;
 
@@ -147,7 +147,7 @@ var
         Context.AudioDiscardUntilSample := -1
       else
       begin
-        FrameStartSample := Round(FrameStartMs * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
+        FrameStartSample := (Int64(FrameStartMs) * AUDIO_OUTPUT_SAMPLE_RATE + 500) div 1000;
         if FrameStartSample + ChunkSampleCount <= DiscardUntilSample then
         begin
           Result := True;

@@ -661,27 +661,40 @@ procedure TVideoMinerVideoSurface.Paint;
 {$IFDEF DEBUG}
 var
   PaintWatch: TStopwatch;
+  DebugLogEnabled: Boolean;
 {$ENDIF}
 var
   DrawCanvas: TCanvas;
   DestRect: TRect;
+  UsePaintBuffer: Boolean;
 begin
 {$IFDEF DEBUG}
-  PaintWatch := TStopwatch.StartNew;
+  DebugLogEnabled := VideoMinerDebugLogEnabled;
+  if DebugLogEnabled then
+    PaintWatch := TStopwatch.StartNew;
 {$ENDIF}
   if (ClientWidth <= 0) or (ClientHeight <= 0) then
     Exit;
 
-  if (FPaintBuffer.Width <> ClientWidth) or
-     (FPaintBuffer.Height <> ClientHeight) then
-    FPaintBuffer.SetSize(ClientWidth, ClientHeight);
+  UsePaintBuffer := FOverlayVisible or FSeekBarVisible or
+    ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible) or
+    ((FNextFileButton <> nil) and FNextFileButton.Visible);
+  if UsePaintBuffer then
+  begin
+    if (FPaintBuffer.Width <> ClientWidth) or
+       (FPaintBuffer.Height <> ClientHeight) then
+      FPaintBuffer.SetSize(ClientWidth, ClientHeight);
+    DrawCanvas := FPaintBuffer.Canvas;
+  end
+  else
+    DrawCanvas := Canvas;
 
-  DrawCanvas := FPaintBuffer.Canvas;
   DrawCanvas.Brush.Color := clBlack;
   if (FBitmap.Width <= 0) or (FBitmap.Height <= 0) then
   begin
     DrawCanvas.FillRect(ClientRect);
-    Canvas.Draw(0, 0, FPaintBuffer);
+    if UsePaintBuffer then
+      Canvas.Draw(0, 0, FPaintBuffer);
     Exit;
   end;
 
@@ -740,11 +753,13 @@ begin
     FNextFileButton.Paint(DrawCanvas);
   if FSeekBarVisible and (FSeekBar <> nil) then
     FSeekBar.Paint(DrawCanvas);
-  Canvas.Draw(0, 0, FPaintBuffer);
+  if UsePaintBuffer then
+    Canvas.Draw(0, 0, FPaintBuffer);
 {$IFDEF DEBUG}
-  WriteVideoMinerDebugLog(Format('paint width=%d height=%d client_w=%d client_h=%d paint_ms=%.3f',
-    [FBitmap.Width, FBitmap.Height, ClientWidth, ClientHeight,
-     PaintWatch.Elapsed.TotalMilliseconds]));
+  if DebugLogEnabled then
+    WriteVideoMinerDebugLog(Format('paint width=%d height=%d client_w=%d client_h=%d paint_ms=%.3f',
+      [FBitmap.Width, FBitmap.Height, ClientWidth, ClientHeight,
+       PaintWatch.Elapsed.TotalMilliseconds]));
 {$ENDIF}
 end;
 

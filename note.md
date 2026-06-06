@@ -364,6 +364,13 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
 - `ScanLine[0]` を渡すと `sws_scale-9.dll` で AccessViolation が出た。`CopyFrameToBgrx32Buffer` 側が bottom-up Bitmap 前提で、渡された先頭ポインタから内部で最終行へ調整するため、ここは `ScanLine[Height - 1]` が正しい。
 - `DoubleBuffered := False` にして、動画サーフェス側の余分なコピーを減らしている。
 - `CopyFrameToBitmapCached` も追加済み。従来 Bitmap 経路用に sws context を使い回すための保険として残っている。
+- 2026-06-06 の高速化作業で、再生中の通常 tick ではシークバー進捗だけを軽く更新し、Caption/タイトルなどの情報更新は約 250ms 間隔へ間引いた。
+- Debug ビルドでも再生中 hot path のログは既定 OFF にした。必要な場合は `VideoMinerDebugLog.pas` の `VIDEO_MINER_DEBUG_LOG_ENABLED` を一時的に True にして調査する。
+- オーバーレイ非表示の通常再生時は、動画サーフェス全体を `FPaintBuffer` に合成してから転送する経路を避け、直接 `Canvas` へ描く。オーバーレイや下側シークバー表示時だけ従来どおりバックバッファを使う。
+- 1 時間程度の動画終盤で重くなる症状は、音声キュー計算のサンプル位置が 32bit 計算で壊れ、`audio_pump` が毎 tick 余計に音声デコードしていたことが主因だった。
+- 対策として、`TVideoMinerAudioPlayback` の `FStartSamples` / `FQueuedSamples` と、再生位置 ms からサンプル数へ変換する計算を `Int64` ベースにした。
+- `FFmpegDecoderAudioRead.SeekAudioToMs` とシーク直後 discard の `FrameStartSample` 計算も `Int64` ベースへ変更した。長時間動画では `PositionMs * 48000` を `Integer` 計算に戻さない。
+- 修正前ログでは `raw_queued_before_samples` と `queued_after_ms` が大きな負値になり、`playback_tick` の `pump_ms` が 50ms、100ms、200ms 以上に跳ねるケースがあった。修正後の体感では 1 時間動画終盤のカクつきは軽減した。
 
 ### シーク時の同期
 

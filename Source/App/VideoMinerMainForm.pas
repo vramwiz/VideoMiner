@@ -72,6 +72,7 @@ type
     FNormalWindowBounds: TVideoMinerWindowBounds;
     FShortcuts: TShortcutAction;
     FTitleIcon: TImage;
+    FLastInfoUpdateTick: UInt64;
     procedure EnterFullScreen;
     procedure ExitFullScreen;
     procedure InitializeTitleIcon;
@@ -116,6 +117,7 @@ type
     function CurrentPlaybackPositionMs: Integer;
     procedure SetTitleBarText(const Text: string);
     procedure SetStatusCaption(const Text: string);
+    procedure UpdatePlaybackProgress(PositionMs: Integer);
     procedure SeekToMs(PositionMs: Integer; ResumeIfPlaying: Boolean = True);
     procedure SeekByMs(DeltaMs: Integer);
     procedure SeekToFirstFrame;
@@ -160,6 +162,7 @@ const
   VIDEO_END_TOLERANCE_MS = 1500;
   VIDEO_DROP_FRAME_MAX = 90;
   VIDEO_DROP_FRAME_BUDGET_MS = 25;
+  UI_INFO_UPDATE_INTERVAL_MS = 250;
   TITLE_BAR_COLOR = $00171617;
   CLOSE_BUTTON_HOVER_COLOR = $00232323;
   CAPTION_BUTTON_HOVER_COLOR = $00232323;
@@ -592,6 +595,20 @@ begin
   SetTitleBarText(Format('%s (%d/%d)', [ExtractFileName(FVideoFile),
     FMediaList.CurrentIndex + 1, FMediaList.Count]));
   FVideoView.SetSeekProgress(CurrentPositionMs, FSeekMaxMs);
+  FLastInfoUpdateTick := GetTickCount64;
+end;
+
+procedure TVideoMinerMainForm.UpdatePlaybackProgress(PositionMs: Integer);
+var
+  CurrentTick: UInt64;
+begin
+  if FVideoView <> nil then
+    FVideoView.SetSeekProgress(PositionMs, FSeekMaxMs);
+
+  CurrentTick := GetTickCount64;
+  if (FLastInfoUpdateTick = 0) or
+     (CurrentTick - FLastInfoUpdateTick >= UI_INFO_UPDATE_INTERVAL_MS) then
+    UpdateInfoLabel;
 end;
 
 procedure TVideoMinerMainForm.OpenFromDialog;
@@ -993,9 +1010,14 @@ var
   SyncMs: Double;
   ConvertFrame: Boolean;
   DidSeekToAudio: Boolean;
+  DebugLogEnabled: Boolean;
 begin
-  TotalWatch := TStopwatch.StartNew;
+  DebugLogEnabled := VideoMinerDebugLogEnabled;
+  if DebugLogEnabled then
+    TotalWatch := TStopwatch.StartNew;
+  PumpMs := 0;
   DecodeMs := 0;
+  SyncMs := 0;
 
   if FSeeking then
     Exit;
@@ -1007,13 +1029,15 @@ begin
     Exit;
   end;
 
-  StepWatch := TStopwatch.StartNew;
+  if DebugLogEnabled then
+    StepWatch := TStopwatch.StartNew;
   if not FAudioPlayback.Pump(ErrorMessage) then
   begin
     SetStatusCaption('Failed to play audio: ' + ErrorMessage);
     Exit;
   end;
-  PumpMs := StepWatch.Elapsed.TotalMilliseconds;
+  if DebugLogEnabled then
+    PumpMs := StepWatch.Elapsed.TotalMilliseconds;
 
   AudioPositionMs := FAudioPlayback.PlaybackPositionMs;
   if AudioPositionMs > FSeekMaxMs then
@@ -1058,7 +1082,8 @@ begin
       end;
     end;
 
-    StepWatch := TStopwatch.StartNew;
+    if DebugLogEnabled then
+      StepWatch := TStopwatch.StartNew;
     if not FVideoView.DecodeNextFrame(FDecoder, ConvertFrame, PositionMs,
       ErrorMessage) then
     begin
@@ -1071,19 +1096,22 @@ begin
         SetStatusCaption('Failed to decode next frame: ' + ErrorMessage);
       Exit;
     end;
-    DecodeMs := DecodeMs + StepWatch.Elapsed.TotalMilliseconds;
+    if DebugLogEnabled then
+      DecodeMs := DecodeMs + StepWatch.Elapsed.TotalMilliseconds;
 
     if PositionMs >= 0 then
       FCurrentVideoPositionMs := PositionMs;
   until ConvertFrame;
 
-  StepWatch := TStopwatch.StartNew;
+  if DebugLogEnabled then
+    StepWatch := TStopwatch.StartNew;
   if (not DidSeekToAudio) and (not SyncVideoToAudio(PositionMs, ErrorMessage)) then
   begin
     SetStatusCaption('Failed to sync video: ' + ErrorMessage);
     Exit;
   end;
-  SyncMs := StepWatch.Elapsed.TotalMilliseconds;
+  if DebugLogEnabled then
+    SyncMs := StepWatch.Elapsed.TotalMilliseconds;
 
   if (FSeekGuardRemaining > 0) and (PositionMs >= 0) then
   begin
@@ -1127,12 +1155,13 @@ begin
     LagMs := AudioPositionMs - PositionMs
   else
     LagMs := 0;
-  UpdateInfoLabel;
-  WriteVideoMinerDebugLog(Format(
-    'playback_tick file="%s" audio_ms=%d video_ms=%d lag_ms=%d drop_count=%d seek_to_audio=%s pump_ms=%.3f decode_ms=%.3f sync_ms=%.3f total_ms=%.3f timer_interval=%d',
-    [ExtractFileName(FVideoFile), AudioPositionMs, PositionMs, LagMs, DropCount,
-     BoolToStr(DidSeekToAudio, True), PumpMs, DecodeMs, SyncMs,
-     TotalWatch.Elapsed.TotalMilliseconds, TimerPlayback.Interval]));
+  UpdatePlaybackProgress(FSeekPositionMs);
+  if DebugLogEnabled then
+    WriteVideoMinerDebugLog(Format(
+      'playback_tick file="%s" audio_ms=%d video_ms=%d lag_ms=%d drop_count=%d seek_to_audio=%s pump_ms=%.3f decode_ms=%.3f sync_ms=%.3f total_ms=%.3f timer_interval=%d',
+      [ExtractFileName(FVideoFile), AudioPositionMs, PositionMs, LagMs, DropCount,
+       BoolToStr(DidSeekToAudio, True), PumpMs, DecodeMs, SyncMs,
+       TotalWatch.Elapsed.TotalMilliseconds, TimerPlayback.Interval]));
 end;
 
 

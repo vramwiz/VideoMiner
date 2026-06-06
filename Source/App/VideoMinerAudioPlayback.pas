@@ -15,8 +15,8 @@ type
   private
     FDecoder: TFFmpegDecoder;
     FFinished: Boolean;
-    FStartSamples: Integer;
-    FQueuedSamples: Integer;
+    FStartSamples: Int64;
+    FQueuedSamples: Int64;
     FVolumePercent: Integer;
     FMuted: Boolean;
     FApplyFadeInNext: Boolean;
@@ -96,15 +96,15 @@ begin
   end;
 
   FFinished := False;
-  FStartSamples := Round(PositionMs * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
+  FStartSamples := (Int64(PositionMs) * AUDIO_OUTPUT_SAMPLE_RATE + 500) div 1000;
   FQueuedSamples := FStartSamples;
   FApplyFadeInNext := True;
   FPlaybackBaseMs := PositionMs;
   FPlaybackClockActive := False;
 
   Pcm := nil;
-  SampleCount := FQueuedSamples;
-  TargetSampleCount := FQueuedSamples +
+  SampleCount := Integer(FQueuedSamples);
+  TargetSampleCount := SampleCount +
     Round(AUDIO_TARGET_QUEUE_MS * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
   if not FDecoder.DecodeAudioPcm16Stereo48kUntil(TargetSampleCount, Pcm,
     SampleCount, Finished, ErrorMessage) then
@@ -172,7 +172,7 @@ begin
   if not FPlaybackClockActive then
     Exit(FStartSamples);
 
-  Result := Round(Int64(PlaybackPositionMs) * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
+  Result := (Int64(PlaybackPositionMs) * AUDIO_OUTPUT_SAMPLE_RATE + 500) div 1000;
 end;
 
 procedure TVideoMinerAudioPlayback.SetMuted(Value: Boolean);
@@ -262,7 +262,7 @@ var
   SampleCount: Integer;
   PlaybackSampleCount: Int64;
   RawQueuedSampleCount: Int64;
-  QueuedSampleCount: Integer;
+  QueuedSampleCount: Int64;
   TargetQueuedSampleCount: Integer;
   TargetSampleCount: Integer;
   Finished: Boolean;
@@ -278,35 +278,35 @@ begin
       SkipReason := 'decoder_nil'
     else
       SkipReason := 'finished';
-    WriteVideoMinerDebugLog(Format(
-      'audio_pump_skip reason="%s" playback_ms=%d queued_samples=%d start_samples=%d finished=%s',
-      [SkipReason, PlaybackPositionMs,
-       FQueuedSamples, FStartSamples, BoolToStr(FFinished, True)]));
+    if VideoMinerDebugLogEnabled then
+      WriteVideoMinerDebugLog(Format(
+        'audio_pump_skip reason="%s" playback_ms=%d queued_samples=%d start_samples=%d finished=%s',
+        [SkipReason, PlaybackPositionMs,
+         FQueuedSamples, FStartSamples, BoolToStr(FFinished, True)]));
     Exit;
   end;
 
   Pcm := nil;
-  SampleCount := FQueuedSamples;
+  SampleCount := Integer(FQueuedSamples);
   PlaybackSampleCount := PlaybackSamplePosition;
   RawQueuedSampleCount := Int64(FQueuedSamples) - Int64(PlaybackSampleCount);
   if RawQueuedSampleCount < 0 then
     QueuedSampleCount := 0
-  else if RawQueuedSampleCount > High(Integer) then
-    QueuedSampleCount := High(Integer)
   else
-    QueuedSampleCount := Integer(RawQueuedSampleCount);
+    QueuedSampleCount := RawQueuedSampleCount;
   QueuedBeforeMs := Round(Int64(QueuedSampleCount) * 1000 / AUDIO_OUTPUT_SAMPLE_RATE);
   TargetQueuedSampleCount := Round(AUDIO_TARGET_QUEUE_MS * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
   if QueuedSampleCount >= TargetQueuedSampleCount then
   begin
-    WriteVideoMinerDebugLog(Format(
-      'audio_pump_skip reason="queue_full" playback_ms=%d raw_queued_samples=%d queued_ms=%d target_ms=%d queued_samples=%d',
-      [PlaybackPositionMs, RawQueuedSampleCount, QueuedBeforeMs,
-       AUDIO_TARGET_QUEUE_MS, FQueuedSamples]));
+    if VideoMinerDebugLogEnabled then
+      WriteVideoMinerDebugLog(Format(
+        'audio_pump_skip reason="queue_full" playback_ms=%d raw_queued_samples=%d queued_ms=%d target_ms=%d queued_samples=%d',
+        [PlaybackPositionMs, RawQueuedSampleCount, QueuedBeforeMs,
+         AUDIO_TARGET_QUEUE_MS, FQueuedSamples]));
     Exit;
   end;
 
-  TargetSampleCount := FQueuedSamples + (TargetQueuedSampleCount - QueuedSampleCount);
+  TargetSampleCount := SampleCount + Integer(TargetQueuedSampleCount - QueuedSampleCount);
 
   if not FDecoder.DecodeAudioPcm16Stereo48kUntil(TargetSampleCount, Pcm,
     SampleCount, Finished, ErrorMessage) then
@@ -328,12 +328,13 @@ begin
     Result := False;
   end;
 
-  WriteVideoMinerDebugLog(Format(
-    'audio_pump playback_ms=%d raw_queued_before_samples=%d queued_before_ms=%d queued_after_ms=%d pcm_bytes=%d sample_count=%d finished=%s result=%s err="%s"',
-    [PlaybackPositionMs, RawQueuedSampleCount, QueuedBeforeMs,
-     Round((Int64(FQueuedSamples) - PlaybackSamplePosition) * 1000 / AUDIO_OUTPUT_SAMPLE_RATE),
-     Length(Pcm), FQueuedSamples, BoolToStr(FFinished, True),
-     BoolToStr(Result, True), ErrorMessage]));
+  if VideoMinerDebugLogEnabled then
+    WriteVideoMinerDebugLog(Format(
+      'audio_pump playback_ms=%d raw_queued_before_samples=%d queued_before_ms=%d queued_after_ms=%d pcm_bytes=%d sample_count=%d finished=%s result=%s err="%s"',
+      [PlaybackPositionMs, RawQueuedSampleCount, QueuedBeforeMs,
+       Round((Int64(FQueuedSamples) - PlaybackSamplePosition) * 1000 / AUDIO_OUTPUT_SAMPLE_RATE),
+       Length(Pcm), FQueuedSamples, BoolToStr(FFinished, True),
+       BoolToStr(Result, True), ErrorMessage]));
 end;
 
 function TVideoMinerAudioPlayback.PlaybackPositionMs: Integer;
