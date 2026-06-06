@@ -34,6 +34,7 @@ type
     function StartAt(const FileName: string; const VideoInfo: TVideoInfo;
       PositionMs: Integer; out ErrorMessage: string): Boolean;
     procedure Stop;
+    procedure SilenceOutput;
     function Pump(out ErrorMessage: string): Boolean;
     function PlaybackPositionMs: Integer;
     property Muted: Boolean read FMuted write SetMuted;
@@ -158,6 +159,12 @@ begin
   FApplyFadeInNext := False;
   FPlaybackClockActive := False;
   FPlaybackBaseMs := 0;
+end;
+
+procedure TVideoMinerAudioPlayback.SilenceOutput;
+begin
+  if FDecoder <> nil then
+    FDecoder.SetAudioOutputVolume(0);
 end;
 
 function TVideoMinerAudioPlayback.PlaybackSamplePosition: Int64;

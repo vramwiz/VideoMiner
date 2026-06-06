@@ -251,7 +251,10 @@ begin
   AudioPlaybackActive := False;
 
   if WaveOut <> 0 then
+  begin
+    SetAudioOutputVolume(WaveOut, 0);
     waveOutReset(WaveOut);
+  end;
 
   if AudioBuffers <> nil then
   begin

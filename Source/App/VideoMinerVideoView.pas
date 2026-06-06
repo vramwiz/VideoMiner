@@ -13,6 +13,8 @@ type
     function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
       out BufferStride: Integer; out ErrorMessage: string): Boolean;
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
+    procedure SetOnSkipBackwardClick(Value: TNotifyEvent);
+    procedure SetOnSkipForwardClick(Value: TNotifyEvent);
     procedure SetPlaybackActive(Value: Boolean);
   public
     constructor Create(Image: TImage);
@@ -25,7 +27,10 @@ type
     function ShowNextFrame(Decoder: TFFmpegDecoder; out PositionMs: Integer;
       out ErrorMessage: string): Boolean;
     procedure Present(Bitmap: TBitmap);
+    procedure PresentImmediate(Bitmap: TBitmap);
     property OnPlayPauseClick: TNotifyEvent write SetOnPlayPauseClick;
+    property OnSkipBackwardClick: TNotifyEvent write SetOnSkipBackwardClick;
+    property OnSkipForwardClick: TNotifyEvent write SetOnSkipForwardClick;
     property PlaybackActive: Boolean write SetPlaybackActive;
   end;
 
@@ -91,10 +96,28 @@ begin
     FSurface.Present;
 end;
 
+procedure TVideoMinerVideoView.PresentImmediate(Bitmap: TBitmap);
+begin
+  if FSurface <> nil then
+    FSurface.PresentImmediate;
+end;
+
 procedure TVideoMinerVideoView.SetOnPlayPauseClick(Value: TNotifyEvent);
 begin
   if FSurface <> nil then
     FSurface.OnPlayPauseClick := Value;
+end;
+
+procedure TVideoMinerVideoView.SetOnSkipBackwardClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnSkipBackwardClick := Value;
+end;
+
+procedure TVideoMinerVideoView.SetOnSkipForwardClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnSkipForwardClick := Value;
 end;
 
 procedure TVideoMinerVideoView.SetPlaybackActive(Value: Boolean);
@@ -122,7 +145,7 @@ begin
      (not Decoder.DecodeFrameToBgrx32(PositionMs, Buffer, BufferStride, ErrorMessage)) then
     Exit;
 
-  Present(FSurface.Bitmap);
+  PresentImmediate(FSurface.Bitmap);
   Result := True;
 end;
 

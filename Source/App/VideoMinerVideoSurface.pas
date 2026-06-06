@@ -11,11 +11,17 @@ type
   private
     FBitmap: TBitmap;
     FOnPlayPauseClick: TNotifyEvent;
+    FOnSkipBackwardClick: TNotifyEvent;
+    FOnSkipForwardClick: TNotifyEvent;
     FPlayPauseButton: TVideoMinerOverlayPlayPauseButton;
     FPreviewRect: TRect;
+    FSkipBackwardButton: TVideoMinerOverlaySkipButton;
+    FSkipForwardButton: TVideoMinerOverlaySkipButton;
     procedure DrawFrame(Canvas: TCanvas; const DestRect: TRect);
     function FitRect: TRect;
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
+    procedure SetOnSkipBackwardClick(Value: TNotifyEvent);
+    procedure SetOnSkipForwardClick(Value: TNotifyEvent);
     procedure SetPlaybackActive(Value: Boolean);
     procedure WMEraseBkgnd(var Message: TWMEraseBkgnd); message WM_ERASEBKGND;
   protected
@@ -32,8 +38,11 @@ type
     function PrepareBgrx32Frame(Width, Height: Integer; out Buffer: Pointer;
       out BufferStride: Integer): Boolean;
     procedure Present;
+    procedure PresentImmediate;
     property Bitmap: TBitmap read FBitmap;
     property OnPlayPauseClick: TNotifyEvent read FOnPlayPauseClick write SetOnPlayPauseClick;
+    property OnSkipBackwardClick: TNotifyEvent read FOnSkipBackwardClick write SetOnSkipBackwardClick;
+    property OnSkipForwardClick: TNotifyEvent read FOnSkipForwardClick write SetOnSkipForwardClick;
     property PlaybackActive: Boolean write SetPlaybackActive;
   end;
 
@@ -49,12 +58,16 @@ begin
   DoubleBuffered := False;
 
   FBitmap := TBitmap.Create;
+  FSkipBackwardButton := TVideoMinerOverlaySkipButton.Create(sdBackward);
   FPlayPauseButton := TVideoMinerOverlayPlayPauseButton.Create;
+  FSkipForwardButton := TVideoMinerOverlaySkipButton.Create(sdForward);
 end;
 
 destructor TVideoMinerVideoSurface.Destroy;
 begin
+  FSkipForwardButton.Free;
   FPlayPauseButton.Free;
+  FSkipBackwardButton.Free;
   FBitmap.Free;
   inherited Destroy;
 end;
@@ -121,27 +134,56 @@ end;
 
 procedure TVideoMinerVideoSurface.MouseDown(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
+var
+  Changed: Boolean;
 begin
   inherited MouseDown(Button, Shift, X, Y);
-  if (Button = mbLeft) and (FPlayPauseButton <> nil) and
-     FPlayPauseButton.MouseDown(Point(X, Y)) then
-    Invalidate;
+  if Button = mbLeft then
+  begin
+    Changed := False;
+    if FSkipBackwardButton <> nil then
+      Changed := FSkipBackwardButton.MouseDown(Point(X, Y)) or Changed;
+    if FPlayPauseButton <> nil then
+      Changed := FPlayPauseButton.MouseDown(Point(X, Y)) or Changed;
+    if FSkipForwardButton <> nil then
+      Changed := FSkipForwardButton.MouseDown(Point(X, Y)) or Changed;
+    if Changed then
+      Invalidate;
+  end;
 end;
 
 procedure TVideoMinerVideoSurface.MouseMove(Shift: TShiftState; X, Y: Integer);
+var
+  Changed: Boolean;
 begin
   inherited MouseMove(Shift, X, Y);
-  if (FPlayPauseButton <> nil) and FPlayPauseButton.MouseMove(Point(X, Y)) then
+  Changed := False;
+  if FSkipBackwardButton <> nil then
+    Changed := FSkipBackwardButton.MouseMove(Point(X, Y)) or Changed;
+  if FPlayPauseButton <> nil then
+    Changed := FPlayPauseButton.MouseMove(Point(X, Y)) or Changed;
+  if FSkipForwardButton <> nil then
+    Changed := FSkipForwardButton.MouseMove(Point(X, Y)) or Changed;
+  if Changed then
     Invalidate;
 end;
 
 procedure TVideoMinerVideoSurface.MouseUp(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
+var
+  Changed: Boolean;
 begin
   inherited MouseUp(Button, Shift, X, Y);
-  if (Button = mbLeft) and (FPlayPauseButton <> nil) then
+  if Button = mbLeft then
   begin
-    if FPlayPauseButton.MouseUp(Point(X, Y)) then
+    Changed := False;
+    if FSkipBackwardButton <> nil then
+      Changed := FSkipBackwardButton.MouseUp(Point(X, Y)) or Changed;
+    if FPlayPauseButton <> nil then
+      Changed := FPlayPauseButton.MouseUp(Point(X, Y)) or Changed;
+    if FSkipForwardButton <> nil then
+      Changed := FSkipForwardButton.MouseUp(Point(X, Y)) or Changed;
+    if Changed then
       Invalidate;
   end;
 end;
@@ -176,10 +218,20 @@ begin
     Canvas.FillRect(Rect(DestRect.Right, DestRect.Top, ClientWidth, DestRect.Bottom));
 
   DrawFrame(Canvas, DestRect);
+  if FSkipBackwardButton <> nil then
+  begin
+    FSkipBackwardButton.UpdateLayout(FPreviewRect);
+    FSkipBackwardButton.Paint(Canvas);
+  end;
   if FPlayPauseButton <> nil then
   begin
     FPlayPauseButton.UpdateLayout(FPreviewRect);
     FPlayPauseButton.Paint(Canvas);
+  end;
+  if FSkipForwardButton <> nil then
+  begin
+    FSkipForwardButton.UpdateLayout(FPreviewRect);
+    FSkipForwardButton.Paint(Canvas);
   end;
 {$IFDEF DEBUG}
   WriteVideoMinerDebugLog(Format('paint width=%d height=%d client_w=%d client_h=%d paint_ms=%.3f',
@@ -191,6 +243,12 @@ end;
 procedure TVideoMinerVideoSurface.Present;
 begin
   Invalidate;
+end;
+
+procedure TVideoMinerVideoSurface.PresentImmediate;
+begin
+  Invalidate;
+  Update;
 end;
 
 procedure TVideoMinerVideoSurface.SetPlaybackActive(Value: Boolean);
@@ -207,6 +265,20 @@ begin
   FOnPlayPauseClick := Value;
   if FPlayPauseButton <> nil then
     FPlayPauseButton.OnClick := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnSkipBackwardClick(Value: TNotifyEvent);
+begin
+  FOnSkipBackwardClick := Value;
+  if FSkipBackwardButton <> nil then
+    FSkipBackwardButton.OnClick := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnSkipForwardClick(Value: TNotifyEvent);
+begin
+  FOnSkipForwardClick := Value;
+  if FSkipForwardButton <> nil then
+    FSkipForwardButton.OnClick := Value;
 end;
 
 procedure TVideoMinerVideoSurface.WMEraseBkgnd(var Message: TWMEraseBkgnd);

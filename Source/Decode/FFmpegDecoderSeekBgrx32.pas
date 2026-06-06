@@ -34,6 +34,7 @@ var
   ConvertSourceFrame: PAVFrame;
   Stream: PAVStream;
   Ret: Integer;
+  FrameTs: Int64;
   TargetTs: Int64;
   DidTransfer: Boolean;
   TransferErrorMessage: string;
@@ -89,7 +90,8 @@ begin
 
         while TFFmpegApi.avcodec_receive_frame(CodecContext, Frame) = 0 do
         begin
-          if (Frame.pts = AV_NOPTS_VALUE) or (Frame.pts >= TargetTs) then
+          FrameTs := Frame.pts;
+          if (FrameTs <> AV_NOPTS_VALUE) and (FrameTs >= TargetTs) then
           begin
             ConvertSourceFrame := Frame;
             DidTransfer := False;

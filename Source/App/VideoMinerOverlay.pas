@@ -6,6 +6,8 @@ uses
   System.Classes, System.Math, System.Types, Winapi.Windows, Vcl.Graphics;
 
 type
+  TVideoMinerOverlaySkipDirection = (sdBackward, sdForward);
+
   TVideoMinerOverlayControl = class abstract
   private
     FBounds: TRect;
@@ -57,6 +59,22 @@ type
     property IsPlaying: Boolean read FIsPlaying write FIsPlaying;
   end;
 
+  TVideoMinerOverlaySkipButton = class(TVideoMinerOverlayButton)
+  private
+    FDirection: TVideoMinerOverlaySkipDirection;
+    procedure DrawAlphaPolyline(Canvas: TCanvas; const Points: array of TPoint;
+      PenWidth: Integer; Alpha: Byte);
+    procedure DrawAlphaPolygon(Canvas: TCanvas; const Points: array of TPoint;
+      Alpha: Byte);
+    function IconAlpha: Byte;
+  protected
+    function CalculateBounds(const PreviewRect: TRect): TRect; override;
+    procedure PaintControl(Canvas: TCanvas); override;
+  public
+    constructor Create(Direction: TVideoMinerOverlaySkipDirection); reintroduce;
+    property Direction: TVideoMinerOverlaySkipDirection read FDirection write FDirection;
+  end;
+
 implementation
 
 type
@@ -74,6 +92,62 @@ type
 function ClampByte(Value: Integer): Byte;
 begin
   Result := Byte(Max(0, Min(255, Value)));
+end;
+
+procedure AlphaBlendMask(Canvas: TCanvas; const DestBounds: TRect;
+  MaskBitmap: TBitmap; Alpha: Byte);
+var
+  Blend: TBlendFunction;
+  DrawBitmap: TBitmap;
+  DrawLine: PBgraQuadArray;
+  Height: Integer;
+  MaskLine: PRgbTripleArray;
+  Width: Integer;
+  X: Integer;
+  Y: Integer;
+begin
+  Width := DestBounds.Width;
+  Height := DestBounds.Height;
+  if (Width <= 0) or (Height <= 0) then
+    Exit;
+
+  DrawBitmap := TBitmap.Create;
+  try
+    DrawBitmap.PixelFormat := pf32bit;
+    DrawBitmap.SetSize(Width, Height);
+    DrawBitmap.AlphaFormat := afPremultiplied;
+    for Y := 0 to Height - 1 do
+    begin
+      MaskLine := MaskBitmap.ScanLine[Y];
+      DrawLine := DrawBitmap.ScanLine[Y];
+      for X := 0 to Width - 1 do
+      begin
+        if MaskLine[X].rgbtRed > 0 then
+        begin
+          DrawLine[X].B := Alpha;
+          DrawLine[X].G := Alpha;
+          DrawLine[X].R := Alpha;
+          DrawLine[X].A := Alpha
+        end
+        else
+        begin
+          DrawLine[X].B := 0;
+          DrawLine[X].G := 0;
+          DrawLine[X].R := 0;
+          DrawLine[X].A := 0;
+        end;
+      end;
+    end;
+
+    Blend.BlendOp := AC_SRC_OVER;
+    Blend.BlendFlags := 0;
+    Blend.SourceConstantAlpha := 255;
+    Blend.AlphaFormat := AC_SRC_ALPHA;
+    AlphaBlend(Canvas.Handle, DestBounds.Left, DestBounds.Top, Width, Height,
+      DrawBitmap.Canvas.Handle, 0, 0, Width, Height, Blend);
+  finally
+    DrawBitmap.Free;
+  end;
 end;
 
 { TVideoMinerOverlayControl }
@@ -331,6 +405,152 @@ begin
     LocalPoints[2] := Point(Round(IconSize * 0.76), Round(IconSize * 0.50));
     DrawAlphaPolygon(Canvas, LocalPoints, Alpha);
   end;
+end;
+
+{ TVideoMinerOverlaySkipButton }
+
+constructor TVideoMinerOverlaySkipButton.Create(
+  Direction: TVideoMinerOverlaySkipDirection);
+begin
+  inherited Create;
+  FDirection := Direction;
+end;
+
+function TVideoMinerOverlaySkipButton.CalculateBounds(
+  const PreviewRect: TRect): TRect;
+var
+  CenterX: Integer;
+  CenterY: Integer;
+  Offset: Integer;
+  Size: Integer;
+begin
+  Size := Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.095);
+  Size := Max(36, Min(92, Size));
+  Offset := Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.22);
+
+  CenterX := PreviewRect.Left + PreviewRect.Width div 2;
+  if FDirection = sdBackward then
+    Dec(CenterX, Offset)
+  else
+    Inc(CenterX, Offset);
+  CenterY := PreviewRect.Top + PreviewRect.Height div 2;
+
+  Result.Left := CenterX - Size div 2;
+  Result.Top := CenterY - Size div 2;
+  Result.Right := Result.Left + Size;
+  Result.Bottom := Result.Top + Size;
+end;
+
+procedure TVideoMinerOverlaySkipButton.DrawAlphaPolygon(Canvas: TCanvas;
+  const Points: array of TPoint; Alpha: Byte);
+var
+  MaskBitmap: TBitmap;
+begin
+  if Bounds.IsEmpty then
+    Exit;
+
+  MaskBitmap := TBitmap.Create;
+  try
+    MaskBitmap.PixelFormat := pf24bit;
+    MaskBitmap.SetSize(Bounds.Width, Bounds.Height);
+    MaskBitmap.Canvas.Brush.Color := clBlack;
+    MaskBitmap.Canvas.FillRect(Rect(0, 0, Bounds.Width, Bounds.Height));
+    MaskBitmap.Canvas.Pen.Style := psClear;
+    MaskBitmap.Canvas.Brush.Color := clWhite;
+    MaskBitmap.Canvas.Polygon(Points);
+    AlphaBlendMask(Canvas, Bounds, MaskBitmap, Alpha);
+  finally
+    MaskBitmap.Free;
+  end;
+end;
+
+procedure TVideoMinerOverlaySkipButton.DrawAlphaPolyline(Canvas: TCanvas;
+  const Points: array of TPoint; PenWidth: Integer; Alpha: Byte);
+var
+  MaskBitmap: TBitmap;
+begin
+  if Bounds.IsEmpty or (Length(Points) <= 1) then
+    Exit;
+
+  MaskBitmap := TBitmap.Create;
+  try
+    MaskBitmap.PixelFormat := pf24bit;
+    MaskBitmap.SetSize(Bounds.Width, Bounds.Height);
+    MaskBitmap.Canvas.Brush.Color := clBlack;
+    MaskBitmap.Canvas.FillRect(Rect(0, 0, Bounds.Width, Bounds.Height));
+    MaskBitmap.Canvas.Pen.Color := clWhite;
+    MaskBitmap.Canvas.Pen.Width := PenWidth;
+    MaskBitmap.Canvas.Pen.Style := psSolid;
+    MaskBitmap.Canvas.Polyline(Points);
+    AlphaBlendMask(Canvas, Bounds, MaskBitmap, Alpha);
+  finally
+    MaskBitmap.Free;
+  end;
+end;
+
+function TVideoMinerOverlaySkipButton.IconAlpha: Byte;
+begin
+  Result := 155;
+  if Hovered then
+    Result := 205;
+  if Pressed then
+    Result := 240;
+  Result := ClampByte(Result);
+end;
+
+procedure TVideoMinerOverlaySkipButton.PaintControl(Canvas: TCanvas);
+const
+  ARC_POINT_COUNT = 24;
+var
+  Alpha: Byte;
+  Angle: Double;
+  ArcPoints: array of TPoint;
+  CenterX: Double;
+  CenterY: Double;
+  HeadPoints: array[0..2] of TPoint;
+  I: Integer;
+  LocalX: Integer;
+  PenWidth: Integer;
+  RadiusX: Double;
+  RadiusY: Double;
+  Size: Integer;
+begin
+  if Bounds.IsEmpty then
+    Exit;
+
+  Alpha := IconAlpha;
+  Size := Min(Bounds.Width, Bounds.Height);
+  CenterX := Size * 0.50;
+  CenterY := Size * 0.55;
+  RadiusX := Size * 0.29;
+  RadiusY := Size * 0.28;
+
+  SetLength(ArcPoints, ARC_POINT_COUNT);
+  for I := 0 to ARC_POINT_COUNT - 1 do
+  begin
+    Angle := (210 - (190 * I / (ARC_POINT_COUNT - 1))) * Pi / 180;
+    LocalX := Round(CenterX + Cos(Angle) * RadiusX);
+    if FDirection = sdBackward then
+      LocalX := Size - LocalX;
+    ArcPoints[I] := Point(LocalX, Round(CenterY + Sin(Angle) * RadiusY));
+  end;
+
+  PenWidth := Max(3, Round(Size * 0.075));
+  DrawAlphaPolyline(Canvas, ArcPoints, PenWidth, Alpha);
+
+  if FDirection = sdForward then
+  begin
+    HeadPoints[0] := Point(Round(Size * 0.78), Round(Size * 0.44));
+    HeadPoints[1] := Point(Round(Size * 0.61), Round(Size * 0.35));
+    HeadPoints[2] := Point(Round(Size * 0.66), Round(Size * 0.57));
+  end
+  else
+  begin
+    HeadPoints[0] := Point(Round(Size * 0.22), Round(Size * 0.44));
+    HeadPoints[1] := Point(Round(Size * 0.39), Round(Size * 0.35));
+    HeadPoints[2] := Point(Round(Size * 0.34), Round(Size * 0.57));
+  end;
+  DrawAlphaPolygon(Canvas, HeadPoints, Alpha);
 end;
 
 end.
