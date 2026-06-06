@@ -59,6 +59,7 @@ begin
 
   FSurface := TVideoMinerVideoSurface.Create(Image.Owner);
   FSurface.Parent := Image.Parent;
+  FSurface.Align := Image.Align;
   FSurface.SetBounds(Image.Left, Image.Top, Image.Width, Image.Height);
   FSurface.Anchors := Image.Anchors;
   FSurface.Visible := Image.Visible;

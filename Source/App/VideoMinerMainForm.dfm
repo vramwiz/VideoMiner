@@ -4,8 +4,7 @@ object VideoMinerMainForm: TVideoMinerMainForm
   Caption = 'VideoMiner'
   ClientHeight = 545
   ClientWidth = 720
-  Color = clBtnFace
-  DoubleBuffered = True
+  Color = clBlack
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
   Font.Height = -11
@@ -9753,117 +9752,15 @@ object VideoMinerMainForm: TVideoMinerMainForm
   OnDestroy = FormDestroy
   OnKeyDown = FormKeyDown
   TextHeight = 13
-  object LabelInfo: TLabel
-    Left = 16
-    Top = 48
-    Width = 688
-    Height = 72
-    AutoSize = False
-    Caption = 'No video loaded'
-  end
   object ImagePreview: TImage
-    Left = 8
-    Top = 128
-    Width = 688
-    Height = 369
+    Left = 0
+    Top = 0
+    Width = 720
+    Height = 545
+    Align = alClient
     Center = True
     Proportional = True
     Stretch = True
-  end
-  object ButtonOpen: TButton
-    Left = 16
-    Top = 16
-    Width = 96
-    Height = 25
-    Caption = 'Open MP4'
-    TabOrder = 0
-    OnClick = ButtonOpenClick
-  end
-  object ButtonPlay: TButton
-    Left = 120
-    Top = 16
-    Width = 75
-    Height = 25
-    Caption = 'Play'
-    TabOrder = 1
-    OnClick = ButtonPlayClick
-  end
-  object ButtonStop: TButton
-    Left = 201
-    Top = 16
-    Width = 75
-    Height = 25
-    Caption = 'Stop'
-    TabOrder = 2
-    OnClick = ButtonStopClick
-  end
-  object ButtonPrevious: TButton
-    Left = 282
-    Top = 16
-    Width = 75
-    Height = 25
-    Caption = 'Previous'
-    Enabled = False
-    TabOrder = 3
-    OnClick = ButtonPreviousClick
-  end
-  object ButtonNext: TButton
-    Left = 363
-    Top = 16
-    Width = 75
-    Height = 25
-    Caption = 'Next'
-    Enabled = False
-    TabOrder = 4
-    OnClick = ButtonNextClick
-  end
-  object ButtonSkipBackward: TButton
-    Left = 444
-    Top = 16
-    Width = 75
-    Height = 25
-    Caption = '-10s'
-    TabOrder = 5
-    OnClick = ButtonSkipBackwardClick
-  end
-  object ButtonSkipForward: TButton
-    Left = 525
-    Top = 16
-    Width = 75
-    Height = 25
-    Caption = '+10s'
-    TabOrder = 6
-    OnClick = ButtonSkipForwardClick
-  end
-  object TrackBarVolume: TTrackBar
-    Left = 608
-    Top = 8
-    Width = 96
-    Height = 25
-    Max = 100
-    Position = 100
-    TabOrder = 7
-    TickStyle = tsNone
-    OnChange = TrackBarVolumeChange
-  end
-  object CheckBoxMute: TCheckBox
-    Left = 608
-    Top = 31
-    Width = 80
-    Height = 17
-    Caption = 'Mute'
-    TabOrder = 8
-    OnClick = CheckBoxMuteClick
-  end
-  object TrackBarSeek: TTrackBar
-    Left = 8
-    Top = 504
-    Width = 688
-    Height = 33
-    Max = 0
-    TabOrder = 9
-    TickStyle = tsNone
-    OnChange = TrackBarSeekChange
   end
   object TimerPlayback: TTimer
     Enabled = False

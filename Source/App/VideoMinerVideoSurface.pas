@@ -3,7 +3,7 @@ unit VideoMinerVideoSurface;
 interface
 
 uses
-  System.Classes, System.Types, Vcl.Controls, Vcl.Graphics;
+  Winapi.Messages, System.Classes, System.Types, Vcl.Controls, Vcl.Graphics;
 
 type
   TVideoMinerVideoSurface = class(TCustomControl)
@@ -11,6 +11,7 @@ type
     FBitmap: TBitmap;
     procedure DrawFrame(Canvas: TCanvas; const DestRect: TRect);
     function FitRect: TRect;
+    procedure WMEraseBkgnd(var Message: TWMEraseBkgnd); message WM_ERASEBKGND;
   protected
     procedure Paint; override;
   public
@@ -108,13 +109,30 @@ procedure TVideoMinerVideoSurface.Paint;
 var
   PaintWatch: TStopwatch;
 {$ENDIF}
+var
+  DestRect: TRect;
 begin
 {$IFDEF DEBUG}
   PaintWatch := TStopwatch.StartNew;
 {$ENDIF}
   Canvas.Brush.Color := clBlack;
-  Canvas.FillRect(ClientRect);
-  DrawFrame(Canvas, FitRect);
+  if (FBitmap.Width <= 0) or (FBitmap.Height <= 0) then
+  begin
+    Canvas.FillRect(ClientRect);
+    Exit;
+  end;
+
+  DestRect := FitRect;
+  if DestRect.Top > 0 then
+    Canvas.FillRect(Rect(0, 0, ClientWidth, DestRect.Top));
+  if DestRect.Bottom < ClientHeight then
+    Canvas.FillRect(Rect(0, DestRect.Bottom, ClientWidth, ClientHeight));
+  if DestRect.Left > 0 then
+    Canvas.FillRect(Rect(0, DestRect.Top, DestRect.Left, DestRect.Bottom));
+  if DestRect.Right < ClientWidth then
+    Canvas.FillRect(Rect(DestRect.Right, DestRect.Top, ClientWidth, DestRect.Bottom));
+
+  DrawFrame(Canvas, DestRect);
 {$IFDEF DEBUG}
   WriteVideoMinerDebugLog(Format('paint width=%d height=%d client_w=%d client_h=%d paint_ms=%.3f',
     [FBitmap.Width, FBitmap.Height, ClientWidth, ClientHeight,
@@ -125,6 +143,11 @@ end;
 procedure TVideoMinerVideoSurface.Present;
 begin
   Invalidate;
+end;
+
+procedure TVideoMinerVideoSurface.WMEraseBkgnd(var Message: TWMEraseBkgnd);
+begin
+  Message.Result := 1;
 end;
 
 end.
