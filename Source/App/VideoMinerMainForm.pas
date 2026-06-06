@@ -51,6 +51,7 @@ type
     procedure UpdateNavigationButtons;
     procedure NavigateBy(Delta: Integer);
     procedure OpenFromDialog;
+    procedure PlayPauseOverlayClick(Sender: TObject);
     procedure PlayFromCurrentPosition;
     procedure StopPlayback;
     function PlaybackActiveOrPending: Boolean;
@@ -99,6 +100,7 @@ begin
   FAudioPlayback := TVideoMinerAudioPlayback.Create;
   FMediaList := TVideoMinerMediaList.Create;
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
+  FVideoView.OnPlayPauseClick := PlayPauseOverlayClick;
   FPendingOpenFiles := TStringList.Create;
   FRestartPlaybackTimer := TTimer.Create(Self);
   FRestartPlaybackTimer.Enabled := False;
@@ -125,6 +127,7 @@ end;
 procedure TVideoMinerMainForm.FormDestroy(Sender: TObject);
 begin
   TimerPlayback.Enabled := False;
+  FVideoView.PlaybackActive := False;
   FRestartPlaybackTimer.Enabled := False;
   FAudioPlayback.Stop;
   FDropAgent.Free;
@@ -236,6 +239,7 @@ begin
   begin
     FVideoFile := '';
     FMediaList.Clear;
+    FVideoView.PlaybackActive := False;
     Caption := 'VideoMiner';
     UpdateNavigationButtons;
     SetStatusCaption('Failed to open video: ' + ErrorMessage);
@@ -302,10 +306,19 @@ begin
   StartPlaybackAtMs(FSeekPositionMs);
 end;
 
+procedure TVideoMinerMainForm.PlayPauseOverlayClick(Sender: TObject);
+begin
+  if PlaybackActiveOrPending then
+    StopPlayback
+  else
+    PlayFromCurrentPosition;
+end;
+
 // 再生を停止する
 procedure TVideoMinerMainForm.StopPlayback;
 begin
   TimerPlayback.Enabled := False;
+  FVideoView.PlaybackActive := False;
   FPendingRestartPlayback := False;
   FPendingRestartMs := -1;
   FRestartPlaybackTimer.Enabled := False;
@@ -339,6 +352,7 @@ begin
   if (FVideoFile = '') or (FDecoder = nil) then
   begin
     TimerPlayback.Enabled := False;
+    FVideoView.PlaybackActive := False;
     Exit;
   end;
 
@@ -398,6 +412,7 @@ begin
       ErrorMessage) then
     begin
       TimerPlayback.Enabled := False;
+      FVideoView.PlaybackActive := False;
       FAudioPlayback.Stop;
       if ErrorMessage = 'End of stream.' then
         FinishPlaybackAtEnd
@@ -569,12 +584,14 @@ begin
   if not FAudioPlayback.StartAt(FVideoFile, FVideoInfo, TargetMs,
     ErrorMessage) then
   begin
+    FVideoView.PlaybackActive := False;
     SetStatusCaption('Failed to start audio playback: ' + ErrorMessage);
     Exit;
   end;
 
   FSeekGuardRemaining := 0;
   TimerPlayback.Enabled := True;
+  FVideoView.PlaybackActive := True;
   TimerPlaybackTimer(TimerPlayback);
 end;
 
@@ -623,6 +640,7 @@ begin
   finally
     FUpdatingSeek := False;
   end;
+  FVideoView.PlaybackActive := False;
   UpdateInfoLabel;
 end;
 

@@ -5,6 +5,7 @@ uses
   VideoMinerAudioPlayback in 'Source\App\VideoMinerAudioPlayback.pas',
   VideoMinerDebugLog in 'Source\App\VideoMinerDebugLog.pas',
   VideoMinerMediaList in 'Source\App\VideoMinerMediaList.pas',
+  VideoMinerOverlay in 'Source\App\VideoMinerOverlay.pas',
   VideoMinerVideoSurface in 'Source\App\VideoMinerVideoSurface.pas',
   VideoMinerVideoView in 'Source\App\VideoMinerVideoView.pas',
   VideoMinerMainForm in 'Source\App\VideoMinerMainForm.pas' {VideoMinerForm},

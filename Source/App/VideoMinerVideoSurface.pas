@@ -3,16 +3,27 @@ unit VideoMinerVideoSurface;
 interface
 
 uses
-  Winapi.Messages, System.Classes, System.Types, Vcl.Controls, Vcl.Graphics;
+  Winapi.Messages, System.Classes, System.Types, Vcl.Controls, Vcl.Graphics,
+  VideoMinerOverlay;
 
 type
   TVideoMinerVideoSurface = class(TCustomControl)
   private
     FBitmap: TBitmap;
+    FOnPlayPauseClick: TNotifyEvent;
+    FPlayPauseButton: TVideoMinerOverlayPlayPauseButton;
+    FPreviewRect: TRect;
     procedure DrawFrame(Canvas: TCanvas; const DestRect: TRect);
     function FitRect: TRect;
+    procedure SetOnPlayPauseClick(Value: TNotifyEvent);
+    procedure SetPlaybackActive(Value: Boolean);
     procedure WMEraseBkgnd(var Message: TWMEraseBkgnd); message WM_ERASEBKGND;
   protected
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X,
+      Y: Integer); override;
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X,
+      Y: Integer); override;
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -22,6 +33,8 @@ type
       out BufferStride: Integer): Boolean;
     procedure Present;
     property Bitmap: TBitmap read FBitmap;
+    property OnPlayPauseClick: TNotifyEvent read FOnPlayPauseClick write SetOnPlayPauseClick;
+    property PlaybackActive: Boolean write SetPlaybackActive;
   end;
 
 implementation
@@ -36,10 +49,12 @@ begin
   DoubleBuffered := False;
 
   FBitmap := TBitmap.Create;
+  FPlayPauseButton := TVideoMinerOverlayPlayPauseButton.Create;
 end;
 
 destructor TVideoMinerVideoSurface.Destroy;
 begin
+  FPlayPauseButton.Free;
   FBitmap.Free;
   inherited Destroy;
 end;
@@ -104,6 +119,33 @@ begin
   Canvas.StretchDraw(DestRect, FBitmap);
 end;
 
+procedure TVideoMinerVideoSurface.MouseDown(Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseDown(Button, Shift, X, Y);
+  if (Button = mbLeft) and (FPlayPauseButton <> nil) and
+     FPlayPauseButton.MouseDown(Point(X, Y)) then
+    Invalidate;
+end;
+
+procedure TVideoMinerVideoSurface.MouseMove(Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseMove(Shift, X, Y);
+  if (FPlayPauseButton <> nil) and FPlayPauseButton.MouseMove(Point(X, Y)) then
+    Invalidate;
+end;
+
+procedure TVideoMinerVideoSurface.MouseUp(Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+  if (Button = mbLeft) and (FPlayPauseButton <> nil) then
+  begin
+    if FPlayPauseButton.MouseUp(Point(X, Y)) then
+      Invalidate;
+  end;
+end;
+
 procedure TVideoMinerVideoSurface.Paint;
 {$IFDEF DEBUG}
 var
@@ -123,6 +165,7 @@ begin
   end;
 
   DestRect := FitRect;
+  FPreviewRect := DestRect;
   if DestRect.Top > 0 then
     Canvas.FillRect(Rect(0, 0, ClientWidth, DestRect.Top));
   if DestRect.Bottom < ClientHeight then
@@ -133,6 +176,11 @@ begin
     Canvas.FillRect(Rect(DestRect.Right, DestRect.Top, ClientWidth, DestRect.Bottom));
 
   DrawFrame(Canvas, DestRect);
+  if FPlayPauseButton <> nil then
+  begin
+    FPlayPauseButton.UpdateLayout(FPreviewRect);
+    FPlayPauseButton.Paint(Canvas);
+  end;
 {$IFDEF DEBUG}
   WriteVideoMinerDebugLog(Format('paint width=%d height=%d client_w=%d client_h=%d paint_ms=%.3f',
     [FBitmap.Width, FBitmap.Height, ClientWidth, ClientHeight,
@@ -143,6 +191,22 @@ end;
 procedure TVideoMinerVideoSurface.Present;
 begin
   Invalidate;
+end;
+
+procedure TVideoMinerVideoSurface.SetPlaybackActive(Value: Boolean);
+begin
+  if (FPlayPauseButton <> nil) and (FPlayPauseButton.IsPlaying <> Value) then
+  begin
+    FPlayPauseButton.IsPlaying := Value;
+    Invalidate;
+  end;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnPlayPauseClick(Value: TNotifyEvent);
+begin
+  FOnPlayPauseClick := Value;
+  if FPlayPauseButton <> nil then
+    FPlayPauseButton.OnClick := Value;
 end;
 
 procedure TVideoMinerVideoSurface.WMEraseBkgnd(var Message: TWMEraseBkgnd);

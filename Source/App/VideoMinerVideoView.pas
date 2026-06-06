@@ -3,7 +3,7 @@ unit VideoMinerVideoView;
 interface
 
 uses
-  System.SysUtils, Vcl.ExtCtrls, Vcl.Graphics, FFmpegDecoder,
+  System.Classes, System.SysUtils, Vcl.ExtCtrls, Vcl.Graphics, FFmpegDecoder,
   VideoMinerVideoSurface;
 
 type
@@ -12,6 +12,8 @@ type
     FSurface: TVideoMinerVideoSurface;
     function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
       out BufferStride: Integer; out ErrorMessage: string): Boolean;
+    procedure SetOnPlayPauseClick(Value: TNotifyEvent);
+    procedure SetPlaybackActive(Value: Boolean);
   public
     constructor Create(Image: TImage);
     destructor Destroy; override;
@@ -23,6 +25,8 @@ type
     function ShowNextFrame(Decoder: TFFmpegDecoder; out PositionMs: Integer;
       out ErrorMessage: string): Boolean;
     procedure Present(Bitmap: TBitmap);
+    property OnPlayPauseClick: TNotifyEvent write SetOnPlayPauseClick;
+    property PlaybackActive: Boolean write SetPlaybackActive;
   end;
 
 implementation
@@ -85,6 +89,18 @@ procedure TVideoMinerVideoView.Present(Bitmap: TBitmap);
 begin
   if FSurface <> nil then
     FSurface.Present;
+end;
+
+procedure TVideoMinerVideoView.SetOnPlayPauseClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnPlayPauseClick := Value;
+end;
+
+procedure TVideoMinerVideoView.SetPlaybackActive(Value: Boolean);
+begin
+  if FSurface <> nil then
+    FSurface.PlaybackActive := Value;
 end;
 
 function TVideoMinerVideoView.ShowFrameAt(Decoder: TFFmpegDecoder;
