@@ -9,7 +9,9 @@ uses
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
   Vcl.ExtCtrls, Vcl.Graphics, Vcl.StdCtrls, ActiveX, DropAgent, FFmpegDecoder,
   FFmpegDecoderTypes, ShortcutAction, VideoMinerAudioPlayback, VideoMinerMediaList,
-  VideoMinerDebugLog, VideoMinerSettings, VideoMinerVideoView;
+  VideoMinerDebugLog, VideoMinerSettings, VideoMinerShortcutBindings,
+  VideoMinerVideoView,
+  VideoMinerWindowChrome;
 
 const
   WM_VM_OPEN_PENDING = WM_APP + 1;
@@ -69,11 +71,9 @@ type
     FEndAction: TVideoMinerEndAction;
     FNormalWindowBounds: TVideoMinerWindowBounds;
     FShortcuts: TShortcutAction;
-    procedure ApplySavedWindowBounds;
     procedure EnterFullScreen;
     procedure ExitFullScreen;
     procedure InitializeShortcuts;
-    procedure RememberNormalWindowBounds;
     procedure SetCaptionButtonColor(Sender: TObject; Color: TColor);
     procedure CycleEndAction;
     procedure EndActionOverlayClick(Sender: TObject);
@@ -139,6 +139,8 @@ type
     procedure UpdateInfoLabel;
   protected
     procedure CreateParams(var Params: TCreateParams); override;
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
   public
     function OpenAndPlayFile(const FileName: string): Boolean;
     function OpenRememberedFile: Boolean;
@@ -156,7 +158,6 @@ const
   VIDEO_END_TOLERANCE_MS = 1500;
   VIDEO_DROP_FRAME_MAX = 90;
   VIDEO_DROP_FRAME_BUDGET_MS = 25;
-  CUSTOM_RESIZE_BORDER = 6;
   TITLE_BAR_COLOR = $00171617;
   CLOSE_BUTTON_HOVER_COLOR = $00232323;
   CAPTION_BUTTON_HOVER_COLOR = $00232323;
@@ -173,7 +174,7 @@ begin
   PanelMinimizeButton.Color := TITLE_BAR_COLOR;
   UpdateMaximizeButton;
   FEndAction := LoadEndAction;
-  ApplySavedWindowBounds;
+  VideoMinerWindowChrome.ApplySavedWindowBounds(Self, FNormalWindowBounds);
   FShortcuts := TShortcutAction.Create;
   InitializeShortcuts;
   FOleInitialized := OleInitialize(nil) >= 0;
@@ -234,64 +235,12 @@ begin
   FAudioPlayback.Free;
   FPreviewDecoder.Free;
   FDecoder.Free;
-  RememberNormalWindowBounds;
+  VideoMinerWindowChrome.RememberNormalWindowBounds(Self, FFullScreen,
+    FNormalWindowBounds);
   SaveMainFormBounds(FNormalWindowBounds);
   SaveEndAction(FEndAction);
   if FOleInitialized then
     OleUninitialize;
-end;
-
-procedure TVideoMinerMainForm.ApplySavedWindowBounds;
-var
-  Bounds: TVideoMinerWindowBounds;
-  Monitor: TMonitor;
-  NewBounds: TRect;
-  WorkArea: TRect;
-begin
-  WindowState := wsNormal;
-  Bounds := LoadMainFormBounds;
-  if not Bounds.Available then
-  begin
-    RememberNormalWindowBounds;
-    Exit;
-  end;
-
-  NewBounds := Rect(Bounds.Left, Bounds.Top, Bounds.Left + Bounds.Width,
-    Bounds.Top + Bounds.Height);
-  Monitor := Screen.MonitorFromRect(NewBounds, mdNearest);
-  if Monitor <> nil then
-  begin
-    WorkArea := Monitor.WorkareaRect;
-    if NewBounds.Width > WorkArea.Width then
-      NewBounds.Right := NewBounds.Left + WorkArea.Width;
-    if NewBounds.Height > WorkArea.Height then
-      NewBounds.Bottom := NewBounds.Top + WorkArea.Height;
-    if NewBounds.Left < WorkArea.Left then
-      OffsetRect(NewBounds, WorkArea.Left - NewBounds.Left, 0);
-    if NewBounds.Top < WorkArea.Top then
-      OffsetRect(NewBounds, 0, WorkArea.Top - NewBounds.Top);
-    if NewBounds.Right > WorkArea.Right then
-      OffsetRect(NewBounds, WorkArea.Right - NewBounds.Right, 0);
-    if NewBounds.Bottom > WorkArea.Bottom then
-      OffsetRect(NewBounds, 0, WorkArea.Bottom - NewBounds.Bottom);
-  end;
-
-  SetBounds(NewBounds.Left, NewBounds.Top, NewBounds.Width, NewBounds.Height);
-  RememberNormalWindowBounds;
-end;
-
-procedure TVideoMinerMainForm.RememberNormalWindowBounds;
-begin
-  if FFullScreen then
-    Exit;
-  if WindowState <> wsNormal then
-    Exit;
-
-  FNormalWindowBounds.Available := True;
-  FNormalWindowBounds.Left := Left;
-  FNormalWindowBounds.Top := Top;
-  FNormalWindowBounds.Width := Width;
-  FNormalWindowBounds.Height := Height;
 end;
 
 procedure TVideoMinerMainForm.EnterFullScreen;
@@ -302,7 +251,8 @@ begin
   if FFullScreen then
     Exit;
 
-  RememberNormalWindowBounds;
+  VideoMinerWindowChrome.RememberNormalWindowBounds(Self, FFullScreen,
+    FNormalWindowBounds);
   FFullScreen := True;
   if FVideoView <> nil then
     FVideoView.FullScreen := FFullScreen;
@@ -335,7 +285,8 @@ begin
   Bounds := FNormalWindowBounds;
   if Bounds.Available then
     SetBounds(Bounds.Left, Bounds.Top, Bounds.Width, Bounds.Height);
-  RememberNormalWindowBounds;
+  VideoMinerWindowChrome.RememberNormalWindowBounds(Self, FFullScreen,
+    FNormalWindowBounds);
 end;
 
 procedure TVideoMinerMainForm.ToggleFullScreen;
@@ -357,27 +308,33 @@ end;
 procedure TVideoMinerMainForm.CreateParams(var Params: TCreateParams);
 begin
   inherited CreateParams(Params);
-  Params.Style := (Params.Style or WS_THICKFRAME or WS_MINIMIZEBOX or
-    WS_MAXIMIZEBOX) and not WS_CAPTION;
+  ConfigureBorderlessCreateParams(Params);
+end;
+
+function TVideoMinerMainForm.DoMouseWheel(Shift: TShiftState;
+  WheelDelta: Integer; MousePos: TPoint): Boolean;
+begin
+  Result := (FVideoView <> nil) and
+    FVideoView.HandleMouseWheel(Shift, WheelDelta, MousePos);
+  if not Result then
+    Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
 end;
 
 procedure TVideoMinerMainForm.InitializeShortcuts;
+var
+  Handlers: TVideoMinerShortcutHandlers;
 begin
-  FShortcuts.Clear;
-  FShortcuts.Add(Ord('O'), [ssCtrl], ShortcutOpenDialog);
-  FShortcuts.Add(VK_LEFT, [ssCtrl], ShortcutNavigatePrevious);
-  FShortcuts.Add(VK_RIGHT, [ssCtrl], ShortcutNavigateNext);
-  FShortcuts.Add(VK_F11, [], ToggleFullScreen);
-  FShortcuts.Add(VK_SPACE, [], TogglePlayPause);
-  FShortcuts.Add(VK_LEFT, [], ShortcutNavigatePrevious);
-  FShortcuts.Add(VK_RIGHT, [], ShortcutNavigateNext);
-  FShortcuts.Add(VK_PRIOR, [], ShortcutNavigatePrevious);
-  FShortcuts.Add(VK_NEXT, [], ShortcutNavigateNext);
-  FShortcuts.Add(VK_HOME, [], ShortcutSeekToFirstFrame);
-  FShortcuts.Add(VK_END, [], ShortcutSeekToLastFrame);
-  FShortcuts.Add(VK_UP, [], ShortcutVolumeUp);
-  FShortcuts.Add(VK_DOWN, [], ShortcutVolumeDown);
-  FShortcuts.Add(Ord('M'), [], ShortcutToggleMute);
+  Handlers.OpenDialog := ShortcutOpenDialog;
+  Handlers.NavigatePrevious := ShortcutNavigatePrevious;
+  Handlers.NavigateNext := ShortcutNavigateNext;
+  Handlers.SeekToFirstFrame := ShortcutSeekToFirstFrame;
+  Handlers.SeekToLastFrame := ShortcutSeekToLastFrame;
+  Handlers.ToggleFullScreen := ToggleFullScreen;
+  Handlers.ToggleMute := ShortcutToggleMute;
+  Handlers.TogglePlayPause := TogglePlayPause;
+  Handlers.VolumeDown := ShortcutVolumeDown;
+  Handlers.VolumeUp := ShortcutVolumeUp;
+  RegisterVideoMinerShortcuts(FShortcuts, Handlers);
 end;
 
 // 指定ミリ秒位置のフレームを表示する
@@ -1470,57 +1427,31 @@ begin
 end;
 
 procedure TVideoMinerMainForm.WMNCHitTest(var Message: TWMNCHitTest);
-var
-  ClientPoint: TPoint;
 begin
   inherited;
-  if Message.Result <> HTCLIENT then
-    Exit;
-  if FFullScreen then
-    Exit;
-
-  ClientPoint := ScreenToClient(Point(Message.XPos, Message.YPos));
-
-  if (ClientPoint.X < CUSTOM_RESIZE_BORDER) and
-     (ClientPoint.Y < CUSTOM_RESIZE_BORDER) then
-    Message.Result := HTTOPLEFT
-  else if (ClientPoint.X >= ClientWidth - CUSTOM_RESIZE_BORDER) and
-          (ClientPoint.Y < CUSTOM_RESIZE_BORDER) then
-    Message.Result := HTTOPRIGHT
-  else if (ClientPoint.X < CUSTOM_RESIZE_BORDER) and
-          (ClientPoint.Y >= ClientHeight - CUSTOM_RESIZE_BORDER) then
-    Message.Result := HTBOTTOMLEFT
-  else if (ClientPoint.X >= ClientWidth - CUSTOM_RESIZE_BORDER) and
-          (ClientPoint.Y >= ClientHeight - CUSTOM_RESIZE_BORDER) then
-    Message.Result := HTBOTTOMRIGHT
-  else if ClientPoint.Y < CUSTOM_RESIZE_BORDER then
-    Message.Result := HTTOP
-  else if ClientPoint.Y >= ClientHeight - CUSTOM_RESIZE_BORDER then
-    Message.Result := HTBOTTOM
-  else if ClientPoint.X < CUSTOM_RESIZE_BORDER then
-    Message.Result := HTLEFT
-  else if ClientPoint.X >= ClientWidth - CUSTOM_RESIZE_BORDER then
-    Message.Result := HTRIGHT;
+  HitTestBorderlessResize(Self, FFullScreen, VIDEO_MINER_RESIZE_BORDER,
+    Point(Message.XPos, Message.YPos), Message.Result);
 end;
 
 procedure TVideoMinerMainForm.WMNCCalcSize(var Message: TMessage);
 begin
   inherited;
-  if Message.WParam <> 0 then
-    Message.Result := 0;
+  HandleBorderlessNCCalcSize(Message);
 end;
 
 procedure TVideoMinerMainForm.WMMove(var Message: TWMMove);
 begin
   inherited;
-  RememberNormalWindowBounds;
+  VideoMinerWindowChrome.RememberNormalWindowBounds(Self, FFullScreen,
+    FNormalWindowBounds);
 end;
 
 procedure TVideoMinerMainForm.WMSize(var Message: TWMSize);
 begin
   inherited;
   UpdateMaximizeButton;
-  RememberNormalWindowBounds;
+  VideoMinerWindowChrome.RememberNormalWindowBounds(Self, FFullScreen,
+    FNormalWindowBounds);
 end;
 
 procedure TVideoMinerMainForm.WMCopyData(var Message: TWMCopyData);

@@ -122,8 +122,10 @@
         <DCCReference Include="Source\App\VideoMinerDebugLog.pas"/>
         <DCCReference Include="Source\App\VideoMinerMediaList.pas"/>
         <DCCReference Include="Source\App\VideoMinerOverlay.pas"/>
+        <DCCReference Include="Source\App\VideoMinerShortcutBindings.pas"/>
         <DCCReference Include="Source\App\VideoMinerVideoSurface.pas"/>
         <DCCReference Include="Source\App\VideoMinerVideoView.pas"/>
+        <DCCReference Include="Source\App\VideoMinerWindowChrome.pas"/>
         <DCCReference Include="Source\App\VideoMinerMainForm.pas">
             <Form>VideoMinerForm</Form>
             <FormType>dfm</FormType>

@@ -14,6 +14,10 @@ type
     FFirstFrameButton: TVideoMinerOverlayEdgeButton;
     FLastFrameButton: TVideoMinerOverlayEdgeButton;
     FNextFileButton: TVideoMinerOverlayFileNavButton;
+    FPanning: Boolean;
+    FPanStartCenterX: Double;
+    FPanStartCenterY: Double;
+    FPanStartPoint: TPoint;
     FOnEndActionClick: TNotifyEvent;
     FOnFirstFrameClick: TNotifyEvent;
     FOnFullScreenClick: TNotifyEvent;
@@ -34,14 +38,22 @@ type
     FSeekBarVisible: Boolean;
     FSkipBackwardButton: TVideoMinerOverlaySkipButton;
     FSkipForwardButton: TVideoMinerOverlaySkipButton;
+    FZoomCenterX: Double;
+    FZoomCenterY: Double;
+    FZoomScale: Double;
+    procedure ClampZoomCenter;
+    function CanStartPan(const Point: TPoint): Boolean;
     function HitNextFileButton(const Point: TPoint): Boolean;
     function HitPreviousFileButton(const Point: TPoint): Boolean;
     procedure DrawFrame(Canvas: TCanvas; const DestRect: TRect);
     function FitRect: TRect;
     function HitAnyOverlayButton(const Point: TPoint): Boolean;
     function HitSeekBar(const Point: TPoint): Boolean;
+    function ImagePointFromClient(const Point: TPoint; out ImageX,
+      ImageY: Double): Boolean;
     procedure InvalidateAllOverlayControls;
     procedure InvalidateOverlayControl(Control: TVideoMinerOverlayControl);
+    procedure ResetZoom;
     procedure SetCanNavigateNext(Value: Boolean);
     procedure SetCanNavigatePrevious(Value: Boolean);
     procedure SetEndActionText(const Value: string);
@@ -71,11 +83,15 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X,
       Y: Integer); override;
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Clear;
+    function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean;
     function PrepareBgrx32Frame(Width, Height: Integer; out Buffer: Pointer;
       out BufferStride: Integer): Boolean;
     procedure Present;
@@ -108,6 +124,11 @@ implementation
 uses
   System.Diagnostics, System.Math, System.SysUtils, VideoMinerDebugLog;
 
+const
+  VIDEO_SURFACE_MAX_ZOOM = 8.0;
+  VIDEO_SURFACE_MIN_ZOOM = 1.0;
+  VIDEO_SURFACE_WHEEL_ZOOM_STEP = 1.20;
+
 constructor TVideoMinerVideoSurface.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -119,6 +140,7 @@ begin
   FPaintBuffer.PixelFormat := pf32bit;
   FOverlayVisible := False;
   FSeekBarVisible := False;
+  ResetZoom;
   FPreviousFileButton := TVideoMinerOverlayFileNavButton.Create(fndPrevious);
   FFirstFrameButton := TVideoMinerOverlayEdgeButton.Create(edFirst);
   FSkipBackwardButton := TVideoMinerOverlaySkipButton.Create(sdBackward);
@@ -162,6 +184,8 @@ end;
 procedure TVideoMinerVideoSurface.Clear;
 begin
   FBitmap.SetSize(0, 0);
+  FPanning := False;
+  ResetZoom;
   if FSeekBar <> nil then
     FSeekBar.SetProgress(0, 0);
   SetSeekBarVisible(False);
@@ -192,6 +216,46 @@ begin
   Result := (Buffer <> nil) and (BufferStride > 0);
 end;
 
+procedure TVideoMinerVideoSurface.ResetZoom;
+begin
+  FZoomScale := VIDEO_SURFACE_MIN_ZOOM;
+  if (FBitmap <> nil) and (FBitmap.Width > 0) and (FBitmap.Height > 0) then
+  begin
+    FZoomCenterX := FBitmap.Width / 2;
+    FZoomCenterY := FBitmap.Height / 2;
+  end
+  else
+  begin
+    FZoomCenterX := 0;
+    FZoomCenterY := 0;
+  end;
+end;
+
+procedure TVideoMinerVideoSurface.ClampZoomCenter;
+var
+  HalfHeight: Double;
+  HalfWidth: Double;
+begin
+  if (FBitmap.Width <= 0) or (FBitmap.Height <= 0) then
+  begin
+    ResetZoom;
+    Exit;
+  end;
+
+  FZoomScale := Max(VIDEO_SURFACE_MIN_ZOOM,
+    Min(VIDEO_SURFACE_MAX_ZOOM, FZoomScale));
+  if FZoomScale <= VIDEO_SURFACE_MIN_ZOOM then
+  begin
+    ResetZoom;
+    Exit;
+  end;
+
+  HalfWidth := FBitmap.Width / FZoomScale / 2;
+  HalfHeight := FBitmap.Height / FZoomScale / 2;
+  FZoomCenterX := Max(HalfWidth, Min(FBitmap.Width - HalfWidth, FZoomCenterX));
+  FZoomCenterY := Max(HalfHeight, Min(FBitmap.Height - HalfHeight, FZoomCenterY));
+end;
+
 function TVideoMinerVideoSurface.FitRect: TRect;
 var
   Scale: Double;
@@ -215,11 +279,68 @@ begin
 end;
 
 procedure TVideoMinerVideoSurface.DrawFrame(Canvas: TCanvas; const DestRect: TRect);
+var
+  SourceHeight: Integer;
+  SourceRect: TRect;
+  SourceWidth: Integer;
 begin
   if (FBitmap.Width <= 0) or (FBitmap.Height <= 0) then
     Exit;
 
-  Canvas.StretchDraw(DestRect, FBitmap);
+  if FZoomScale <= VIDEO_SURFACE_MIN_ZOOM then
+  begin
+    Canvas.StretchDraw(DestRect, FBitmap);
+    Exit;
+  end;
+
+  ClampZoomCenter;
+  SourceWidth := Max(1, Round(FBitmap.Width / FZoomScale));
+  SourceHeight := Max(1, Round(FBitmap.Height / FZoomScale));
+  SourceRect.Left := Round(FZoomCenterX - SourceWidth / 2);
+  SourceRect.Top := Round(FZoomCenterY - SourceHeight / 2);
+  SourceRect.Right := SourceRect.Left + SourceWidth;
+  SourceRect.Bottom := SourceRect.Top + SourceHeight;
+
+  if SourceRect.Left < 0 then
+    OffsetRect(SourceRect, -SourceRect.Left, 0);
+  if SourceRect.Top < 0 then
+    OffsetRect(SourceRect, 0, -SourceRect.Top);
+  if SourceRect.Right > FBitmap.Width then
+    OffsetRect(SourceRect, FBitmap.Width - SourceRect.Right, 0);
+  if SourceRect.Bottom > FBitmap.Height then
+    OffsetRect(SourceRect, 0, FBitmap.Height - SourceRect.Bottom);
+
+  Canvas.CopyRect(DestRect, FBitmap.Canvas, SourceRect);
+end;
+
+function TVideoMinerVideoSurface.ImagePointFromClient(const Point: TPoint;
+  out ImageX, ImageY: Double): Boolean;
+var
+  DestRect: TRect;
+  SourceHeight: Double;
+  SourceLeft: Double;
+  SourceTop: Double;
+  SourceWidth: Double;
+begin
+  ImageX := 0;
+  ImageY := 0;
+  DestRect := FitRect;
+  Result := (FBitmap.Width > 0) and (FBitmap.Height > 0) and
+    (not DestRect.IsEmpty) and PtInRect(DestRect, Point);
+  if not Result then
+    Exit;
+
+  ClampZoomCenter;
+  SourceWidth := FBitmap.Width / FZoomScale;
+  SourceHeight := FBitmap.Height / FZoomScale;
+  SourceLeft := FZoomCenterX - SourceWidth / 2;
+  SourceTop := FZoomCenterY - SourceHeight / 2;
+  ImageX := SourceLeft + (Point.X - DestRect.Left) / Max(1, DestRect.Width) *
+    SourceWidth;
+  ImageY := SourceTop + (Point.Y - DestRect.Top) / Max(1, DestRect.Height) *
+    SourceHeight;
+  ImageX := Max(0.0, Min(FBitmap.Width - 1.0, ImageX));
+  ImageY := Max(0.0, Min(FBitmap.Height - 1.0, ImageY));
 end;
 
 procedure TVideoMinerVideoSurface.InvalidateOverlayControl(
@@ -274,6 +395,14 @@ begin
   Result := (FSeekBar <> nil) and FSeekBar.BoundsHitTest(Point);
 end;
 
+function TVideoMinerVideoSurface.CanStartPan(const Point: TPoint): Boolean;
+begin
+  Result := (FZoomScale > VIDEO_SURFACE_MIN_ZOOM) and
+    (not FitRect.IsEmpty) and PtInRect(FitRect, Point) and
+    not HitSeekBar(Point) and not HitAnyOverlayButton(Point) and
+    not HitPreviousFileButton(Point) and not HitNextFileButton(Point);
+end;
+
 procedure TVideoMinerVideoSurface.SetOverlayVisible(Value: Boolean);
 begin
   if FOverlayVisible = Value then
@@ -308,6 +437,16 @@ procedure TVideoMinerVideoSurface.MouseDown(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseDown(Button, Shift, X, Y);
+  if (Button = mbLeft) and CanStartPan(Point(X, Y)) then
+  begin
+    FPanning := True;
+    FPanStartPoint := Point(X, Y);
+    FPanStartCenterX := FZoomCenterX;
+    FPanStartCenterY := FZoomCenterY;
+    MouseCapture := True;
+    Exit;
+  end;
+
   if (Button = mbLeft) and (FSeekBar <> nil) and HitSeekBar(Point(X, Y)) then
   begin
     SetSeekBarVisible(True);
@@ -341,10 +480,32 @@ end;
 
 procedure TVideoMinerVideoSurface.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
+  DestRect: TRect;
   MousePoint: TPoint;
+  SourceHeight: Double;
+  SourceWidth: Double;
 begin
   inherited MouseMove(Shift, X, Y);
   MousePoint := Point(X, Y);
+
+  if FPanning then
+  begin
+    DestRect := FitRect;
+    if not DestRect.IsEmpty then
+    begin
+      SourceWidth := FBitmap.Width / FZoomScale;
+      SourceHeight := FBitmap.Height / FZoomScale;
+      FZoomCenterX := FPanStartCenterX -
+        (MousePoint.X - FPanStartPoint.X) / Max(1, DestRect.Width) *
+        SourceWidth;
+      FZoomCenterY := FPanStartCenterY -
+        (MousePoint.Y - FPanStartPoint.Y) / Max(1, DestRect.Height) *
+        SourceHeight;
+      ClampZoomCenter;
+      Invalidate;
+    end;
+    Exit;
+  end;
 
   SetOverlayVisible(HitAnyOverlayButton(MousePoint));
   SetSeekBarVisible(HitSeekBar(MousePoint) or
@@ -385,6 +546,13 @@ procedure TVideoMinerVideoSurface.MouseUp(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
+  if (Button = mbLeft) and FPanning then
+  begin
+    FPanning := False;
+    MouseCapture := False;
+    Exit;
+  end;
+
   if (Button = mbLeft) and (FSeekBar <> nil) and
      (FSeekBarVisible or FSeekBar.Dragging) then
   begin
@@ -415,6 +583,78 @@ begin
     if (FNextFileButton <> nil) and FNextFileButton.MouseUp(Point(X, Y)) then
       InvalidateOverlayControl(FNextFileButton);
   end;
+end;
+
+function TVideoMinerVideoSurface.DoMouseWheel(Shift: TShiftState;
+  WheelDelta: Integer; MousePos: TPoint): Boolean;
+begin
+  Result := HandleMouseWheel(Shift, WheelDelta, MousePos);
+  if not Result then
+    Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
+end;
+
+function TVideoMinerVideoSurface.HandleMouseWheel(Shift: TShiftState;
+  WheelDelta: Integer; MousePos: TPoint): Boolean;
+var
+  DestRect: TRect;
+  ImageX: Double;
+  ImageY: Double;
+  LocalPoint: TPoint;
+  NewScale: Double;
+  NewSourceHeight: Double;
+  NewSourceWidth: Double;
+  RatioX: Double;
+  RatioY: Double;
+begin
+  Result := False;
+
+  if (FBitmap.Width <= 0) or (FBitmap.Height <= 0) then
+    Exit;
+
+  LocalPoint := ScreenToClient(MousePos);
+  DestRect := FitRect;
+  if DestRect.IsEmpty then
+    Exit;
+
+  if FSeekBar <> nil then
+  begin
+    FSeekBar.UpdateLayout(DestRect);
+    if FSeekBar.BoundsHitTest(LocalPoint) then
+      Exit;
+  end;
+
+  if not PtInRect(DestRect, LocalPoint) then
+    Exit;
+  if not ImagePointFromClient(LocalPoint, ImageX, ImageY) then
+    Exit;
+
+  if WheelDelta > 0 then
+    NewScale := FZoomScale * VIDEO_SURFACE_WHEEL_ZOOM_STEP
+  else
+    NewScale := FZoomScale / VIDEO_SURFACE_WHEEL_ZOOM_STEP;
+  NewScale := Max(VIDEO_SURFACE_MIN_ZOOM,
+    Min(VIDEO_SURFACE_MAX_ZOOM, NewScale));
+
+  if Abs(NewScale - VIDEO_SURFACE_MIN_ZOOM) < 0.01 then
+  begin
+    ResetZoom;
+    Invalidate;
+    Result := True;
+    Exit;
+  end;
+
+  RatioX := (LocalPoint.X - DestRect.Left) / Max(1, DestRect.Width);
+  RatioY := (LocalPoint.Y - DestRect.Top) / Max(1, DestRect.Height);
+  NewSourceWidth := FBitmap.Width / NewScale;
+  NewSourceHeight := FBitmap.Height / NewScale;
+
+  FZoomScale := NewScale;
+  FZoomCenterX := ImageX - RatioX * NewSourceWidth + NewSourceWidth / 2;
+  FZoomCenterY := ImageY - RatioY * NewSourceHeight + NewSourceHeight / 2;
+  ClampZoomCenter;
+
+  Invalidate;
+  Result := True;
 end;
 
 procedure TVideoMinerVideoSurface.Paint;

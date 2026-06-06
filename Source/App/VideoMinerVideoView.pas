@@ -3,8 +3,8 @@ unit VideoMinerVideoView;
 interface
 
 uses
-  System.Classes, System.SysUtils, Vcl.ExtCtrls, Vcl.Graphics, FFmpegDecoder,
-  VideoMinerOverlay, VideoMinerVideoSurface;
+  System.Classes, System.SysUtils, System.Types, Vcl.ExtCtrls, Vcl.Graphics,
+  FFmpegDecoder, VideoMinerOverlay, VideoMinerVideoSurface;
 
 type
   TVideoMinerVideoView = class
@@ -39,6 +39,8 @@ type
       out ErrorMessage: string): Boolean;
     function DecodeNextFrame(Decoder: TFFmpegDecoder; ConvertFrame: Boolean;
       out PositionMs: Integer; out ErrorMessage: string): Boolean;
+    function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean;
     function ShowNextFrame(Decoder: TFFmpegDecoder; out PositionMs: Integer;
       out ErrorMessage: string): Boolean;
     procedure Present(Bitmap: TBitmap);
@@ -308,6 +310,13 @@ begin
     Present(FSurface.Bitmap);
 
   Result := True;
+end;
+
+function TVideoMinerVideoView.HandleMouseWheel(Shift: TShiftState;
+  WheelDelta: Integer; MousePos: TPoint): Boolean;
+begin
+  Result := (FSurface <> nil) and
+    FSurface.HandleMouseWheel(Shift, WheelDelta, MousePos);
 end;
 
 function TVideoMinerVideoView.ShowNextFrame(Decoder: TFFmpegDecoder;
