@@ -4,6 +4,7 @@ interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
+  System.Types,
   System.Diagnostics, System.Math,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
   Vcl.ExtCtrls, Vcl.Graphics, Vcl.StdCtrls, ActiveX, DropAgent, FFmpegDecoder,
@@ -90,6 +91,7 @@ type
     procedure FirstFrameOverlayClick(Sender: TObject);
     procedure FullScreenOverlayClick(Sender: TObject);
     procedure LastFrameOverlayClick(Sender: TObject);
+    procedure MuteOverlayClick(Sender: TObject);
     procedure NavigateNextOverlayClick(Sender: TObject);
     procedure NavigatePreviousOverlayClick(Sender: TObject);
     procedure PlayPauseOverlayClick(Sender: TObject);
@@ -126,6 +128,7 @@ type
     procedure WMCopyData(var Message: TWMCopyData); message WM_COPYDATA;
     procedure WMMove(var Message: TWMMove); message WM_MOVE;
     procedure WMNCHitTest(var Message: TWMNCHitTest); message WM_NCHITTEST;
+    procedure WMNCCalcSize(var Message: TMessage); message WM_NCCALCSIZE;
     procedure WMOpenPending(var Message: TMessage); message WM_VM_OPEN_PENDING;
     procedure WMSize(var Message: TWMSize); message WM_SIZE;
     // 指定ミリ秒位置のフレームを表示する
@@ -134,6 +137,8 @@ type
       out ErrorMessage: string): Boolean;
     // 動画情報ラベルを更新する
     procedure UpdateInfoLabel;
+  protected
+    procedure CreateParams(var Params: TCreateParams); override;
   public
     function OpenAndPlayFile(const FileName: string): Boolean;
     function OpenRememberedFile: Boolean;
@@ -187,6 +192,7 @@ begin
   FVideoView.OnSkipForwardClick := SkipForwardOverlayClick;
   FVideoView.OnLastFrameClick := LastFrameOverlayClick;
   FVideoView.OnVolumeChange := VolumeOverlayChange;
+  FVideoView.OnMuteClick := MuteOverlayClick;
   FVideoView.OnEndActionClick := EndActionOverlayClick;
   UpdateEndActionButton;
   FPendingOpenFiles := TStringList.Create;
@@ -201,6 +207,7 @@ begin
   FPendingRestartMs := -1;
   FAudioPlayback.VolumePercent := 100;
   FAudioPlayback.Muted := False;
+  FVideoView.Muted := FAudioPlayback.Muted;
   FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
   FDropAgent := TDropAgent.Create;
   if FOleInitialized then
@@ -345,6 +352,13 @@ begin
     StopPlayback
   else
     PlayFromCurrentPosition;
+end;
+
+procedure TVideoMinerMainForm.CreateParams(var Params: TCreateParams);
+begin
+  inherited CreateParams(Params);
+  Params.Style := (Params.Style or WS_THICKFRAME or WS_MINIMIZEBOX or
+    WS_MAXIMIZEBOX) and not WS_CAPTION;
 end;
 
 procedure TVideoMinerMainForm.InitializeShortcuts;
@@ -931,10 +945,16 @@ end;
 procedure TVideoMinerMainForm.ShortcutToggleMute;
 begin
   FAudioPlayback.Muted := not FAudioPlayback.Muted;
+  FVideoView.Muted := FAudioPlayback.Muted;
   if FAudioPlayback.Muted then
     FVideoView.VolumePercent := 0
   else
     FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
+end;
+
+procedure TVideoMinerMainForm.MuteOverlayClick(Sender: TObject);
+begin
+  ShortcutToggleMute;
 end;
 
 procedure TVideoMinerMainForm.SkipForwardOverlayClick(Sender: TObject);
@@ -945,6 +965,7 @@ end;
 procedure TVideoMinerMainForm.ChangeVolumeBy(DeltaPercent: Integer);
 begin
   FAudioPlayback.Muted := False;
+  FVideoView.Muted := FAudioPlayback.Muted;
   FAudioPlayback.VolumePercent := Max(0,
     Min(100, FAudioPlayback.VolumePercent + DeltaPercent));
   FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
@@ -954,6 +975,7 @@ procedure TVideoMinerMainForm.VolumeOverlayChange(Sender: TObject;
   VolumePercent: Integer);
 begin
   FAudioPlayback.Muted := False;
+  FVideoView.Muted := FAudioPlayback.Muted;
   FAudioPlayback.VolumePercent := VolumePercent;
   FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
 end;
@@ -1450,14 +1472,14 @@ end;
 procedure TVideoMinerMainForm.WMNCHitTest(var Message: TWMNCHitTest);
 var
   ClientPoint: TPoint;
-  ScreenPoint: TPoint;
 begin
   inherited;
   if Message.Result <> HTCLIENT then
     Exit;
+  if FFullScreen then
+    Exit;
 
-  GetCursorPos(ScreenPoint);
-  ClientPoint := ScreenToClient(ScreenPoint);
+  ClientPoint := ScreenToClient(Point(Message.XPos, Message.YPos));
 
   if (ClientPoint.X < CUSTOM_RESIZE_BORDER) and
      (ClientPoint.Y < CUSTOM_RESIZE_BORDER) then
@@ -1479,6 +1501,13 @@ begin
     Message.Result := HTLEFT
   else if ClientPoint.X >= ClientWidth - CUSTOM_RESIZE_BORDER then
     Message.Result := HTRIGHT;
+end;
+
+procedure TVideoMinerMainForm.WMNCCalcSize(var Message: TMessage);
+begin
+  inherited;
+  if Message.WParam <> 0 then
+    Message.Result := 0;
 end;
 
 procedure TVideoMinerMainForm.WMMove(var Message: TWMMove);

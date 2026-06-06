@@ -18,6 +18,7 @@ type
     FOnFirstFrameClick: TNotifyEvent;
     FOnFullScreenClick: TNotifyEvent;
     FOnLastFrameClick: TNotifyEvent;
+    FOnMuteClick: TNotifyEvent;
     FOnNavigateNextClick: TNotifyEvent;
     FOnNavigatePreviousClick: TNotifyEvent;
     FOnPlayPauseClick: TNotifyEvent;
@@ -51,6 +52,8 @@ type
     procedure SetOnEndActionClick(Value: TNotifyEvent);
     procedure SetOnFullScreenClick(Value: TNotifyEvent);
     procedure SetOnLastFrameClick(Value: TNotifyEvent);
+    procedure SetMuted(Value: Boolean);
+    procedure SetOnMuteClick(Value: TNotifyEvent);
     procedure SetOnNavigateNextClick(Value: TNotifyEvent);
     procedure SetOnNavigatePreviousClick(Value: TNotifyEvent);
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
@@ -87,6 +90,7 @@ type
     property OnFirstFrameClick: TNotifyEvent read FOnFirstFrameClick write SetOnFirstFrameClick;
     property OnFullScreenClick: TNotifyEvent read FOnFullScreenClick write SetOnFullScreenClick;
     property OnLastFrameClick: TNotifyEvent read FOnLastFrameClick write SetOnLastFrameClick;
+    property OnMuteClick: TNotifyEvent read FOnMuteClick write SetOnMuteClick;
     property OnNavigateNextClick: TNotifyEvent read FOnNavigateNextClick write SetOnNavigateNextClick;
     property OnNavigatePreviousClick: TNotifyEvent read FOnNavigatePreviousClick write SetOnNavigatePreviousClick;
     property OnPlayPauseClick: TNotifyEvent read FOnPlayPauseClick write SetOnPlayPauseClick;
@@ -95,6 +99,7 @@ type
     property OnSkipForwardClick: TNotifyEvent read FOnSkipForwardClick write SetOnSkipForwardClick;
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent read FOnVolumeChange write SetOnVolumeChange;
     property PlaybackActive: Boolean write SetPlaybackActive;
+    property Muted: Boolean write SetMuted;
     property VolumePercent: Integer write SetVolumePercent;
   end;
 
@@ -585,6 +590,16 @@ begin
   end;
 end;
 
+procedure TVideoMinerVideoSurface.SetMuted(Value: Boolean);
+begin
+  if FSeekBar <> nil then
+  begin
+    FSeekBar.Muted := Value;
+    if FSeekBarVisible then
+      InvalidateOverlayControl(FSeekBar);
+  end;
+end;
+
 procedure TVideoMinerVideoSurface.SetOnPlayPauseClick(Value: TNotifyEvent);
 begin
   FOnPlayPauseClick := Value;
@@ -604,6 +619,13 @@ begin
   FOnFullScreenClick := Value;
   if FSeekBar <> nil then
     FSeekBar.OnFullScreenClick := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnMuteClick(Value: TNotifyEvent);
+begin
+  FOnMuteClick := Value;
+  if FSeekBar <> nil then
+    FSeekBar.OnMuteClick := Value;
 end;
 
 procedure TVideoMinerVideoSurface.SetOnSeek(Value: TVideoMinerOverlaySeekEvent);

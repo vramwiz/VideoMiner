@@ -20,6 +20,8 @@ type
     procedure SetOnFirstFrameClick(Value: TNotifyEvent);
     procedure SetOnFullScreenClick(Value: TNotifyEvent);
     procedure SetOnLastFrameClick(Value: TNotifyEvent);
+    procedure SetMuted(Value: Boolean);
+    procedure SetOnMuteClick(Value: TNotifyEvent);
     procedure SetOnNavigateNextClick(Value: TNotifyEvent);
     procedure SetOnNavigatePreviousClick(Value: TNotifyEvent);
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
@@ -50,6 +52,7 @@ type
     property OnFirstFrameClick: TNotifyEvent write SetOnFirstFrameClick;
     property OnFullScreenClick: TNotifyEvent write SetOnFullScreenClick;
     property OnLastFrameClick: TNotifyEvent write SetOnLastFrameClick;
+    property OnMuteClick: TNotifyEvent write SetOnMuteClick;
     property OnNavigateNextClick: TNotifyEvent write SetOnNavigateNextClick;
     property OnNavigatePreviousClick: TNotifyEvent write SetOnNavigatePreviousClick;
     property OnPlayPauseClick: TNotifyEvent write SetOnPlayPauseClick;
@@ -58,6 +61,7 @@ type
     property OnSkipForwardClick: TNotifyEvent write SetOnSkipForwardClick;
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent write SetOnVolumeChange;
     property PlaybackActive: Boolean write SetPlaybackActive;
+    property Muted: Boolean write SetMuted;
     property VolumePercent: Integer write SetVolumePercent;
   end;
 
@@ -145,6 +149,12 @@ procedure TVideoMinerVideoView.SetOnFullScreenClick(Value: TNotifyEvent);
 begin
   if FSurface <> nil then
     FSurface.OnFullScreenClick := Value;
+end;
+
+procedure TVideoMinerVideoView.SetOnMuteClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnMuteClick := Value;
 end;
 
 procedure TVideoMinerVideoView.SetOnEndActionClick(Value: TNotifyEvent);
@@ -236,6 +246,12 @@ procedure TVideoMinerVideoView.SetVolumePercent(Value: Integer);
 begin
   if FSurface <> nil then
     FSurface.VolumePercent := Value;
+end;
+
+procedure TVideoMinerVideoView.SetMuted(Value: Boolean);
+begin
+  if FSurface <> nil then
+    FSurface.Muted := Value;
 end;
 
 function TVideoMinerVideoView.ShowFrameAt(Decoder: TFFmpegDecoder;

@@ -123,8 +123,12 @@ type
     FFullScreenButtonPressed: Boolean;
     FHovered: Boolean;
     FMaxMs: Integer;
+    FMuted: Boolean;
+    FMuteButtonHovered: Boolean;
+    FMuteButtonPressed: Boolean;
     FOnEndActionClick: TNotifyEvent;
     FOnFullScreenClick: TNotifyEvent;
+    FOnMuteClick: TNotifyEvent;
     FOnSeek: TVideoMinerOverlaySeekEvent;
     FOnVolumeChange: TVideoMinerOverlayVolumeEvent;
     FPositionMs: Integer;
@@ -141,6 +145,8 @@ type
       Radius: Integer; Alpha: Byte);
     procedure DrawFullScreenIcon(Canvas: TCanvas; const DrawRect: TRect;
       Alpha: Byte);
+    procedure DrawMuteIcon(Canvas: TCanvas; const DrawRect: TRect;
+      Alpha: Byte);
     function DisplayPositionMs: Integer;
     function EndActionButtonHitTest(const Point: TPoint): Boolean;
     function EndActionButtonRect: TRect;
@@ -148,12 +154,17 @@ type
     function FullScreenButtonAlpha: Byte;
     function FullScreenButtonHitTest(const Point: TPoint): Boolean;
     function FullScreenButtonRect: TRect;
+    function MuteButtonAlpha: Byte;
+    function MuteButtonHitTest(const Point: TPoint): Boolean;
+    function MuteButtonRect: TRect;
     function PositionFromPoint(const Point: TPoint): Integer;
     procedure SetEndActionText(const Value: string);
     procedure SetFullScreen(Value: Boolean);
+    procedure SetMuted(Value: Boolean);
     procedure SetVolumePercent(Value: Integer);
     function TrackRect: TRect;
     function VolumeFromPoint(const Point: TPoint): Integer;
+    function VolumeLabelRect: TRect;
     function VolumeHitTest(const Point: TPoint): Boolean;
     function VolumeTrackRect: TRect;
   protected
@@ -169,8 +180,10 @@ type
     property FullScreen: Boolean read FFullScreen write SetFullScreen;
     property OnEndActionClick: TNotifyEvent read FOnEndActionClick write FOnEndActionClick;
     property OnFullScreenClick: TNotifyEvent read FOnFullScreenClick write FOnFullScreenClick;
+    property OnMuteClick: TNotifyEvent read FOnMuteClick write FOnMuteClick;
     property OnSeek: TVideoMinerOverlaySeekEvent read FOnSeek write FOnSeek;
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent read FOnVolumeChange write FOnVolumeChange;
+    property Muted: Boolean read FMuted write SetMuted;
     property VolumePercent: Integer read FVolumePercent write SetVolumePercent;
   end;
 
@@ -903,7 +916,7 @@ begin
   if PreviewRect.IsEmpty then
     Exit;
 
-  Height := 88;
+  Height := 72;
   Width := Round(PreviewRect.Width * 0.88);
   Width := Max(160, Min(PreviewRect.Width - 32, Width));
   BottomOffset := Max(12, Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.045));
@@ -1178,12 +1191,61 @@ begin
   end;
 end;
 
+procedure TVideoMinerOverlaySeekBar.DrawMuteIcon(Canvas: TCanvas;
+  const DrawRect: TRect; Alpha: Byte);
+var
+  CenterY: Integer;
+  Left: Integer;
+  PenWidth: Integer;
+  Speaker: array[0..4] of TPoint;
+  Top: Integer;
+begin
+  if DrawRect.IsEmpty then
+    Exit;
+
+  Left := DrawRect.Left + 8;
+  Top := DrawRect.Top + 8;
+  CenterY := DrawRect.Top + DrawRect.Height div 2;
+  PenWidth := 2;
+
+  Speaker[0] := Point(Left, CenterY - 4);
+  Speaker[1] := Point(Left + 5, CenterY - 4);
+  Speaker[2] := Point(Left + 11, Top);
+  Speaker[3] := Point(Left + 11, DrawRect.Bottom - 8);
+  Speaker[4] := Point(Left + 5, CenterY + 4);
+  DrawAlphaPolyline(Canvas, Speaker, PenWidth, Alpha);
+  DrawAlphaPolyline(Canvas, [Speaker[4], Speaker[0]], PenWidth, Alpha);
+
+  if FMuted or (FVolumePercent <= 0) then
+  begin
+    DrawAlphaPolyline(Canvas, [Point(DrawRect.Right - 9, DrawRect.Top + 8),
+      Point(DrawRect.Right - 20, DrawRect.Bottom - 8)], PenWidth, Alpha);
+  end
+  else
+  begin
+    DrawAlphaPolyline(Canvas, [Point(DrawRect.Right - 13, CenterY - 7),
+      Point(DrawRect.Right - 9, CenterY - 3), Point(DrawRect.Right - 9,
+      CenterY + 3), Point(DrawRect.Right - 13, CenterY + 7)], PenWidth,
+      Alpha);
+  end;
+end;
+
 function TVideoMinerOverlaySeekBar.FullScreenButtonAlpha: Byte;
 begin
   Result := 185;
   if FFullScreenButtonHovered then
     Result := 225;
   if FFullScreenButtonPressed then
+    Result := 250;
+  Result := ClampByte(Result);
+end;
+
+function TVideoMinerOverlaySeekBar.MuteButtonAlpha: Byte;
+begin
+  Result := 185;
+  if FMuteButtonHovered or FMuted then
+    Result := 225;
+  if FMuteButtonPressed then
     Result := 250;
   Result := ClampByte(Result);
 end;
@@ -1211,21 +1273,49 @@ begin
     System.Types.Point(Point.X - Bounds.Left, Point.Y - Bounds.Top));
 end;
 
+function TVideoMinerOverlaySeekBar.MuteButtonHitTest(
+  const Point: TPoint): Boolean;
+begin
+  Result := BoundsHitTest(Point) and PtInRect(MuteButtonRect,
+    System.Types.Point(Point.X - Bounds.Left, Point.Y - Bounds.Top));
+end;
+
 function TVideoMinerOverlaySeekBar.FullScreenButtonRect: TRect;
 var
   Size: Integer;
 begin
   Size := 34;
-  Result := Rect(Bounds.Width - Size - 10, Bounds.Height - Size - 10,
-    Bounds.Width - 10, Bounds.Height - 10);
+  Result := Rect(Bounds.Width - Size - 14, Bounds.Height - Size - 10,
+    Bounds.Width - 14, Bounds.Height - 10);
+end;
+
+function TVideoMinerOverlaySeekBar.MuteButtonRect: TRect;
+var
+  LabelRect: TRect;
+  Size: Integer;
+begin
+  LabelRect := VolumeLabelRect;
+  Size := 28;
+  Result := Rect(LabelRect.Right + 22, LabelRect.Top - 2,
+    LabelRect.Right + 22 + Size, LabelRect.Top - 2 + Size);
+end;
+
+function TVideoMinerOverlaySeekBar.VolumeLabelRect: TRect;
+var
+  RowTop: Integer;
+begin
+  RowTop := Bounds.Height - 36;
+  Result := Rect(22, RowTop, 112, RowTop + 17);
 end;
 
 function TVideoMinerOverlaySeekBar.VolumeTrackRect: TRect;
 var
-  Top: Integer;
+  LabelRect: TRect;
+  TrackTop: Integer;
 begin
-  Top := TrackRect.Bottom + 24;
-  Result := Rect(118, Top, 188, Top + 6);
+  LabelRect := VolumeLabelRect;
+  TrackTop := LabelRect.Bottom + 4;
+  Result := Rect(LabelRect.Left, TrackTop, LabelRect.Right, TrackTop + 5);
 end;
 
 function TVideoMinerOverlaySeekBar.VolumeHitTest(const Point: TPoint): Boolean;
@@ -1233,8 +1323,8 @@ var
   HitRect: TRect;
 begin
   HitRect := VolumeTrackRect;
-  HitRect.Left := 34;
-  InflateRect(HitRect, 8, 12);
+  HitRect.Left := VolumeLabelRect.Left;
+  InflateRect(HitRect, 8, 10);
   Result := BoundsHitTest(Point) and PtInRect(HitRect,
     System.Types.Point(Point.X - Bounds.Left, Point.Y - Bounds.Top));
 end;
@@ -1279,6 +1369,14 @@ begin
     Exit;
   end;
 
+  if MuteButtonHitTest(Point) then
+  begin
+    FMuteButtonPressed := True;
+    FMuteButtonHovered := True;
+    FHovered := True;
+    Exit;
+  end;
+
   if VolumeHitTest(Point) then
   begin
     FVolumeDragging := True;
@@ -1304,6 +1402,7 @@ var
   NewEndActionButtonHovered: Boolean;
   NewFullScreenButtonHovered: Boolean;
   NewHovered: Boolean;
+  NewMuteButtonHovered: Boolean;
   NewPositionMs: Integer;
   NewVolume: Integer;
   NewVolumeHovered: Boolean;
@@ -1330,6 +1429,13 @@ begin
   if NewFullScreenButtonHovered <> FFullScreenButtonHovered then
   begin
     FFullScreenButtonHovered := NewFullScreenButtonHovered;
+    Result := True;
+  end;
+
+  NewMuteButtonHovered := MuteButtonHitTest(Point);
+  if NewMuteButtonHovered <> FMuteButtonHovered then
+  begin
+    FMuteButtonHovered := NewMuteButtonHovered;
     Result := True;
   end;
 
@@ -1360,6 +1466,7 @@ function TVideoMinerOverlaySeekBar.MouseUp(const Point: TPoint): Boolean;
 var
   EndActionButtonClicked: Boolean;
   FullScreenButtonClicked: Boolean;
+  MuteButtonClicked: Boolean;
   SeekPositionMs: Integer;
 begin
   Result := FDragging or FVolumeDragging or BoundsHitTest(Point);
@@ -1372,6 +1479,17 @@ begin
     Result := True;
     if FullScreenButtonClicked and Assigned(FOnFullScreenClick) then
       FOnFullScreenClick(Self);
+    Exit;
+  end;
+
+  if FMuteButtonPressed then
+  begin
+    MuteButtonClicked := MuteButtonHitTest(Point);
+    FMuteButtonPressed := False;
+    FMuteButtonHovered := MuteButtonClicked;
+    Result := True;
+    if MuteButtonClicked and Assigned(FOnMuteClick) then
+      FOnMuteClick(Self);
     Exit;
   end;
 
@@ -1418,11 +1536,13 @@ var
   KnobRadius: Integer;
   PositionRatio: Double;
   ShadowRadius: Integer;
+  MuteRect: TRect;
   Text: string;
   TextSize: TSize;
   Track: TRect;
   TrackCenterY: Integer;
   VolumeFilledRect: TRect;
+  VolumeLabel: TRect;
   VolumeText: string;
   VolumeTrack: TRect;
 begin
@@ -1436,6 +1556,7 @@ begin
   DrawAlphaPanel(Canvas, Rect(0, 0, Bounds.Width, Bounds.Height), 18, 96);
   ButtonRect := FullScreenButtonRect;
   EndActionRect := EndActionButtonRect;
+  MuteRect := MuteButtonRect;
 
   if FMaxMs > 0 then
     PositionRatio := DisplayPositionMs / FMaxMs
@@ -1472,18 +1593,25 @@ begin
   SetBkMode(Canvas.Handle, TRANSPARENT);
   TextSize := Canvas.TextExtent(Text);
   Canvas.TextOut(Bounds.Left + (Track.Left + Track.Right - TextSize.cx) div 2,
-    Bounds.Top + Track.Bottom + 18, Text);
+    Bounds.Top + Bounds.Height - 29, Text);
 
   VolumeTrack := VolumeTrackRect;
+  VolumeLabel := VolumeLabelRect;
   VolumeText := Format('Vol %d%%', [FVolumePercent]);
-  Canvas.TextOut(Bounds.Left + 38,
-    Bounds.Top + Track.Bottom + 18, VolumeText);
+  TextSize := Canvas.TextExtent(VolumeText);
+  Canvas.TextOut(Bounds.Left + VolumeLabel.Left,
+    Bounds.Top + VolumeLabel.Top + (VolumeLabel.Height - TextSize.cy) div 2,
+    VolumeText);
   DrawAlphaRoundRect(Canvas, VolumeTrack, VolumeTrack.Height, 72);
   VolumeFilledRect := VolumeTrack;
   VolumeFilledRect.Right := VolumeTrack.Left +
     Round(VolumeTrack.Width * Max(0, Min(100, FVolumePercent)) / 100);
   if VolumeFilledRect.Right > VolumeFilledRect.Left then
     DrawAlphaRoundRect(Canvas, VolumeFilledRect, VolumeTrack.Height, 210);
+
+  if FMuteButtonHovered or FMuteButtonPressed or FMuted then
+    DrawAlphaRoundRect(Canvas, MuteRect, 8, 38);
+  DrawMuteIcon(Canvas, MuteRect, MuteButtonAlpha);
 
   if FFullScreenButtonHovered or FFullScreenButtonPressed then
     DrawAlphaRoundRect(Canvas, ButtonRect, 8, 38);
@@ -1538,6 +1666,11 @@ begin
   FFullScreen := Value;
 end;
 
+procedure TVideoMinerOverlaySeekBar.SetMuted(Value: Boolean);
+begin
+  FMuted := Value;
+end;
+
 procedure TVideoMinerOverlaySeekBar.SetEndActionText(const Value: string);
 begin
   FEndActionText := Value;
@@ -1551,7 +1684,6 @@ end;
 function TVideoMinerOverlaySeekBar.TrackRect: TRect;
 var
   PadX: Integer;
-  RightReserve: Integer;
   TrackHeight: Integer;
   TrackY: Integer;
 begin
@@ -1559,14 +1691,12 @@ begin
   if Bounds.IsEmpty then
     Exit;
 
-  PadX := 12;
-  RightReserve := 116;
+  PadX := 22;
   TrackHeight := 7;
   if FHovered or FDragging then
     TrackHeight := 8;
-  TrackY := Round(Bounds.Height * 0.30) - TrackHeight div 2;
-  Result := Rect(PadX, TrackY, Bounds.Width - PadX - RightReserve,
-    TrackY + TrackHeight);
+  TrackY := 17;
+  Result := Rect(PadX, TrackY, Bounds.Width - PadX, TrackY + TrackHeight);
 end;
 
 end.
