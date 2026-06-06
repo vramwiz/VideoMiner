@@ -29,6 +29,7 @@ type
       PositionMs: Integer; out ErrorMessage: string): Boolean;
     procedure Stop;
     function Pump(out ErrorMessage: string): Boolean;
+    function PlaybackPositionMs: Integer;
     property Muted: Boolean read FMuted write SetMuted;
     property VolumePercent: Integer read FVolumePercent write SetVolumePercent;
   end;
@@ -214,6 +215,15 @@ begin
     Stop;
     Result := False;
   end;
+end;
+
+function TVideoMinerAudioPlayback.PlaybackPositionMs: Integer;
+begin
+  if (FDecoder = nil) or FFinished then
+    Exit(-1);
+
+  Result := Round((FStartSamples + FDecoder.PlayedAudioSampleCount) * 1000 /
+    AUDIO_OUTPUT_SAMPLE_RATE);
 end;
 
 end.

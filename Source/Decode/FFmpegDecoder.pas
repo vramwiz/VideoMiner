@@ -553,7 +553,8 @@ var
   Frame: PAVFrame; // デコード結果を受け取るAVFrame
   Stream: PAVStream; // 対象の映像ストリーム
   Ret: Integer; // FFmpeg APIの戻り値
-  TargetTs: Int64; // 目的位置のストリーム時間軸PTS
+  TargetTs: Int64;
+  DecodedAny: Boolean;
 begin
   ErrorMessage := '';
   Result := False;
@@ -572,6 +573,7 @@ begin
 
   try
     TargetTs := StreamTimestampFromMs(Stream, PositionMs);
+    DecodedAny := False;
     Ret := TFFmpegApi.av_seek_frame(FormatContext, FStreamIndex, TargetTs, AVSEEK_FLAG_BACKWARD);
     if Ret < 0 then
     begin
@@ -593,9 +595,10 @@ begin
 
         while TFFmpegApi.avcodec_receive_frame(CodecContext, Frame) = 0 do
         begin
+          CopyFrameToBitmap(Frame, Bitmap);
+          DecodedAny := True;
           if (Frame.pts = AV_NOPTS_VALUE) or (Frame.pts >= TargetTs) then
           begin
-            CopyFrameToBitmap(Frame, Bitmap);
             Result := True;
             Exit;
           end;
@@ -603,6 +606,12 @@ begin
       finally
         TFFmpegApi.av_packet_unref(Packet);
       end;
+    end;
+
+    if DecodedAny then
+    begin
+      Result := True;
+      Exit;
     end;
 
     ErrorMessage := 'Frame could not be decoded.';

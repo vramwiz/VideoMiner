@@ -72,6 +72,8 @@ type
     procedure SeekByMs(DeltaMs: Integer);
     procedure SeekToFirstFrame;
     procedure SeekToLastFrame;
+    function SyncVideoToAudio(var PositionMs: Integer; out ErrorMessage: string): Boolean;
+    procedure FinishPlaybackAtEnd;
     procedure QueueOpenAndPlayFile(const FileName: string);
     procedure ProcessOpenQueue;
     procedure WMCopyData(var Message: TWMCopyData); message WM_COPYDATA;
@@ -91,6 +93,8 @@ implementation
 
 const
   COPYDATA_OPEN_FILE = $564D0001;
+  VIDEO_AUDIO_SYNC_LAG_MS = 200;
+  VIDEO_END_TOLERANCE_MS = 1500;
 
 {$R *.dfm}
 
@@ -308,12 +312,26 @@ begin
     Exit;
   end;
 
+  if not FAudioPlayback.Pump(ErrorMessage) then
+  begin
+    LabelInfo.Caption := 'Failed to play audio: ' + ErrorMessage;
+    Exit;
+  end;
+
   if not FVideoView.ShowNextFrame(FDecoder, PositionMs, ErrorMessage) then
   begin
     TimerPlayback.Enabled := False;
     FAudioPlayback.Stop;
-    if ErrorMessage <> 'End of stream.' then
+    if ErrorMessage = 'End of stream.' then
+      FinishPlaybackAtEnd
+    else
       LabelInfo.Caption := 'Failed to decode next frame: ' + ErrorMessage;
+    Exit;
+  end;
+
+  if not SyncVideoToAudio(PositionMs, ErrorMessage) then
+  begin
+    LabelInfo.Caption := 'Failed to sync video: ' + ErrorMessage;
     Exit;
   end;
 
@@ -353,8 +371,6 @@ begin
   end;
 
   UpdateInfoLabel;
-  if not FAudioPlayback.Pump(ErrorMessage) then
-    LabelInfo.Caption := 'Failed to play audio: ' + ErrorMessage;
 end;
 // シークバー操作に合わせて指定位置のフレームを表示する
 procedure TVideoMinerMainForm.TrackBarSeekChange(Sender: TObject);
@@ -457,6 +473,50 @@ end;
 procedure TVideoMinerMainForm.SeekToLastFrame;
 begin
   SeekToMs(TrackBarSeek.Max);
+end;
+
+function TVideoMinerMainForm.SyncVideoToAudio(var PositionMs: Integer;
+  out ErrorMessage: string): Boolean;
+var
+  AudioPositionMs: Integer;
+begin
+  ErrorMessage := '';
+  Result := True;
+
+  if PositionMs < 0 then
+    Exit;
+
+  AudioPositionMs := FAudioPlayback.PlaybackPositionMs;
+  if AudioPositionMs < 0 then
+    Exit;
+
+  if AudioPositionMs > TrackBarSeek.Max then
+    AudioPositionMs := TrackBarSeek.Max;
+
+  if AudioPositionMs - PositionMs <= VIDEO_AUDIO_SYNC_LAG_MS then
+    Exit;
+
+  Result := FVideoView.ShowFrameAt(FDecoder, AudioPositionMs, ErrorMessage);
+  if Result then
+    PositionMs := AudioPositionMs;
+  if (not Result) and
+     (TrackBarSeek.Max - AudioPositionMs <= VIDEO_END_TOLERANCE_MS) then
+  begin
+    ErrorMessage := '';
+    PositionMs := AudioPositionMs;
+    Result := True;
+  end;
+end;
+
+procedure TVideoMinerMainForm.FinishPlaybackAtEnd;
+begin
+  FUpdatingSeek := True;
+  try
+    TrackBarSeek.Position := TrackBarSeek.Max;
+  finally
+    FUpdatingSeek := False;
+  end;
+  UpdateInfoLabel;
 end;
 
 procedure TVideoMinerMainForm.ButtonSkipBackwardClick(Sender: TObject);

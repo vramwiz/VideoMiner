@@ -3,14 +3,16 @@ unit VideoMinerVideoView;
 interface
 
 uses
-  System.SysUtils, Vcl.ExtCtrls, Vcl.Graphics, FFmpegDecoder;
+  System.SysUtils, Vcl.ExtCtrls, Vcl.Graphics, FFmpegDecoder,
+  VideoMinerVideoSurface;
 
 type
   TVideoMinerVideoView = class
   private
-    FImage: TImage;
+    FSurface: TVideoMinerVideoSurface;
   public
     constructor Create(Image: TImage);
+    destructor Destroy; override;
     procedure Clear;
     function ShowFrameAt(Decoder: TFFmpegDecoder; PositionMs: Integer;
       out ErrorMessage: string): Boolean;
@@ -24,25 +26,38 @@ implementation
 constructor TVideoMinerVideoView.Create(Image: TImage);
 begin
   inherited Create;
-  FImage := Image;
+
+  FSurface := TVideoMinerVideoSurface.Create(Image.Owner);
+  FSurface.Parent := Image.Parent;
+  FSurface.SetBounds(Image.Left, Image.Top, Image.Width, Image.Height);
+  FSurface.Anchors := Image.Anchors;
+  FSurface.Visible := Image.Visible;
+  FSurface.TabStop := False;
+  FSurface.SendToBack;
+
+  Image.Visible := False;
+end;
+
+destructor TVideoMinerVideoView.Destroy;
+begin
+  FSurface.Free;
+  inherited Destroy;
 end;
 
 procedure TVideoMinerVideoView.Clear;
 begin
-  if FImage <> nil then
-    FImage.Picture.Assign(nil);
+  if FSurface <> nil then
+    FSurface.Clear;
 end;
 
 procedure TVideoMinerVideoView.Present(Bitmap: TBitmap);
 begin
-  if (FImage <> nil) and (Bitmap <> nil) then
-    FImage.Picture.Bitmap.Assign(Bitmap);
+  if FSurface <> nil then
+    FSurface.Present;
 end;
 
 function TVideoMinerVideoView.ShowFrameAt(Decoder: TFFmpegDecoder;
   PositionMs: Integer; out ErrorMessage: string): Boolean;
-var
-  Bitmap: TBitmap;
 begin
   ErrorMessage := '';
   Result := False;
@@ -53,22 +68,16 @@ begin
     Exit;
   end;
 
-  Bitmap := TBitmap.Create;
-  try
-    if not Decoder.DecodeFrameToBitmap(PositionMs, Bitmap, ErrorMessage) then
-      Exit;
+  if (FSurface = nil) or
+     (not Decoder.DecodeFrameToBitmap(PositionMs, FSurface.Bitmap, ErrorMessage)) then
+    Exit;
 
-    Present(Bitmap);
-    Result := True;
-  finally
-    Bitmap.Free;
-  end;
+  Present(FSurface.Bitmap);
+  Result := True;
 end;
 
 function TVideoMinerVideoView.ShowNextFrame(Decoder: TFFmpegDecoder;
   out PositionMs: Integer; out ErrorMessage: string): Boolean;
-var
-  Bitmap: TBitmap;
 begin
   ErrorMessage := '';
   PositionMs := -1;
@@ -80,16 +89,12 @@ begin
     Exit;
   end;
 
-  Bitmap := TBitmap.Create;
-  try
-    if not Decoder.DecodeNextFrameToBitmap(Bitmap, PositionMs, ErrorMessage) then
-      Exit;
+  if (FSurface = nil) or
+     (not Decoder.DecodeNextFrameToBitmap(FSurface.Bitmap, PositionMs, ErrorMessage)) then
+    Exit;
 
-    Present(Bitmap);
-    Result := True;
-  finally
-    Bitmap.Free;
-  end;
+  Present(FSurface.Bitmap);
+  Result := True;
 end;
 
 end.
