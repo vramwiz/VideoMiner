@@ -14,6 +14,7 @@ type
     FFirstFrameButton: TVideoMinerOverlayEdgeButton;
     FLastFrameButton: TVideoMinerOverlayEdgeButton;
     FOnFirstFrameClick: TNotifyEvent;
+    FOnFullScreenClick: TNotifyEvent;
     FOnLastFrameClick: TNotifyEvent;
     FOnPlayPauseClick: TNotifyEvent;
     FOnSeek: TVideoMinerOverlaySeekEvent;
@@ -33,8 +34,10 @@ type
     procedure InvalidateAllOverlayControls;
     procedure InvalidateOverlayControl(Control: TVideoMinerOverlayControl);
     procedure SetSeekBarVisible(Value: Boolean);
+    procedure SetFullScreen(Value: Boolean);
     procedure SetOverlayVisible(Value: Boolean);
     procedure SetOnFirstFrameClick(Value: TNotifyEvent);
+    procedure SetOnFullScreenClick(Value: TNotifyEvent);
     procedure SetOnLastFrameClick(Value: TNotifyEvent);
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
     procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
@@ -59,7 +62,9 @@ type
     procedure PresentImmediate;
     procedure SetSeekProgress(PositionMs, MaxMs: Integer);
     property Bitmap: TBitmap read FBitmap;
+    property FullScreen: Boolean write SetFullScreen;
     property OnFirstFrameClick: TNotifyEvent read FOnFirstFrameClick write SetOnFirstFrameClick;
+    property OnFullScreenClick: TNotifyEvent read FOnFullScreenClick write SetOnFullScreenClick;
     property OnLastFrameClick: TNotifyEvent read FOnLastFrameClick write SetOnLastFrameClick;
     property OnPlayPauseClick: TNotifyEvent read FOnPlayPauseClick write SetOnPlayPauseClick;
     property OnSeek: TVideoMinerOverlaySeekEvent read FOnSeek write SetOnSeek;
@@ -438,11 +443,28 @@ begin
   end;
 end;
 
+procedure TVideoMinerVideoSurface.SetFullScreen(Value: Boolean);
+begin
+  if FSeekBar <> nil then
+  begin
+    FSeekBar.FullScreen := Value;
+    if FSeekBarVisible then
+      InvalidateOverlayControl(FSeekBar);
+  end;
+end;
+
 procedure TVideoMinerVideoSurface.SetOnPlayPauseClick(Value: TNotifyEvent);
 begin
   FOnPlayPauseClick := Value;
   if FPlayPauseButton <> nil then
     FPlayPauseButton.OnClick := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnFullScreenClick(Value: TNotifyEvent);
+begin
+  FOnFullScreenClick := Value;
+  if FSeekBar <> nil then
+    FSeekBar.OnFullScreenClick := Value;
 end;
 
 procedure TVideoMinerVideoSurface.SetOnSeek(Value: TVideoMinerOverlaySeekEvent);

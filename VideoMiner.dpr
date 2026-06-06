@@ -11,6 +11,7 @@ uses
   VideoMinerMainForm in 'Source\App\VideoMinerMainForm.pas' {VideoMinerForm},
   VideoMinerSettings in 'Source\App\VideoMinerSettings.pas',
   DropAgent in 'Source\Lib\DropAgent\DropAgent.pas',
+  ShortcutAction in 'Source\Lib\ShortcutAction\ShortcutAction.pas',
   FFmpegApi in 'Source\FFmpeg\FFmpegApi.pas',
   FFmpegFrameConvert in 'Source\FFmpeg\FFmpegFrameConvert.pas',
   FFmpegQsvDecode in 'Source\FFmpeg\FFmpegQsvDecode.pas',
@@ -93,7 +94,9 @@ begin
   Application.MainFormOnTaskbar := True;
   Application.CreateForm(TVideoMinerMainForm, VideoMinerForm);
   if ParamCount > 0 then
-    VideoMinerForm.OpenAndPlayFile(ParamStr(1));
+    VideoMinerForm.OpenAndPlayFile(ParamStr(1))
+  else
+    VideoMinerForm.OpenRememberedFile;
   try
     Application.Run;
   finally

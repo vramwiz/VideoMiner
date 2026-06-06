@@ -7,8 +7,8 @@ uses
   System.Diagnostics, System.Math,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
   Vcl.ExtCtrls, Vcl.Graphics, Vcl.StdCtrls, ActiveX, DropAgent, FFmpegDecoder,
-  FFmpegDecoderTypes, VideoMinerAudioPlayback, VideoMinerMediaList,
-  VideoMinerDebugLog, VideoMinerVideoView;
+  FFmpegDecoderTypes, ShortcutAction, VideoMinerAudioPlayback, VideoMinerMediaList,
+  VideoMinerDebugLog, VideoMinerSettings, VideoMinerVideoView;
 
 const
   WM_VM_OPEN_PENDING = WM_APP + 1;
@@ -64,18 +64,38 @@ type
     FPendingRestartPlayback: Boolean;
     FPendingRestartMs: Integer;
     FRestartPlaybackTimer: TTimer;
+    FFullScreen: Boolean;
+    FNormalWindowBounds: TVideoMinerWindowBounds;
+    FShortcuts: TShortcutAction;
+    procedure ApplySavedWindowBounds;
+    procedure EnterFullScreen;
+    procedure ExitFullScreen;
+    procedure InitializeShortcuts;
+    procedure RememberNormalWindowBounds;
     procedure SetCaptionButtonColor(Sender: TObject; Color: TColor);
+    procedure ToggleFullScreen;
+    procedure TogglePlayPause;
     procedure UpdateMaximizeButton;
     function LoadVideoFile(const FileName: string; AutoPlay: Boolean): Boolean;
     procedure DropFiles(Sender: TObject; Control: TWinControl; const FileNames: TArray<string>);
     procedure UpdateNavigationButtons;
     procedure NavigateBy(Delta: Integer);
     procedure OpenFromDialog;
+    procedure PrepareOpenDialogInitialDir;
+    procedure RememberLastMediaFile(const FileName: string);
     procedure FirstFrameOverlayClick(Sender: TObject);
+    procedure FullScreenOverlayClick(Sender: TObject);
     procedure LastFrameOverlayClick(Sender: TObject);
     procedure PlayPauseOverlayClick(Sender: TObject);
     procedure PlayFromCurrentPosition;
     procedure SeekBarSeek(Sender: TObject; PositionMs: Integer);
+    procedure ShortcutNavigateNext;
+    procedure ShortcutNavigatePrevious;
+    procedure ShortcutOpenDialog;
+    procedure ShortcutSeekBackward;
+    procedure ShortcutSeekForward;
+    procedure ShortcutSeekToFirstFrame;
+    procedure ShortcutSeekToLastFrame;
     procedure SkipBackwardOverlayClick(Sender: TObject);
     procedure SkipForwardOverlayClick(Sender: TObject);
     procedure StopPlayback;
@@ -95,6 +115,7 @@ type
     procedure QueueOpenAndPlayFile(const FileName: string);
     procedure ProcessOpenQueue;
     procedure WMCopyData(var Message: TWMCopyData); message WM_COPYDATA;
+    procedure WMMove(var Message: TWMMove); message WM_MOVE;
     procedure WMNCHitTest(var Message: TWMNCHitTest); message WM_NCHITTEST;
     procedure WMOpenPending(var Message: TMessage); message WM_VM_OPEN_PENDING;
     procedure WMSize(var Message: TWMSize); message WM_SIZE;
@@ -106,6 +127,7 @@ type
     procedure UpdateInfoLabel;
   public
     function OpenAndPlayFile(const FileName: string): Boolean;
+    function OpenRememberedFile: Boolean;
   end;
 
 var
@@ -136,6 +158,9 @@ begin
   PanelMaximizeButton.Color := TITLE_BAR_COLOR;
   PanelMinimizeButton.Color := TITLE_BAR_COLOR;
   UpdateMaximizeButton;
+  ApplySavedWindowBounds;
+  FShortcuts := TShortcutAction.Create;
+  InitializeShortcuts;
   FOleInitialized := OleInitialize(nil) >= 0;
   FDecoder := TFFmpegDecoder.Create;
   FPreviewDecoder := TFFmpegDecoder.Create;
@@ -143,6 +168,7 @@ begin
   FMediaList := TVideoMinerMediaList.Create;
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
   FVideoView.OnFirstFrameClick := FirstFrameOverlayClick;
+  FVideoView.OnFullScreenClick := FullScreenOverlayClick;
   FVideoView.OnPlayPauseClick := PlayPauseOverlayClick;
   FVideoView.OnSeek := SeekBarSeek;
   FVideoView.OnSkipBackwardClick := SkipBackwardOverlayClick;
@@ -179,13 +205,145 @@ begin
   FAudioPlayback.Stop;
   FDropAgent.Free;
   FPendingOpenFiles.Free;
+  FShortcuts.Free;
   FVideoView.Free;
   FMediaList.Free;
   FAudioPlayback.Free;
   FPreviewDecoder.Free;
   FDecoder.Free;
+  RememberNormalWindowBounds;
+  SaveMainFormBounds(FNormalWindowBounds);
   if FOleInitialized then
     OleUninitialize;
+end;
+
+procedure TVideoMinerMainForm.ApplySavedWindowBounds;
+var
+  Bounds: TVideoMinerWindowBounds;
+  Monitor: TMonitor;
+  NewBounds: TRect;
+  WorkArea: TRect;
+begin
+  WindowState := wsNormal;
+  Bounds := LoadMainFormBounds;
+  if not Bounds.Available then
+  begin
+    RememberNormalWindowBounds;
+    Exit;
+  end;
+
+  NewBounds := Rect(Bounds.Left, Bounds.Top, Bounds.Left + Bounds.Width,
+    Bounds.Top + Bounds.Height);
+  Monitor := Screen.MonitorFromRect(NewBounds, mdNearest);
+  if Monitor <> nil then
+  begin
+    WorkArea := Monitor.WorkareaRect;
+    if NewBounds.Width > WorkArea.Width then
+      NewBounds.Right := NewBounds.Left + WorkArea.Width;
+    if NewBounds.Height > WorkArea.Height then
+      NewBounds.Bottom := NewBounds.Top + WorkArea.Height;
+    if NewBounds.Left < WorkArea.Left then
+      OffsetRect(NewBounds, WorkArea.Left - NewBounds.Left, 0);
+    if NewBounds.Top < WorkArea.Top then
+      OffsetRect(NewBounds, 0, WorkArea.Top - NewBounds.Top);
+    if NewBounds.Right > WorkArea.Right then
+      OffsetRect(NewBounds, WorkArea.Right - NewBounds.Right, 0);
+    if NewBounds.Bottom > WorkArea.Bottom then
+      OffsetRect(NewBounds, 0, WorkArea.Bottom - NewBounds.Bottom);
+  end;
+
+  SetBounds(NewBounds.Left, NewBounds.Top, NewBounds.Width, NewBounds.Height);
+  RememberNormalWindowBounds;
+end;
+
+procedure TVideoMinerMainForm.RememberNormalWindowBounds;
+begin
+  if FFullScreen then
+    Exit;
+  if WindowState <> wsNormal then
+    Exit;
+
+  FNormalWindowBounds.Available := True;
+  FNormalWindowBounds.Left := Left;
+  FNormalWindowBounds.Top := Top;
+  FNormalWindowBounds.Width := Width;
+  FNormalWindowBounds.Height := Height;
+end;
+
+procedure TVideoMinerMainForm.EnterFullScreen;
+var
+  FullScreenRect: TRect;
+  Monitor: TMonitor;
+begin
+  if FFullScreen then
+    Exit;
+
+  RememberNormalWindowBounds;
+  FFullScreen := True;
+  if FVideoView <> nil then
+    FVideoView.FullScreen := FFullScreen;
+  WindowState := wsNormal;
+  PanelTitleBar.Visible := False;
+
+  Monitor := Screen.MonitorFromWindow(Handle, mdNearest);
+  if Monitor <> nil then
+    FullScreenRect := Monitor.BoundsRect
+  else
+    FullScreenRect := Screen.DesktopRect;
+
+  SetBounds(FullScreenRect.Left, FullScreenRect.Top, FullScreenRect.Width,
+    FullScreenRect.Height);
+end;
+
+procedure TVideoMinerMainForm.ExitFullScreen;
+var
+  Bounds: TVideoMinerWindowBounds;
+begin
+  if not FFullScreen then
+    Exit;
+
+  FFullScreen := False;
+  if FVideoView <> nil then
+    FVideoView.FullScreen := FFullScreen;
+  PanelTitleBar.Visible := True;
+  WindowState := wsNormal;
+
+  Bounds := FNormalWindowBounds;
+  if Bounds.Available then
+    SetBounds(Bounds.Left, Bounds.Top, Bounds.Width, Bounds.Height);
+  RememberNormalWindowBounds;
+end;
+
+procedure TVideoMinerMainForm.ToggleFullScreen;
+begin
+  if FFullScreen then
+    ExitFullScreen
+  else
+    EnterFullScreen;
+end;
+
+procedure TVideoMinerMainForm.TogglePlayPause;
+begin
+  if PlaybackActiveOrPending then
+    StopPlayback
+  else
+    PlayFromCurrentPosition;
+end;
+
+procedure TVideoMinerMainForm.InitializeShortcuts;
+begin
+  FShortcuts.Clear;
+  FShortcuts.Add(Ord('O'), [ssCtrl], ShortcutOpenDialog);
+  FShortcuts.Add(VK_LEFT, [ssCtrl], ShortcutNavigatePrevious);
+  FShortcuts.Add(VK_RIGHT, [ssCtrl], ShortcutNavigateNext);
+  FShortcuts.Add(VK_F11, [], ToggleFullScreen);
+  FShortcuts.Add(VK_SPACE, [], TogglePlayPause);
+  FShortcuts.Add(VK_LEFT, [], ShortcutSeekBackward);
+  FShortcuts.Add(VK_RIGHT, [], ShortcutSeekForward);
+  FShortcuts.Add(VK_PRIOR, [], ShortcutNavigatePrevious);
+  FShortcuts.Add(VK_NEXT, [], ShortcutNavigateNext);
+  FShortcuts.Add(VK_HOME, [], ShortcutSeekToFirstFrame);
+  FShortcuts.Add(VK_END, [], ShortcutSeekToLastFrame);
 end;
 
 // 指定ミリ秒位置のフレームを表示する
@@ -385,8 +543,41 @@ end;
 
 procedure TVideoMinerMainForm.OpenFromDialog;
 begin
+  PrepareOpenDialogInitialDir;
   if OpenDialogVideo.Execute then
     LoadVideoFile(OpenDialogVideo.FileName, False);
+end;
+
+procedure TVideoMinerMainForm.PrepareOpenDialogInitialDir;
+var
+  Folder: string;
+  LastMedia: TVideoMinerLastMedia;
+begin
+  Folder := '';
+  if FVideoFile <> '' then
+    Folder := ExtractFilePath(FVideoFile);
+
+  if (Folder = '') or (not DirectoryExists(Folder)) then
+  begin
+    LastMedia := LoadLastMedia;
+    Folder := LastMedia.Folder;
+  end;
+
+  if (Folder <> '') and DirectoryExists(Folder) then
+    OpenDialogVideo.InitialDir := Folder
+  else
+    OpenDialogVideo.InitialDir := '';
+end;
+
+procedure TVideoMinerMainForm.RememberLastMediaFile(const FileName: string);
+var
+  Folder: string;
+begin
+  if FileName = '' then
+    Exit;
+
+  Folder := ExcludeTrailingPathDelimiter(ExtractFilePath(FileName));
+  SaveLastMedia(Folder, FileName);
 end;
 
 function TVideoMinerMainForm.PlaybackActiveOrPending: Boolean;
@@ -438,11 +629,25 @@ end;
 function TVideoMinerMainForm.LoadVideoFile(const FileName: string; AutoPlay: Boolean): Boolean;
 var
   ErrorMessage: string;
+  Folder: string;
   PreviewInfo: TVideoInfo;
 begin
   Result := False;
 
-  if (FileName = '') or (not FileExists(FileName)) then
+  if FileName = '' then
+  begin
+    SetStatusCaption('File name is empty.');
+    Exit;
+  end;
+
+  Folder := ExtractFilePath(FileName);
+  if (Folder <> '') and (not DirectoryExists(Folder)) then
+  begin
+    SetStatusCaption('Folder not found: ' + Folder);
+    Exit;
+  end;
+
+  if not FileExists(FileName) then
   begin
     SetStatusCaption('File not found: ' + FileName);
     Exit;
@@ -519,12 +724,51 @@ begin
   if AutoPlay then
     PlayFromCurrentPosition;
 
+  RememberLastMediaFile(FileName);
   Result := True;
 end;
 
 function TVideoMinerMainForm.OpenAndPlayFile(const FileName: string): Boolean;
 begin
   Result := LoadVideoFile(FileName, True);
+end;
+
+function TVideoMinerMainForm.OpenRememberedFile: Boolean;
+var
+  FileName: string;
+  Folder: string;
+  LastMedia: TVideoMinerLastMedia;
+begin
+  Result := False;
+  LastMedia := LoadLastMedia;
+  if not LastMedia.Available then
+    Exit;
+
+  Folder := LastMedia.Folder;
+  FileName := LastMedia.FileName;
+  if (FileName <> '') and (ExtractFilePath(FileName) = '') and
+     (Folder <> '') then
+    FileName := IncludeTrailingPathDelimiter(Folder) + FileName;
+
+  if (Folder <> '') and (not DirectoryExists(Folder)) then
+  begin
+    SetStatusCaption('Last folder not found: ' + Folder);
+    Exit;
+  end;
+
+  if FileName = '' then
+  begin
+    SetStatusCaption('Last file is not stored.');
+    Exit;
+  end;
+
+  if not FileExists(FileName) then
+  begin
+    SetStatusCaption('Last file not found: ' + FileName);
+    Exit;
+  end;
+
+  Result := LoadVideoFile(FileName, False);
 end;
 
 procedure TVideoMinerMainForm.DropFiles(Sender: TObject; Control: TWinControl; const FileNames: TArray<string>);
@@ -578,6 +822,46 @@ end;
 procedure TVideoMinerMainForm.SeekBarSeek(Sender: TObject; PositionMs: Integer);
 begin
   SeekToMs(PositionMs);
+end;
+
+procedure TVideoMinerMainForm.FullScreenOverlayClick(Sender: TObject);
+begin
+  ToggleFullScreen;
+end;
+
+procedure TVideoMinerMainForm.ShortcutOpenDialog;
+begin
+  OpenFromDialog;
+end;
+
+procedure TVideoMinerMainForm.ShortcutNavigatePrevious;
+begin
+  NavigateBy(-1);
+end;
+
+procedure TVideoMinerMainForm.ShortcutNavigateNext;
+begin
+  NavigateBy(1);
+end;
+
+procedure TVideoMinerMainForm.ShortcutSeekBackward;
+begin
+  SeekByMs(-10000);
+end;
+
+procedure TVideoMinerMainForm.ShortcutSeekForward;
+begin
+  SeekByMs(10000);
+end;
+
+procedure TVideoMinerMainForm.ShortcutSeekToFirstFrame;
+begin
+  SeekToFirstFrame;
+end;
+
+procedure TVideoMinerMainForm.ShortcutSeekToLastFrame;
+begin
+  SeekToLastFrame;
 end;
 
 procedure TVideoMinerMainForm.SkipForwardOverlayClick(Sender: TObject);
@@ -974,71 +1258,15 @@ end;
 
 procedure TVideoMinerMainForm.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
-  if Shift = [ssCtrl] then
+  if (Key = VK_ESCAPE) and FFullScreen then
   begin
-    case Key of
-      Ord('O'):
-        begin
-          OpenFromDialog;
-          Key := 0;
-        end;
-      VK_LEFT:
-        begin
-          NavigateBy(-1);
-          Key := 0;
-        end;
-      VK_RIGHT:
-        begin
-          NavigateBy(1);
-          Key := 0;
-        end;
-    end;
+    ExitFullScreen;
+    Key := 0;
     Exit;
   end;
 
-  if Shift = [] then
-  begin
-    case Key of
-      VK_SPACE:
-        begin
-          if PlaybackActiveOrPending then
-            StopPlayback
-          else
-            PlayFromCurrentPosition;
-          Key := 0;
-        end;
-      VK_LEFT:
-        begin
-          SeekByMs(-10000);
-          Key := 0;
-        end;
-      VK_RIGHT:
-        begin
-          SeekByMs(10000);
-          Key := 0;
-        end;
-      VK_PRIOR:
-        begin
-          NavigateBy(-1);
-          Key := 0;
-        end;
-      VK_NEXT:
-        begin
-          NavigateBy(1);
-          Key := 0;
-        end;
-      VK_HOME:
-        begin
-          SeekToFirstFrame;
-          Key := 0;
-        end;
-      VK_END:
-        begin
-          SeekToLastFrame;
-          Key := 0;
-        end;
-    end;
-  end;
+  if (FShortcuts <> nil) and FShortcuts.KeyDown(Key, Shift) then
+    Exit;
 end;
 
 procedure TVideoMinerMainForm.QueueOpenAndPlayFile(const FileName: string);
@@ -1130,10 +1358,17 @@ begin
     Message.Result := HTRIGHT;
 end;
 
+procedure TVideoMinerMainForm.WMMove(var Message: TWMMove);
+begin
+  inherited;
+  RememberNormalWindowBounds;
+end;
+
 procedure TVideoMinerMainForm.WMSize(var Message: TWMSize);
 begin
   inherited;
   UpdateMaximizeButton;
+  RememberNormalWindowBounds;
 end;
 
 procedure TVideoMinerMainForm.WMCopyData(var Message: TWMCopyData);

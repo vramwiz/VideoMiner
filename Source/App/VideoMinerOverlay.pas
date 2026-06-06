@@ -99,19 +99,31 @@ type
   private
     FDragPositionMs: Integer;
     FDragging: Boolean;
+    FFullScreen: Boolean;
+    FFullScreenButtonHovered: Boolean;
+    FFullScreenButtonPressed: Boolean;
     FHovered: Boolean;
     FMaxMs: Integer;
+    FOnFullScreenClick: TNotifyEvent;
     FOnSeek: TVideoMinerOverlaySeekEvent;
     FPositionMs: Integer;
     procedure DrawAlphaEllipse(Canvas: TCanvas; const DrawRect: TRect;
       Alpha: Byte);
     procedure DrawAlphaPanel(Canvas: TCanvas; const DrawRect: TRect;
       Radius: Integer; Alpha: Byte);
+    procedure DrawAlphaPolyline(Canvas: TCanvas; const Points: array of TPoint;
+      PenWidth: Integer; Alpha: Byte);
     procedure DrawAlphaRoundRect(Canvas: TCanvas; const DrawRect: TRect;
       Radius: Integer; Alpha: Byte);
+    procedure DrawFullScreenIcon(Canvas: TCanvas; const DrawRect: TRect;
+      Alpha: Byte);
     function DisplayPositionMs: Integer;
     function FormatTimeMs(ValueMs: Integer): string;
+    function FullScreenButtonAlpha: Byte;
+    function FullScreenButtonHitTest(const Point: TPoint): Boolean;
+    function FullScreenButtonRect: TRect;
     function PositionFromPoint(const Point: TPoint): Integer;
+    procedure SetFullScreen(Value: Boolean);
     function TrackRect: TRect;
   protected
     function CalculateBounds(const PreviewRect: TRect): TRect; override;
@@ -122,6 +134,8 @@ type
     function MouseUp(const Point: TPoint): Boolean; override;
     procedure SetProgress(PositionMs, MaxMs: Integer);
     property Dragging: Boolean read FDragging;
+    property FullScreen: Boolean read FFullScreen write SetFullScreen;
+    property OnFullScreenClick: TNotifyEvent read FOnFullScreenClick write FOnFullScreenClick;
     property OnSeek: TVideoMinerOverlaySeekEvent read FOnSeek write FOnSeek;
   end;
 
@@ -877,6 +891,30 @@ begin
   end;
 end;
 
+procedure TVideoMinerOverlaySeekBar.DrawAlphaPolyline(Canvas: TCanvas;
+  const Points: array of TPoint; PenWidth: Integer; Alpha: Byte);
+var
+  MaskBitmap: TBitmap;
+begin
+  if Bounds.IsEmpty or (Length(Points) <= 1) then
+    Exit;
+
+  MaskBitmap := TBitmap.Create;
+  try
+    MaskBitmap.PixelFormat := pf24bit;
+    MaskBitmap.SetSize(Bounds.Width, Bounds.Height);
+    MaskBitmap.Canvas.Brush.Color := clBlack;
+    MaskBitmap.Canvas.FillRect(Rect(0, 0, Bounds.Width, Bounds.Height));
+    MaskBitmap.Canvas.Pen.Color := clWhite;
+    MaskBitmap.Canvas.Pen.Width := PenWidth;
+    MaskBitmap.Canvas.Pen.Style := psSolid;
+    MaskBitmap.Canvas.Polyline(Points);
+    AlphaBlendMask(Canvas, Bounds, MaskBitmap, Alpha);
+  finally
+    MaskBitmap.Free;
+  end;
+end;
+
 procedure TVideoMinerOverlaySeekBar.DrawAlphaRoundRect(Canvas: TCanvas;
   const DrawRect: TRect; Radius: Integer; Alpha: Byte);
 var
@@ -901,11 +939,140 @@ begin
   end;
 end;
 
+procedure TVideoMinerOverlaySeekBar.DrawFullScreenIcon(Canvas: TCanvas;
+  const DrawRect: TRect; Alpha: Byte);
+var
+  Bottom: Integer;
+  CenterX: Integer;
+  CenterY: Integer;
+  Head: Integer;
+  Inset: Integer;
+  Left: Integer;
+  PenWidth: Integer;
+  Right: Integer;
+  Top: Integer;
+  WindowRect: TRect;
+begin
+  if DrawRect.IsEmpty then
+    Exit;
+
+  Left := DrawRect.Left;
+  Top := DrawRect.Top;
+  Right := DrawRect.Right - 1;
+  Bottom := DrawRect.Bottom - 1;
+  CenterX := DrawRect.Left + DrawRect.Width div 2;
+  CenterY := DrawRect.Top + DrawRect.Height div 2;
+  Inset := 7;
+  Head := 8;
+  PenWidth := 2;
+
+  if not FFullScreen then
+  begin
+    DrawAlphaPolyline(Canvas, [Point(CenterX - 3, CenterY - 3),
+      Point(Left + Inset, Top + Inset)], PenWidth, Alpha);
+    DrawAlphaPolyline(Canvas, [Point(Left + Inset, Top + Inset),
+      Point(Left + Inset + Head, Top + Inset)], PenWidth, Alpha);
+    DrawAlphaPolyline(Canvas, [Point(Left + Inset, Top + Inset),
+      Point(Left + Inset, Top + Inset + Head)], PenWidth, Alpha);
+
+    DrawAlphaPolyline(Canvas, [Point(CenterX + 3, CenterY - 3),
+      Point(Right - Inset, Top + Inset)], PenWidth, Alpha);
+    DrawAlphaPolyline(Canvas, [Point(Right - Inset, Top + Inset),
+      Point(Right - Inset - Head, Top + Inset)], PenWidth, Alpha);
+    DrawAlphaPolyline(Canvas, [Point(Right - Inset, Top + Inset),
+      Point(Right - Inset, Top + Inset + Head)], PenWidth, Alpha);
+
+    DrawAlphaPolyline(Canvas, [Point(CenterX - 3, CenterY + 3),
+      Point(Left + Inset, Bottom - Inset)], PenWidth, Alpha);
+    DrawAlphaPolyline(Canvas, [Point(Left + Inset, Bottom - Inset),
+      Point(Left + Inset + Head, Bottom - Inset)], PenWidth, Alpha);
+    DrawAlphaPolyline(Canvas, [Point(Left + Inset, Bottom - Inset),
+      Point(Left + Inset, Bottom - Inset - Head)], PenWidth, Alpha);
+
+    DrawAlphaPolyline(Canvas, [Point(CenterX + 3, CenterY + 3),
+      Point(Right - Inset, Bottom - Inset)], PenWidth, Alpha);
+    DrawAlphaPolyline(Canvas, [Point(Right - Inset, Bottom - Inset),
+      Point(Right - Inset - Head, Bottom - Inset)], PenWidth, Alpha);
+    DrawAlphaPolyline(Canvas, [Point(Right - Inset, Bottom - Inset),
+      Point(Right - Inset, Bottom - Inset - Head)], PenWidth, Alpha);
+  end
+  else
+  begin
+    WindowRect := Rect(CenterX - 7, CenterY - 6, CenterX + 8, CenterY + 7);
+    DrawAlphaPolyline(Canvas, [Point(WindowRect.Left, WindowRect.Top),
+      Point(WindowRect.Right, WindowRect.Top), Point(WindowRect.Right,
+      WindowRect.Bottom), Point(WindowRect.Left, WindowRect.Bottom),
+      Point(WindowRect.Left, WindowRect.Top)], PenWidth, Alpha);
+
+    DrawAlphaPolyline(Canvas, [Point(Left + Inset, Top + Inset),
+      Point(WindowRect.Left, WindowRect.Top)], PenWidth, Alpha);
+    DrawAlphaPolyline(Canvas, [Point(WindowRect.Left, WindowRect.Top),
+      Point(WindowRect.Left - Head, WindowRect.Top)], PenWidth, Alpha);
+    DrawAlphaPolyline(Canvas, [Point(WindowRect.Left, WindowRect.Top),
+      Point(WindowRect.Left, WindowRect.Top - Head)], PenWidth, Alpha);
+
+    DrawAlphaPolyline(Canvas, [Point(Right - Inset, Top + Inset),
+      Point(WindowRect.Right, WindowRect.Top)], PenWidth, Alpha);
+    DrawAlphaPolyline(Canvas, [Point(WindowRect.Right, WindowRect.Top),
+      Point(WindowRect.Right + Head, WindowRect.Top)], PenWidth, Alpha);
+    DrawAlphaPolyline(Canvas, [Point(WindowRect.Right, WindowRect.Top),
+      Point(WindowRect.Right, WindowRect.Top - Head)], PenWidth, Alpha);
+
+    DrawAlphaPolyline(Canvas, [Point(Left + Inset, Bottom - Inset),
+      Point(WindowRect.Left, WindowRect.Bottom)], PenWidth, Alpha);
+    DrawAlphaPolyline(Canvas, [Point(WindowRect.Left, WindowRect.Bottom),
+      Point(WindowRect.Left - Head, WindowRect.Bottom)], PenWidth, Alpha);
+    DrawAlphaPolyline(Canvas, [Point(WindowRect.Left, WindowRect.Bottom),
+      Point(WindowRect.Left, WindowRect.Bottom + Head)], PenWidth, Alpha);
+
+    DrawAlphaPolyline(Canvas, [Point(Right - Inset, Bottom - Inset),
+      Point(WindowRect.Right, WindowRect.Bottom)], PenWidth, Alpha);
+    DrawAlphaPolyline(Canvas, [Point(WindowRect.Right, WindowRect.Bottom),
+      Point(WindowRect.Right + Head, WindowRect.Bottom)], PenWidth, Alpha);
+    DrawAlphaPolyline(Canvas, [Point(WindowRect.Right, WindowRect.Bottom),
+      Point(WindowRect.Right, WindowRect.Bottom + Head)], PenWidth, Alpha);
+  end;
+end;
+
+function TVideoMinerOverlaySeekBar.FullScreenButtonAlpha: Byte;
+begin
+  Result := 185;
+  if FFullScreenButtonHovered then
+    Result := 225;
+  if FFullScreenButtonPressed then
+    Result := 250;
+  Result := ClampByte(Result);
+end;
+
+function TVideoMinerOverlaySeekBar.FullScreenButtonHitTest(
+  const Point: TPoint): Boolean;
+begin
+  Result := BoundsHitTest(Point) and PtInRect(FullScreenButtonRect,
+    System.Types.Point(Point.X - Bounds.Left, Point.Y - Bounds.Top));
+end;
+
+function TVideoMinerOverlaySeekBar.FullScreenButtonRect: TRect;
+var
+  Size: Integer;
+begin
+  Size := 34;
+  Result := Rect(Bounds.Width - Size - 10, Bounds.Height - Size - 10,
+    Bounds.Width - 10, Bounds.Height - 10);
+end;
+
 function TVideoMinerOverlaySeekBar.MouseDown(const Point: TPoint): Boolean;
 begin
   Result := BoundsHitTest(Point);
   if not Result then
     Exit;
+
+  if FullScreenButtonHitTest(Point) then
+  begin
+    FFullScreenButtonPressed := True;
+    FFullScreenButtonHovered := True;
+    FHovered := True;
+    Exit;
+  end;
 
   FDragging := True;
   FHovered := True;
@@ -914,12 +1081,20 @@ end;
 
 function TVideoMinerOverlaySeekBar.MouseMove(const Point: TPoint): Boolean;
 var
+  NewFullScreenButtonHovered: Boolean;
   NewHovered: Boolean;
   NewPositionMs: Integer;
 begin
   NewHovered := FDragging or BoundsHitTest(Point);
   Result := NewHovered <> FHovered;
   FHovered := NewHovered;
+
+  NewFullScreenButtonHovered := FullScreenButtonHitTest(Point);
+  if NewFullScreenButtonHovered <> FFullScreenButtonHovered then
+  begin
+    FFullScreenButtonHovered := NewFullScreenButtonHovered;
+    Result := True;
+  end;
 
   if FDragging then
   begin
@@ -934,9 +1109,22 @@ end;
 
 function TVideoMinerOverlaySeekBar.MouseUp(const Point: TPoint): Boolean;
 var
+  FullScreenButtonClicked: Boolean;
   SeekPositionMs: Integer;
 begin
   Result := FDragging or BoundsHitTest(Point);
+
+  if FFullScreenButtonPressed then
+  begin
+    FullScreenButtonClicked := FullScreenButtonHitTest(Point);
+    FFullScreenButtonPressed := False;
+    FFullScreenButtonHovered := FullScreenButtonClicked;
+    Result := True;
+    if FullScreenButtonClicked and Assigned(FOnFullScreenClick) then
+      FOnFullScreenClick(Self);
+    Exit;
+  end;
+
   if not FDragging then
     Exit;
 
@@ -951,6 +1139,7 @@ end;
 
 procedure TVideoMinerOverlaySeekBar.PaintControl(Canvas: TCanvas);
 var
+  ButtonRect: TRect;
   FilledRect: TRect;
   KnobCenterX: Integer;
   KnobRadius: Integer;
@@ -969,6 +1158,7 @@ begin
     Exit;
 
   DrawAlphaPanel(Canvas, Rect(0, 0, Bounds.Width, Bounds.Height), 18, 96);
+  ButtonRect := FullScreenButtonRect;
 
   if FMaxMs > 0 then
     PositionRatio := DisplayPositionMs / FMaxMs
@@ -1004,8 +1194,12 @@ begin
   Canvas.Font.Color := clWhite;
   SetBkMode(Canvas.Handle, TRANSPARENT);
   TextSize := Canvas.TextExtent(Text);
-  Canvas.TextOut(Bounds.Left + (Bounds.Width - TextSize.cx) div 2,
+  Canvas.TextOut(Bounds.Left + (Track.Left + Track.Right - TextSize.cx) div 2,
     Bounds.Top + Track.Bottom + 18, Text);
+
+  if FFullScreenButtonHovered or FFullScreenButtonPressed then
+    DrawAlphaRoundRect(Canvas, ButtonRect, 8, 38);
+  DrawFullScreenIcon(Canvas, ButtonRect, FullScreenButtonAlpha);
 end;
 
 function TVideoMinerOverlaySeekBar.PositionFromPoint(const Point: TPoint): Integer;
@@ -1036,9 +1230,15 @@ begin
     FDragPositionMs := FPositionMs;
 end;
 
+procedure TVideoMinerOverlaySeekBar.SetFullScreen(Value: Boolean);
+begin
+  FFullScreen := Value;
+end;
+
 function TVideoMinerOverlaySeekBar.TrackRect: TRect;
 var
   PadX: Integer;
+  RightReserve: Integer;
   TrackHeight: Integer;
   TrackY: Integer;
 begin
@@ -1047,11 +1247,13 @@ begin
     Exit;
 
   PadX := 12;
+  RightReserve := 52;
   TrackHeight := 7;
   if FHovered or FDragging then
     TrackHeight := 8;
   TrackY := Round(Bounds.Height * 0.30) - TrackHeight div 2;
-  Result := Rect(PadX, TrackY, Bounds.Width - PadX, TrackY + TrackHeight);
+  Result := Rect(PadX, TrackY, Bounds.Width - PadX - RightReserve,
+    TrackY + TrackHeight);
 end;
 
 end.

@@ -12,7 +12,9 @@ type
     FSurface: TVideoMinerVideoSurface;
     function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
       out BufferStride: Integer; out ErrorMessage: string): Boolean;
+    procedure SetFullScreen(Value: Boolean);
     procedure SetOnFirstFrameClick(Value: TNotifyEvent);
+    procedure SetOnFullScreenClick(Value: TNotifyEvent);
     procedure SetOnLastFrameClick(Value: TNotifyEvent);
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
     procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
@@ -32,7 +34,9 @@ type
     procedure Present(Bitmap: TBitmap);
     procedure PresentImmediate(Bitmap: TBitmap);
     procedure SetSeekProgress(PositionMs, MaxMs: Integer);
+    property FullScreen: Boolean write SetFullScreen;
     property OnFirstFrameClick: TNotifyEvent write SetOnFirstFrameClick;
+    property OnFullScreenClick: TNotifyEvent write SetOnFullScreenClick;
     property OnLastFrameClick: TNotifyEvent write SetOnLastFrameClick;
     property OnPlayPauseClick: TNotifyEvent write SetOnPlayPauseClick;
     property OnSeek: TVideoMinerOverlaySeekEvent write SetOnSeek;
@@ -113,6 +117,18 @@ procedure TVideoMinerVideoView.SetOnPlayPauseClick(Value: TNotifyEvent);
 begin
   if FSurface <> nil then
     FSurface.OnPlayPauseClick := Value;
+end;
+
+procedure TVideoMinerVideoView.SetFullScreen(Value: Boolean);
+begin
+  if FSurface <> nil then
+    FSurface.FullScreen := Value;
+end;
+
+procedure TVideoMinerVideoView.SetOnFullScreenClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnFullScreenClick := Value;
 end;
 
 procedure TVideoMinerVideoView.SetOnSeek(Value: TVideoMinerOverlaySeekEvent);

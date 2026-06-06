@@ -5,17 +5,43 @@ interface
 type
   TVideoDecoderMode = (vdmAuto, vdmQsv, vdmSoftware);
 
+  TVideoMinerLastMedia = record
+    Available: Boolean;
+    Folder: string;
+    FileName: string;
+  end;
+
+  TVideoMinerWindowBounds = record
+    Available: Boolean;
+    Left: Integer;
+    Top: Integer;
+    Width: Integer;
+    Height: Integer;
+  end;
+
 function GetVideoDecoderMode: TVideoDecoderMode;
+function LoadLastMedia: TVideoMinerLastMedia;
+function LoadMainFormBounds: TVideoMinerWindowBounds;
+procedure SaveLastMedia(const Folder, FileName: string);
+procedure SaveMainFormBounds(const Bounds: TVideoMinerWindowBounds);
 function VideoDecoderModeToText(Mode: TVideoDecoderMode): string;
 
 implementation
 
 uses
-  System.IniFiles, System.SysUtils, Winapi.Windows;
+  System.IniFiles, System.SysUtils, Winapi.ShlObj, Winapi.Windows;
 
 const
   SETTINGS_SECTION = 'VideoMiner';
   SETTINGS_DECODER_MODE = 'VideoDecoderMode';
+  WINDOW_SECTION = 'MainForm';
+  WINDOW_LEFT = 'Left';
+  WINDOW_TOP = 'Top';
+  WINDOW_WIDTH = 'Width';
+  WINDOW_HEIGHT = 'Height';
+  LAST_MEDIA_SECTION = 'LastMedia';
+  LAST_MEDIA_FOLDER = 'Folder';
+  LAST_MEDIA_FILE = 'FileName';
 
 var
   CurrentVideoDecoderMode: TVideoDecoderMode = vdmAuto;
@@ -23,12 +49,17 @@ var
 
 function SettingsFileName: string;
 var
-  ModulePath: array[0..MAX_PATH - 1] of Char;
+  AppDataPath: array[0..MAX_PATH - 1] of Char;
+  SettingsDir: string;
 begin
-  if GetModuleFileName(HInstance, ModulePath, Length(ModulePath)) > 0 then
-    Result := ChangeFileExt(ModulePath, '.ini')
+  if Succeeded(SHGetFolderPath(0, CSIDL_APPDATA or CSIDL_FLAG_CREATE, 0,
+    SHGFP_TYPE_CURRENT, AppDataPath)) then
+    SettingsDir := IncludeTrailingPathDelimiter(AppDataPath) + 'VideoMiner'
   else
-    Result := IncludeTrailingPathDelimiter(GetEnvironmentVariable('TEMP')) + 'VideoMiner.ini';
+    SettingsDir := IncludeTrailingPathDelimiter(GetEnvironmentVariable('TEMP')) + 'VideoMiner';
+
+  ForceDirectories(SettingsDir);
+  Result := IncludeTrailingPathDelimiter(SettingsDir) + 'VideoMiner.ini';
 end;
 
 function TextToVideoDecoderMode(const Value: string): TVideoDecoderMode;
@@ -74,6 +105,83 @@ function GetVideoDecoderMode: TVideoDecoderMode;
 begin
   LoadSettings;
   Result := CurrentVideoDecoderMode;
+end;
+
+function LoadMainFormBounds: TVideoMinerWindowBounds;
+var
+  Ini: TIniFile;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    Result.Available :=
+      Ini.ValueExists(WINDOW_SECTION, WINDOW_LEFT) and
+      Ini.ValueExists(WINDOW_SECTION, WINDOW_TOP) and
+      Ini.ValueExists(WINDOW_SECTION, WINDOW_WIDTH) and
+      Ini.ValueExists(WINDOW_SECTION, WINDOW_HEIGHT);
+    if not Result.Available then
+      Exit;
+
+    Result.Left := Ini.ReadInteger(WINDOW_SECTION, WINDOW_LEFT, 0);
+    Result.Top := Ini.ReadInteger(WINDOW_SECTION, WINDOW_TOP, 0);
+    Result.Width := Ini.ReadInteger(WINDOW_SECTION, WINDOW_WIDTH, 0);
+    Result.Height := Ini.ReadInteger(WINDOW_SECTION, WINDOW_HEIGHT, 0);
+    if (Result.Width < 320) or (Result.Height < 240) then
+      Result.Available := False;
+  finally
+    Ini.Free;
+  end;
+end;
+
+function LoadLastMedia: TVideoMinerLastMedia;
+var
+  Ini: TIniFile;
+begin
+  Result.Available := False;
+  Result.Folder := '';
+  Result.FileName := '';
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    Result.Folder := Ini.ReadString(LAST_MEDIA_SECTION, LAST_MEDIA_FOLDER, '');
+    Result.FileName := Ini.ReadString(LAST_MEDIA_SECTION, LAST_MEDIA_FILE, '');
+    Result.Available := (Result.Folder <> '') or (Result.FileName <> '');
+  finally
+    Ini.Free;
+  end;
+end;
+
+procedure SaveLastMedia(const Folder, FileName: string);
+var
+  Ini: TIniFile;
+begin
+  if (Folder = '') and (FileName = '') then
+    Exit;
+
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    Ini.WriteString(LAST_MEDIA_SECTION, LAST_MEDIA_FOLDER, Folder);
+    Ini.WriteString(LAST_MEDIA_SECTION, LAST_MEDIA_FILE, FileName);
+  finally
+    Ini.Free;
+  end;
+end;
+
+procedure SaveMainFormBounds(const Bounds: TVideoMinerWindowBounds);
+var
+  Ini: TIniFile;
+begin
+  if (not Bounds.Available) or (Bounds.Width < 320) or (Bounds.Height < 240) then
+    Exit;
+
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    Ini.WriteInteger(WINDOW_SECTION, WINDOW_LEFT, Bounds.Left);
+    Ini.WriteInteger(WINDOW_SECTION, WINDOW_TOP, Bounds.Top);
+    Ini.WriteInteger(WINDOW_SECTION, WINDOW_WIDTH, Bounds.Width);
+    Ini.WriteInteger(WINDOW_SECTION, WINDOW_HEIGHT, Bounds.Height);
+  finally
+    Ini.Free;
+  end;
 end;
 
 initialization
