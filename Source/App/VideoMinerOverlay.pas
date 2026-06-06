@@ -21,10 +21,12 @@ type
     constructor Create; virtual;
     procedure UpdateLayout(const PreviewRect: TRect); virtual;
     procedure Paint(Canvas: TCanvas); virtual;
+    function BoundsHitTest(const Point: TPoint): Boolean; virtual;
     function HitTest(const Point: TPoint): Boolean; virtual;
     function MouseDown(const Point: TPoint): Boolean; virtual;
     function MouseMove(const Point: TPoint): Boolean; virtual;
     function MouseUp(const Point: TPoint): Boolean; virtual;
+    property BoundsRect: TRect read FBounds;
     property Enabled: Boolean read FEnabled write FEnabled;
     property Visible: Boolean read FVisible write FVisible;
   end;
@@ -161,7 +163,12 @@ end;
 
 function TVideoMinerOverlayControl.HitTest(const Point: TPoint): Boolean;
 begin
-  Result := FVisible and FEnabled and PtInRect(FBounds, Point);
+  Result := FVisible and FEnabled and BoundsHitTest(Point);
+end;
+
+function TVideoMinerOverlayControl.BoundsHitTest(const Point: TPoint): Boolean;
+begin
+  Result := FEnabled and PtInRect(FBounds, Point);
 end;
 
 function TVideoMinerOverlayControl.MouseDown(const Point: TPoint): Boolean;
