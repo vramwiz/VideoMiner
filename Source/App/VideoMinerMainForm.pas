@@ -75,6 +75,7 @@ type
     procedure LastFrameOverlayClick(Sender: TObject);
     procedure PlayPauseOverlayClick(Sender: TObject);
     procedure PlayFromCurrentPosition;
+    procedure SeekBarSeek(Sender: TObject; PositionMs: Integer);
     procedure SkipBackwardOverlayClick(Sender: TObject);
     procedure SkipForwardOverlayClick(Sender: TObject);
     procedure StopPlayback;
@@ -143,6 +144,7 @@ begin
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
   FVideoView.OnFirstFrameClick := FirstFrameOverlayClick;
   FVideoView.OnPlayPauseClick := PlayPauseOverlayClick;
+  FVideoView.OnSeek := SeekBarSeek;
   FVideoView.OnSkipBackwardClick := SkipBackwardOverlayClick;
   FVideoView.OnSkipForwardClick := SkipForwardOverlayClick;
   FVideoView.OnLastFrameClick := LastFrameOverlayClick;
@@ -346,6 +348,7 @@ begin
   if FVideoFile = '' then
   begin
     SetStatusCaption('No video loaded');
+    FVideoView.SetSeekProgress(0, 0);
     Exit;
   end;
 
@@ -377,6 +380,7 @@ begin
      FVideoInfo.Width, FVideoInfo.Height, FVideoInfo.Fps, AudioText]);
   SetTitleBarText(Format('%s (%d/%d)', [ExtractFileName(FVideoFile),
     FMediaList.CurrentIndex + 1, FMediaList.Count]));
+  FVideoView.SetSeekProgress(CurrentPositionMs, FSeekMaxMs);
 end;
 
 procedure TVideoMinerMainForm.OpenFromDialog;
@@ -569,6 +573,11 @@ end;
 procedure TVideoMinerMainForm.SkipBackwardOverlayClick(Sender: TObject);
 begin
   SeekByMs(-10000);
+end;
+
+procedure TVideoMinerMainForm.SeekBarSeek(Sender: TObject; PositionMs: Integer);
+begin
+  SeekToMs(PositionMs);
 end;
 
 procedure TVideoMinerMainForm.SkipForwardOverlayClick(Sender: TObject);

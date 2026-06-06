@@ -4,7 +4,7 @@ interface
 
 uses
   System.Classes, System.SysUtils, Vcl.ExtCtrls, Vcl.Graphics, FFmpegDecoder,
-  VideoMinerVideoSurface;
+  VideoMinerOverlay, VideoMinerVideoSurface;
 
 type
   TVideoMinerVideoView = class
@@ -15,6 +15,7 @@ type
     procedure SetOnFirstFrameClick(Value: TNotifyEvent);
     procedure SetOnLastFrameClick(Value: TNotifyEvent);
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
+    procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
     procedure SetOnSkipBackwardClick(Value: TNotifyEvent);
     procedure SetOnSkipForwardClick(Value: TNotifyEvent);
     procedure SetPlaybackActive(Value: Boolean);
@@ -30,9 +31,11 @@ type
       out ErrorMessage: string): Boolean;
     procedure Present(Bitmap: TBitmap);
     procedure PresentImmediate(Bitmap: TBitmap);
+    procedure SetSeekProgress(PositionMs, MaxMs: Integer);
     property OnFirstFrameClick: TNotifyEvent write SetOnFirstFrameClick;
     property OnLastFrameClick: TNotifyEvent write SetOnLastFrameClick;
     property OnPlayPauseClick: TNotifyEvent write SetOnPlayPauseClick;
+    property OnSeek: TVideoMinerOverlaySeekEvent write SetOnSeek;
     property OnSkipBackwardClick: TNotifyEvent write SetOnSkipBackwardClick;
     property OnSkipForwardClick: TNotifyEvent write SetOnSkipForwardClick;
     property PlaybackActive: Boolean write SetPlaybackActive;
@@ -112,6 +115,12 @@ begin
     FSurface.OnPlayPauseClick := Value;
 end;
 
+procedure TVideoMinerVideoView.SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnSeek := Value;
+end;
+
 procedure TVideoMinerVideoView.SetOnFirstFrameClick(Value: TNotifyEvent);
 begin
   if FSurface <> nil then
@@ -140,6 +149,12 @@ procedure TVideoMinerVideoView.SetPlaybackActive(Value: Boolean);
 begin
   if FSurface <> nil then
     FSurface.PlaybackActive := Value;
+end;
+
+procedure TVideoMinerVideoView.SetSeekProgress(PositionMs, MaxMs: Integer);
+begin
+  if FSurface <> nil then
+    FSurface.SetSeekProgress(PositionMs, MaxMs);
 end;
 
 function TVideoMinerVideoView.ShowFrameAt(Decoder: TFFmpegDecoder;

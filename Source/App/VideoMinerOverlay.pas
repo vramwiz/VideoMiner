@@ -3,10 +3,12 @@ unit VideoMinerOverlay;
 interface
 
 uses
-  System.Classes, System.Math, System.Types, Winapi.Windows, Vcl.Graphics;
+  System.Classes, System.Math, System.SysUtils, System.Types, Winapi.Windows,
+  Vcl.Graphics;
 
 type
   TVideoMinerOverlayEdgeDirection = (edFirst, edLast);
+  TVideoMinerOverlaySeekEvent = procedure(Sender: TObject; PositionMs: Integer) of object;
   TVideoMinerOverlaySkipDirection = (sdBackward, sdForward);
 
   TVideoMinerOverlayControl = class abstract
@@ -91,6 +93,36 @@ type
   public
     constructor Create(Direction: TVideoMinerOverlayEdgeDirection); reintroduce;
     property Direction: TVideoMinerOverlayEdgeDirection read FDirection write FDirection;
+  end;
+
+  TVideoMinerOverlaySeekBar = class(TVideoMinerOverlayControl)
+  private
+    FDragPositionMs: Integer;
+    FDragging: Boolean;
+    FHovered: Boolean;
+    FMaxMs: Integer;
+    FOnSeek: TVideoMinerOverlaySeekEvent;
+    FPositionMs: Integer;
+    procedure DrawAlphaEllipse(Canvas: TCanvas; const DrawRect: TRect;
+      Alpha: Byte);
+    procedure DrawAlphaPanel(Canvas: TCanvas; const DrawRect: TRect;
+      Radius: Integer; Alpha: Byte);
+    procedure DrawAlphaRoundRect(Canvas: TCanvas; const DrawRect: TRect;
+      Radius: Integer; Alpha: Byte);
+    function DisplayPositionMs: Integer;
+    function FormatTimeMs(ValueMs: Integer): string;
+    function PositionFromPoint(const Point: TPoint): Integer;
+    function TrackRect: TRect;
+  protected
+    function CalculateBounds(const PreviewRect: TRect): TRect; override;
+    procedure PaintControl(Canvas: TCanvas); override;
+  public
+    function MouseDown(const Point: TPoint): Boolean; override;
+    function MouseMove(const Point: TPoint): Boolean; override;
+    function MouseUp(const Point: TPoint): Boolean; override;
+    procedure SetProgress(PositionMs, MaxMs: Integer);
+    property Dragging: Boolean read FDragging;
+    property OnSeek: TVideoMinerOverlaySeekEvent read FOnSeek write FOnSeek;
   end;
 
 implementation
@@ -698,6 +730,328 @@ begin
 
   DrawAlphaRect(Canvas, BarRect, Alpha);
   DrawAlphaPolygon(Canvas, TrianglePoints, Alpha);
+end;
+
+{ TVideoMinerOverlaySeekBar }
+
+function TVideoMinerOverlaySeekBar.CalculateBounds(
+  const PreviewRect: TRect): TRect;
+var
+  BottomOffset: Integer;
+  Height: Integer;
+  Width: Integer;
+begin
+  Result := TRect.Empty;
+  if PreviewRect.IsEmpty then
+    Exit;
+
+  Height := 88;
+  Width := Round(PreviewRect.Width * 0.88);
+  Width := Max(160, Min(PreviewRect.Width - 32, Width));
+  BottomOffset := Max(12, Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.045));
+
+  Result.Left := PreviewRect.Left + (PreviewRect.Width - Width) div 2;
+  Result.Right := Result.Left + Width;
+  Result.Bottom := PreviewRect.Bottom - BottomOffset;
+  Result.Top := Result.Bottom - Height;
+  if Result.Top < PreviewRect.Top then
+    OffsetRect(Result, 0, PreviewRect.Top - Result.Top);
+end;
+
+function TVideoMinerOverlaySeekBar.DisplayPositionMs: Integer;
+begin
+  if FDragging then
+    Result := FDragPositionMs
+  else
+    Result := FPositionMs;
+
+  if Result < 0 then
+    Result := 0
+  else if Result > FMaxMs then
+    Result := FMaxMs;
+end;
+
+function TVideoMinerOverlaySeekBar.FormatTimeMs(ValueMs: Integer): string;
+var
+  Hours: Integer;
+  Minutes: Integer;
+  Seconds: Integer;
+  TotalSeconds: Integer;
+begin
+  TotalSeconds := Max(0, (ValueMs + 500) div 1000);
+  Hours := TotalSeconds div 3600;
+  Minutes := (TotalSeconds div 60) mod 60;
+  Seconds := TotalSeconds mod 60;
+
+  if Hours > 0 then
+    Result := Format('%d:%.2d:%.2d', [Hours, Minutes, Seconds])
+  else
+    Result := Format('%d:%.2d', [Minutes, Seconds]);
+end;
+
+procedure TVideoMinerOverlaySeekBar.DrawAlphaEllipse(Canvas: TCanvas;
+  const DrawRect: TRect; Alpha: Byte);
+var
+  MaskBitmap: TBitmap;
+begin
+  if Bounds.IsEmpty or DrawRect.IsEmpty then
+    Exit;
+
+  MaskBitmap := TBitmap.Create;
+  try
+    MaskBitmap.PixelFormat := pf24bit;
+    MaskBitmap.SetSize(Bounds.Width, Bounds.Height);
+    MaskBitmap.Canvas.Brush.Color := clBlack;
+    MaskBitmap.Canvas.FillRect(Rect(0, 0, Bounds.Width, Bounds.Height));
+    MaskBitmap.Canvas.Pen.Style := psClear;
+    MaskBitmap.Canvas.Brush.Color := clWhite;
+    MaskBitmap.Canvas.Ellipse(DrawRect);
+    AlphaBlendMask(Canvas, Bounds, MaskBitmap, Alpha);
+  finally
+    MaskBitmap.Free;
+  end;
+end;
+
+procedure TVideoMinerOverlaySeekBar.DrawAlphaPanel(Canvas: TCanvas;
+  const DrawRect: TRect; Radius: Integer; Alpha: Byte);
+var
+  Bitmap: TBitmap;
+  Blend: TBlendFunction;
+  Line: PBgraQuadArray;
+  MaskBitmap: TBitmap;
+  MaskLine: PRgbTripleArray;
+  X: Integer;
+  Y: Integer;
+begin
+  if Bounds.IsEmpty or DrawRect.IsEmpty then
+    Exit;
+
+  MaskBitmap := TBitmap.Create;
+  Bitmap := TBitmap.Create;
+  try
+    MaskBitmap.PixelFormat := pf24bit;
+    MaskBitmap.SetSize(Bounds.Width, Bounds.Height);
+    MaskBitmap.Canvas.Brush.Color := clBlack;
+    MaskBitmap.Canvas.FillRect(Rect(0, 0, Bounds.Width, Bounds.Height));
+    MaskBitmap.Canvas.Pen.Style := psClear;
+    MaskBitmap.Canvas.Brush.Color := clWhite;
+    MaskBitmap.Canvas.RoundRect(DrawRect.Left, DrawRect.Top, DrawRect.Right,
+      DrawRect.Bottom, Radius, Radius);
+
+    Bitmap.PixelFormat := pf32bit;
+    Bitmap.SetSize(Bounds.Width, Bounds.Height);
+    Bitmap.AlphaFormat := afPremultiplied;
+    for Y := 0 to Bounds.Height - 1 do
+    begin
+      MaskLine := MaskBitmap.ScanLine[Y];
+      Line := Bitmap.ScanLine[Y];
+      for X := 0 to Bounds.Width - 1 do
+      begin
+        if MaskLine[X].rgbtRed > 0 then
+        begin
+          Line[X].B := 0;
+          Line[X].G := 0;
+          Line[X].R := 0;
+          Line[X].A := Alpha;
+        end
+        else
+        begin
+          Line[X].B := 0;
+          Line[X].G := 0;
+          Line[X].R := 0;
+          Line[X].A := 0;
+        end;
+      end;
+    end;
+
+    Blend.BlendOp := AC_SRC_OVER;
+    Blend.BlendFlags := 0;
+    Blend.SourceConstantAlpha := 255;
+    Blend.AlphaFormat := AC_SRC_ALPHA;
+    AlphaBlend(Canvas.Handle, Bounds.Left, Bounds.Top, Bounds.Width,
+      Bounds.Height, Bitmap.Canvas.Handle, 0, 0, Bounds.Width, Bounds.Height,
+      Blend);
+  finally
+    Bitmap.Free;
+    MaskBitmap.Free;
+  end;
+end;
+
+procedure TVideoMinerOverlaySeekBar.DrawAlphaRoundRect(Canvas: TCanvas;
+  const DrawRect: TRect; Radius: Integer; Alpha: Byte);
+var
+  MaskBitmap: TBitmap;
+begin
+  if Bounds.IsEmpty or DrawRect.IsEmpty then
+    Exit;
+
+  MaskBitmap := TBitmap.Create;
+  try
+    MaskBitmap.PixelFormat := pf24bit;
+    MaskBitmap.SetSize(Bounds.Width, Bounds.Height);
+    MaskBitmap.Canvas.Brush.Color := clBlack;
+    MaskBitmap.Canvas.FillRect(Rect(0, 0, Bounds.Width, Bounds.Height));
+    MaskBitmap.Canvas.Pen.Style := psClear;
+    MaskBitmap.Canvas.Brush.Color := clWhite;
+    MaskBitmap.Canvas.RoundRect(DrawRect.Left, DrawRect.Top, DrawRect.Right,
+      DrawRect.Bottom, Radius, Radius);
+    AlphaBlendMask(Canvas, Bounds, MaskBitmap, Alpha);
+  finally
+    MaskBitmap.Free;
+  end;
+end;
+
+function TVideoMinerOverlaySeekBar.MouseDown(const Point: TPoint): Boolean;
+begin
+  Result := BoundsHitTest(Point);
+  if not Result then
+    Exit;
+
+  FDragging := True;
+  FHovered := True;
+  FDragPositionMs := PositionFromPoint(Point);
+end;
+
+function TVideoMinerOverlaySeekBar.MouseMove(const Point: TPoint): Boolean;
+var
+  NewHovered: Boolean;
+  NewPositionMs: Integer;
+begin
+  NewHovered := FDragging or BoundsHitTest(Point);
+  Result := NewHovered <> FHovered;
+  FHovered := NewHovered;
+
+  if FDragging then
+  begin
+    NewPositionMs := PositionFromPoint(Point);
+    if NewPositionMs <> FDragPositionMs then
+    begin
+      FDragPositionMs := NewPositionMs;
+      Result := True;
+    end;
+  end;
+end;
+
+function TVideoMinerOverlaySeekBar.MouseUp(const Point: TPoint): Boolean;
+var
+  SeekPositionMs: Integer;
+begin
+  Result := FDragging or BoundsHitTest(Point);
+  if not FDragging then
+    Exit;
+
+  SeekPositionMs := PositionFromPoint(Point);
+  FDragPositionMs := SeekPositionMs;
+  FDragging := False;
+  FPositionMs := SeekPositionMs;
+  FHovered := BoundsHitTest(Point);
+  if Assigned(FOnSeek) then
+    FOnSeek(Self, SeekPositionMs);
+end;
+
+procedure TVideoMinerOverlaySeekBar.PaintControl(Canvas: TCanvas);
+var
+  FilledRect: TRect;
+  KnobCenterX: Integer;
+  KnobRadius: Integer;
+  PositionRatio: Double;
+  ShadowRadius: Integer;
+  Text: string;
+  TextSize: TSize;
+  Track: TRect;
+  TrackCenterY: Integer;
+begin
+  if Bounds.IsEmpty then
+    Exit;
+
+  Track := TrackRect;
+  if Track.IsEmpty then
+    Exit;
+
+  DrawAlphaPanel(Canvas, Rect(0, 0, Bounds.Width, Bounds.Height), 18, 96);
+
+  if FMaxMs > 0 then
+    PositionRatio := DisplayPositionMs / FMaxMs
+  else
+    PositionRatio := 0;
+  PositionRatio := Max(0.0, Min(1.0, PositionRatio));
+  KnobCenterX := Track.Left + Round(Track.Width * PositionRatio);
+  TrackCenterY := Track.Top + Track.Height div 2;
+
+  DrawAlphaRoundRect(Canvas, Track, Track.Height, 85);
+
+  FilledRect := Track;
+  FilledRect.Right := Max(FilledRect.Left + Track.Height, KnobCenterX);
+  DrawAlphaRoundRect(Canvas, FilledRect, Track.Height, 230);
+
+  ShadowRadius := 22;
+  DrawAlphaEllipse(Canvas, Rect(KnobCenterX - ShadowRadius,
+    TrackCenterY - ShadowRadius, KnobCenterX + ShadowRadius,
+    TrackCenterY + ShadowRadius), 70);
+
+  KnobRadius := 11;
+  if FHovered or FDragging then
+    KnobRadius := 12;
+  DrawAlphaEllipse(Canvas, Rect(KnobCenterX - KnobRadius,
+    TrackCenterY - KnobRadius, KnobCenterX + KnobRadius,
+    TrackCenterY + KnobRadius), 245);
+
+  Text := Format('%s / %s', [FormatTimeMs(DisplayPositionMs),
+    FormatTimeMs(FMaxMs)]);
+  Canvas.Font.Name := 'Segoe UI';
+  Canvas.Font.Size := 10;
+  Canvas.Font.Style := [];
+  Canvas.Font.Color := clWhite;
+  SetBkMode(Canvas.Handle, TRANSPARENT);
+  TextSize := Canvas.TextExtent(Text);
+  Canvas.TextOut(Bounds.Left + (Bounds.Width - TextSize.cx) div 2,
+    Bounds.Top + Track.Bottom + 18, Text);
+end;
+
+function TVideoMinerOverlaySeekBar.PositionFromPoint(const Point: TPoint): Integer;
+var
+  LocalX: Integer;
+  Track: TRect;
+begin
+  Result := 0;
+  Track := TrackRect;
+  if (FMaxMs <= 0) or Track.IsEmpty then
+    Exit;
+
+  LocalX := Point.X - Bounds.Left;
+  if LocalX < Track.Left then
+    LocalX := Track.Left
+  else if LocalX > Track.Right then
+    LocalX := Track.Right;
+
+  Result := Round((LocalX - Track.Left) / Max(1, Track.Width) * FMaxMs);
+  Result := Max(0, Min(FMaxMs, Result));
+end;
+
+procedure TVideoMinerOverlaySeekBar.SetProgress(PositionMs, MaxMs: Integer);
+begin
+  FMaxMs := Max(0, MaxMs);
+  FPositionMs := Max(0, Min(FMaxMs, PositionMs));
+  if not FDragging then
+    FDragPositionMs := FPositionMs;
+end;
+
+function TVideoMinerOverlaySeekBar.TrackRect: TRect;
+var
+  PadX: Integer;
+  TrackHeight: Integer;
+  TrackY: Integer;
+begin
+  Result := TRect.Empty;
+  if Bounds.IsEmpty then
+    Exit;
+
+  PadX := 12;
+  TrackHeight := 7;
+  if FHovered or FDragging then
+    TrackHeight := 8;
+  TrackY := Round(Bounds.Height * 0.30) - TrackHeight div 2;
+  Result := Rect(PadX, TrackY, Bounds.Width - PadX, TrackY + TrackHeight);
 end;
 
 end.
