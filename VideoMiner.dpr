@@ -13,6 +13,7 @@ uses
   VideoMinerMainForm in 'Source\App\VideoMinerMainForm.pas' {VideoMinerForm},
   VideoMinerSettings in 'Source\App\VideoMinerSettings.pas',
   DropAgent in 'Source\Lib\DropAgent\DropAgent.pas',
+  ResizeEdges in 'Source\Lib\ResizeEdges\ResizeEdges.pas',
   ShortcutAction in 'Source\Lib\ShortcutAction\ShortcutAction.pas',
   FFmpegApi in 'Source\FFmpeg\FFmpegApi.pas',
   FFmpegFrameConvert in 'Source\FFmpeg\FFmpegFrameConvert.pas',

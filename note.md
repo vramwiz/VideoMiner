@@ -61,14 +61,181 @@ VideoMiner は、素材確認・動画確認・画像確認を軽く行えるビ
 ソースフォルダ:
 
 - `Source\App`
-  - アプリ本体、メインフォーム。
+  - VideoMiner アプリ本体のユニット。
+  - フォーム、表示サーフェス、オーバーレイ GUI、設定、音声再生ラッパ、フォルダ内メディア一覧など、アプリ固有の責務を置く。
 - `Source\Decode`
-  - 既存のメディア処理ユニット。
+  - FFmpeg を使ったデコード処理。
+  - 動画/音声ストリームを開く、シークする、次フレームを読む、音声 PCM を読む、色形式ごとにフレームを取り出す処理を置く。
 - `Source\FFmpeg`
-  - FFmpeg API、変換、ストリーム情報などの共通部分。
+  - FFmpeg API 宣言、フレーム変換、QSV 関連、ストリーム情報取得などの低レベル共通処理。
+  - `Source\Decode` から使われる土台で、アプリ UI へ直接依存させない。
 - `Source\Lib`
   - アプリから使う汎用補助ユニット。
-  - 現在はドラッグ&ドロップ用の `DropAgent` と、タイマー補助の `MMTimer` がある。
+  - ドラッグ&ドロップ、ショートカット登録、タイマー補助、フォルダ監視など、VideoMiner 固有ではない再利用可能な補助処理を置く。
+
+### 主要ユニットの意味
+
+開発時に迷わないため、主なユニットの責務を以下のように扱う。
+
+#### `Source\App`
+
+- `VideoMinerMainForm.pas`
+  - メインフォーム。
+  - GUI コンポーネントの生成後初期化、イベント受け口、各機能ユニットの接続、現在のアプリ状態の橋渡しを担当する。
+  - 今後は処理を抱え込ませすぎず、再生制御、ウィンドウ制御、設定、ショートカット、表示部品の詳細は別ユニットへ寄せる。
+- `VideoMinerMainForm.dfm`
+  - メインフォームの VCL デザイン定義。
+  - 独自タイトルバー、動画表示元の `ImagePreview`、タイマー、ファイル選択ダイアログなどの配置を持つ。
+- `VideoMinerVideoView.pas`
+  - メインフォームと動画表示サーフェスの間に置く薄い窓口。
+  - `TImage` から専用サーフェスへ差し替え、フレーム表示、シーク進捗、オーバーレイイベント接続を中継する。
+- `VideoMinerVideoSurface.pas`
+  - 実際の動画表示面。
+  - 32bit Bitmap の再利用、バックバッファ描画、ズーム/パン、ホイール処理、マウス操作、オーバーレイ部品の表示制御を担当する。
+- `VideoMinerOverlay.pas`
+  - 動画サーフェス上に描く自前オーバーレイ GUI。
+  - 再生/一時停止、10 秒戻し/進み、先頭/末尾、左右ファイル移動、下側シークバー、音量、ミュート、終了時動作、全画面ボタンなどの描画とヒットテストを担当する。
+  - 中央の 5 アイコンや左右ファイルナビゲーションなど、動画上に直接重ねる操作部品の見た目もここで調整する。
+- `VideoMinerAudioPlayback.pas`
+  - アプリ側から使う音声再生ラッパ。
+  - 音声開始/停止、シーク位置からの再生、単調時計ベースの再生位置、音量、ミュートを管理する。
+- `VideoMinerMediaList.pas`
+  - 開いたファイルのフォルダを作業単位として扱うためのメディア一覧。
+  - 対象拡張子の収集、現在位置、前後ファイルへの移動可否、ナビゲーション先ファイルを管理する。
+- `VideoMinerSettings.pas`
+  - `%APPDATA%\VideoMiner\VideoMiner.ini` への設定保存/読込。
+  - 通常ウィンドウ位置、最後に開いたフォルダ/ファイル、再生終了時動作を扱う。
+- `VideoMinerWindowChrome.pas`
+  - 枠なしフォームの Windows 連携。
+  - `CreateParams`、`WM_NCCALCSIZE`、保存済みウィンドウ位置の復元と記憶を担当する。
+  - 端/角の実リサイズ操作は `Source\Lib\ResizeEdges` の透明エッジに任せる。
+- `VideoMinerShortcutBindings.pas`
+  - VideoMiner 用ショートカット割り当て表。
+  - どのキーをどの操作へ結びつけるかを持ち、`VideoMinerMainForm` からキー割り当ての詳細を分離する。
+- `VideoMinerDebugLog.pas`
+  - Debug ビルド専用の調査ログ。
+  - 再生同期、描画負荷、音声キューなどの調査用ログを `%TEMP%\VideoMiner_playback_debug.log` へ出す。
+
+#### `Source\Decode`
+
+- `FFmpegDecoder.pas`
+  - デコード処理の高レベル窓口。
+  - ファイルを開く/閉じる、動画フレーム取得、音声出力音量、音声読み取り系処理への中継を担当する。
+- `FFmpegDecoderTypes.pas`
+  - デコーダで共有する型定義。
+  - 動画情報、音声情報、フレーム形式など、Decode 層で使う共通型を置く。
+- `FFmpegDecoderContext.pas`
+  - FFmpeg デコード文脈の管理。
+  - format/codec/sws など、複数の処理から共有される状態を扱う。
+- `FFmpegAudioOpen.pas`
+  - 音声ストリームを開く処理。
+  - 入力ファイルから音声デコードに必要な codec/context を準備する。
+- `FFmpegAudioConvert.pas`
+  - 音声サンプル変換。
+  - FFmpeg から得た音声フレームを waveOut へ渡せる PCM 形式へ変換する。
+- `FFmpegDecoderAudioRead.pas`
+  - 音声フレーム読み取りとシーク補助。
+  - 指定位置から音声 PCM を読み、シーク直後の不要サンプル破棄などを扱う。
+- `FFmpegDecoderAudioPlayback.pas`
+  - waveOut への音声投入補助。
+  - PCM キュー、音量反映、waveOut 操作など、低レベル音声出力を扱う。
+- `FFmpegDecoderNext*.pas`
+  - 順方向に次の動画フレームを読む処理。
+  - `Bgrx32`、`Bgr24`、`I420`、`Yc48`、`Yuy2` など出力形式ごとに分かれている。
+- `FFmpegDecoderSeek*.pas`
+  - 指定時刻へシークして動画フレームを取得する処理。
+  - 出力形式ごとに分かれており、VideoMiner の表示では主に `Bgrx32` 系を使う。
+- `FFmpegDecoderResources.pas`
+  - デコーダ内部リソースの解放や補助処理。
+  - FFmpeg リソース管理に関わる処理をまとめる。
+
+#### `Source\FFmpeg`
+
+- `FFmpegApi.pas`
+  - FFmpeg DLL/API への Delphi 側宣言。
+  - libavformat/libavcodec/libswscale/libswresample などの関数や型を使うための土台。
+- `FFmpegFrameConvert.pas`
+  - 映像フレーム変換。
+  - FFmpeg の frame を Bitmap や BGRX/BGR24 などの表示用バッファへコピー/変換する。
+- `FFmpegQsvDecode.pas`
+  - Intel QSV などハードウェアデコード関連の補助。
+  - 現状で使い続けるかは、今後の不要ユニット整理時に確認する。
+- `FFmpegStreamInfo.pas`
+  - 入力ファイルのストリーム情報取得。
+  - 動画/音声の有無、サイズ、fps、duration などの情報を読む。
+
+#### `Source\Lib`
+
+- `DropAgent\DropAgent.pas`
+  - Windows/VCL のドラッグ&ドロップ補助。
+  - フォームへファイルドロップを受けるために使う。
+- `ShortcutAction\ShortcutAction.pas`
+  - キーボードショートカット登録/実行補助。
+  - `VideoMinerShortcutBindings` がこのクラスへ VideoMiner 用の割り当てを登録する。
+- `ResizeEdges\ResizeEdges.pas`
+  - 枠なしフォームや任意の `TWinControl` に透明なリサイズエッジを追加する補助。
+  - VideoMiner では標準の `WS_THICKFRAME` に頼らず、白い境界線を出さずに端/角リサイズを可能にするために使う。
+- `MMTimer\MMTimer.pas`
+  - マルチメディアタイマー補助。
+  - 現状の VideoMiner 本体で必要かは、今後の不要ユニット整理で確認する。
+- `FolderWatch\FolderWatch.pas`
+  - フォルダ監視補助。
+  - 現状の VideoMiner 本体で必要かは、今後の不要ユニット整理で確認する。
+
+### コメント記述ルール
+
+今後はユニットを 1 つずつ確認し、開発しやすくなるようにコメントを整備する。
+
+基本方針:
+
+- コメントは、処理を読めば分かることをなぞるのではなく、目的、責務、注意点、状態の意味を補うために書く。
+- 古い仕様や現在の実装と食い違うコメントは、見つけた時点で更新する。
+- コメント整理中に、不要なコメントや重複したコメントを増やしすぎない。
+
+ユニット先頭:
+
+- 各ユニットの先頭には、そのユニットの目的や担当範囲を `//` コメントで記述する。
+- 依存関係や「ここには書かない処理」が重要な場合は、その注意も先頭コメントに含める。
+
+フィールド:
+
+- フィールドの意味は、フィールド宣言の右側に 1 行コメントとして `//` で書く。
+- 同じブロック内では、`//` の X 座標を揃える。
+- 同じブロック内では、コメント本文の区切りとして使う `:` の X 座標も揃える。
+- 例:
+
+```pascal
+FVideoFile: string;              // file      : 現在開いている動画ファイル
+FSeekPositionMs: Integer;        // playback  : UI 側で保持する現在位置 ms
+FSeekMaxMs: Integer;             // playback  : シーク可能な最大位置 ms
+```
+
+メソッド:
+
+- メソッドの意味は、メソッド宣言または実装の上に 1 行コメントとして書く。
+- 引数の意味が複雑な場合は、複数行コメントにしてよい。
+- コメントと対象メソッドの間に空行は入れない。
+- 例:
+
+```pascal
+// 指定位置へシークし、必要なら再生状態を復元する
+procedure SeekToMs(PositionMs: Integer; ResumeIfPlaying: Boolean = True);
+```
+
+複雑な引数がある場合:
+
+```pascal
+// フレームを表示用 BGRX32 バッファへ直接デコードする
+// Buffer       : 出力先バッファ先頭
+// BufferStride : 1 行あたりのバイト数
+function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
+  out BufferStride: Integer; out ErrorMessage: string): Boolean;
+```
+
+空行:
+
+- コメントと対象の宣言/実装の間には空行を入れない。
+- コメントブロック内でも、意味の切れ目が明確に必要な場合以外は空行を入れない。
 
 ## 現在の状態
 
@@ -229,7 +396,9 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
 - hover / pressed 変化ではサーフェス全体を再描画せず、対象アイコン周辺だけ `InvalidateRect` する。これによりホバー時のちらつきを抑える。
 - 10 秒戻し/進みのさらに外側に、先頭フレームへ移動する `|<` と最後付近のフレームへ移動する `>|` のオーバーレイボタンを追加した。
 - 標準タイトルバーは外し、`bsNone` の枠なしフォームへ変更した。上部には自前のタイトルバーを配置し、ドラッグ移動、最小化、最大化/復元、閉じるボタンを実装した。
-- 枠なしフォームでも端を掴んでリサイズできるよう、メインフォーム側で `WM_NCHITTEST` を処理する。
+  - タイトル左側にはフォームまたはアプリのアイコンを表示する。
+  - アイコン上のマウスドラッグもタイトルバー移動として扱う。
+- 枠なしフォームでも端を掴んでリサイズできるよう、透明なリサイズエッジを配置する。
 - アイコン群とは連動しない下側ツールグループとして、ホバー時だけ表示されるシークバーを `VideoMinerVideoSurface` のオーバーレイに追加した。
 - シークバーは標準 `TTrackBar` ではなく、`TVideoMinerOverlaySeekBar` として 32bit Bitmap と `AlphaBlend` 系の自前描画で実装した。
 - シークバーは半透明黒の角丸パネル上に、白いバー本体、再生済み部分、白い丸いつまみ、つまみ背後の半透明影を描く。
@@ -282,9 +451,11 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
   - `Next` はフォルダ内の次動画へ移動して再生する。次動画がない場合は停止する。
   - 状態は `%APPDATA%\VideoMiner\VideoMiner.ini` の `[Playback] EndAction` に `stop` / `loop` / `next` として保存し、次回起動時に復元する。
 - 枠なしフォームのサイズ変更に対応した。
-  - 見た目は `bsNone` の独自タイトルバーのまま、`CreateParams` で `WS_THICKFRAME` / 最小化 / 最大化スタイルを付ける。
+  - 見た目は `bsNone` の独自タイトルバーのまま、標準の太枠を出さずに透明リサイズエッジを使う。
   - `WM_NCCALCSIZE` で Windows 標準の非クライアント枠を表示領域に出さないようにする。
-  - `WM_NCHITTEST` はメッセージ座標から端判定を行い、全画面中はリサイズ判定を出さない。
+  - `Source\Lib\ResizeEdges\ResizeEdges.pas` を使い、フォーム端/角に透明な `TLabel` ハンドルを置いて `SC_SIZE` を送る。
+  - `ResizeEdges` の透明ハンドルはウィンドウ付きコントロールの上へ重ねられないため、上端は `PanelTitleBar`、左右/下端は動画サーフェスへ attach する。
+  - サイズ変更後は `TResizeEdgeHelper.AdjustEdges` でタイトルバー側と動画サーフェス側の透明エッジを再配置する。
   - これにより動画サーフェスなどの子コントロールが端まで覆っていても、通常ウィンドウでは端や角を掴んでサイズ変更できる。
 - ズーム表示とパン操作を追加した。
   - 映像表示部分上のマウスホイールで拡大縮小する。
@@ -293,6 +464,10 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
   - 拡大中は映像表示部分の左ドラッグで表示位置を移動する。
   - 下側ツールバー、中央操作ボタン、左右ナビゲーション上では既存のオーバーレイ操作を優先し、パン操作と衝突させない。
   - 新しい動画を開く、または表示をクリアした場合は等倍表示へ戻す。
+- オーバーレイ GUI の見た目を調整した。
+  - 中央付近の 5 アイコンは、中心 X 座標を共通ステップで `-2, -1, 0, +1, +2` に並べ、X 座標間隔を揃えた。
+  - 左右端の前後ファイルナビゲーションは横幅を縮め、縦長の表示領域にした。
+  - 左右端の矢印背後に黒い半透明の縦長背景を描き、動画の明るさに関係なく矢印を見やすくした。
 - メインフォーム肥大化防止の第一段として、GUI そのものではない処理を一部別ユニットへ移した。
   - `Source\App\VideoMinerWindowChrome.pas` を追加し、枠なしフォームの作成パラメータ、非クライアント領域調整、リサイズヒットテスト、ウィンドウ位置復元/記憶を担当させる。
   - `Source\App\VideoMinerShortcutBindings.pas` を追加し、キーボードショートカットの割り当て表を担当させる。
@@ -335,6 +510,10 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
 - コメント整理。
   - 古い仕様や実装と食い違うコメントを更新する。
   - 必要な意図は残し、処理を読めば分かるだけのコメントは増やしすぎない。
+- 映像再生が少しカクつくことがある。
+  - 現状は同期ズレではなく、描画/デコード/タイマー周りの負荷や間隔が原因の可能性がある。
+  - 調査する場合は `%TEMP%\VideoMiner_playback_debug.log` の `playback_tick`、`paint`、`decode_ms`、`paint_ms`、`timer_interval` を確認する。
+  - まずはログ量を絞り、描画負荷とフレーム取得間隔のどちらが支配的かを見る。
 - アプリ本体で使わない既存補助ユニットの必要性を整理し、不要なら外す。
 
 設計メモ:

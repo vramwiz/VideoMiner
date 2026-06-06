@@ -22,8 +22,8 @@ implementation
 
 procedure ConfigureBorderlessCreateParams(var Params: TCreateParams);
 begin
-  Params.Style := (Params.Style or WS_THICKFRAME or WS_MINIMIZEBOX or
-    WS_MAXIMIZEBOX) and not WS_CAPTION;
+  Params.Style := (Params.Style or WS_MINIMIZEBOX or WS_MAXIMIZEBOX) and
+    not WS_CAPTION and not WS_THICKFRAME;
 end;
 
 procedure HandleBorderlessNCCalcSize(var Message: TMessage);

@@ -8,8 +8,8 @@ uses
   System.Diagnostics, System.Math,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
   Vcl.ExtCtrls, Vcl.Graphics, Vcl.StdCtrls, ActiveX, DropAgent, FFmpegDecoder,
-  FFmpegDecoderTypes, ShortcutAction, VideoMinerAudioPlayback, VideoMinerMediaList,
-  VideoMinerDebugLog, VideoMinerSettings, VideoMinerShortcutBindings,
+  FFmpegDecoderTypes, ResizeEdges, ShortcutAction, VideoMinerAudioPlayback,
+  VideoMinerMediaList, VideoMinerDebugLog, VideoMinerSettings, VideoMinerShortcutBindings,
   VideoMinerVideoView,
   VideoMinerWindowChrome;
 
@@ -71,8 +71,10 @@ type
     FEndAction: TVideoMinerEndAction;
     FNormalWindowBounds: TVideoMinerWindowBounds;
     FShortcuts: TShortcutAction;
+    FTitleIcon: TImage;
     procedure EnterFullScreen;
     procedure ExitFullScreen;
+    procedure InitializeTitleIcon;
     procedure InitializeShortcuts;
     procedure SetCaptionButtonColor(Sender: TObject; Color: TColor);
     procedure CycleEndAction;
@@ -172,6 +174,7 @@ begin
   PanelCloseButton.Color := TITLE_BAR_COLOR;
   PanelMaximizeButton.Color := TITLE_BAR_COLOR;
   PanelMinimizeButton.Color := TITLE_BAR_COLOR;
+  InitializeTitleIcon;
   UpdateMaximizeButton;
   FEndAction := LoadEndAction;
   VideoMinerWindowChrome.ApplySavedWindowBounds(Self, FNormalWindowBounds);
@@ -183,6 +186,10 @@ begin
   FAudioPlayback := TVideoMinerAudioPlayback.Create;
   FMediaList := TVideoMinerMediaList.Create;
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
+  TResizeEdgeHelper.AttachEdges(PanelTitleBar, VIDEO_MINER_RESIZE_BORDER,
+    [rdTop]);
+  TResizeEdgeHelper.AttachEdges(FVideoView.SurfaceControl,
+    VIDEO_MINER_RESIZE_BORDER, [rdBottom, rdLeft, rdRight]);
   FVideoView.OnFirstFrameClick := FirstFrameOverlayClick;
   FVideoView.OnFullScreenClick := FullScreenOverlayClick;
   FVideoView.OnNavigateNextClick := NavigateNextOverlayClick;
@@ -235,6 +242,7 @@ begin
   FAudioPlayback.Free;
   FPreviewDecoder.Free;
   FDecoder.Free;
+  FTitleIcon.Free;
   VideoMinerWindowChrome.RememberNormalWindowBounds(Self, FFullScreen,
     FNormalWindowBounds);
   SaveMainFormBounds(FNormalWindowBounds);
@@ -303,6 +311,26 @@ begin
     StopPlayback
   else
     PlayFromCurrentPosition;
+end;
+
+procedure TVideoMinerMainForm.InitializeTitleIcon;
+begin
+  if FTitleIcon <> nil then
+    Exit;
+
+  FTitleIcon := TImage.Create(Self);
+  FTitleIcon.Parent := PanelTitleBar;
+  FTitleIcon.Align := alLeft;
+  FTitleIcon.Width := PanelTitleBar.Height;
+  FTitleIcon.Center := True;
+  FTitleIcon.Proportional := True;
+  FTitleIcon.Stretch := False;
+  FTitleIcon.Transparent := True;
+  FTitleIcon.OnMouseDown := TitleBarMouseDown;
+  if not Icon.Empty then
+    FTitleIcon.Picture.Icon.Assign(Icon)
+  else if not Application.Icon.Empty then
+    FTitleIcon.Picture.Icon.Assign(Application.Icon);
 end;
 
 procedure TVideoMinerMainForm.CreateParams(var Params: TCreateParams);
@@ -1450,6 +1478,9 @@ procedure TVideoMinerMainForm.WMSize(var Message: TWMSize);
 begin
   inherited;
   UpdateMaximizeButton;
+  TResizeEdgeHelper.AdjustEdges(PanelTitleBar);
+  if FVideoView <> nil then
+    TResizeEdgeHelper.AdjustEdges(FVideoView.SurfaceControl);
   VideoMinerWindowChrome.RememberNormalWindowBounds(Self, FFullScreen,
     FNormalWindowBounds);
 end;

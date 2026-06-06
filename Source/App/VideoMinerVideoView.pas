@@ -3,13 +3,14 @@ unit VideoMinerVideoView;
 interface
 
 uses
-  System.Classes, System.SysUtils, System.Types, Vcl.ExtCtrls, Vcl.Graphics,
-  FFmpegDecoder, VideoMinerOverlay, VideoMinerVideoSurface;
+  System.Classes, System.SysUtils, System.Types, Vcl.Controls, Vcl.ExtCtrls,
+  Vcl.Graphics, FFmpegDecoder, VideoMinerOverlay, VideoMinerVideoSurface;
 
 type
   TVideoMinerVideoView = class
   private
     FSurface: TVideoMinerVideoSurface;
+    function GetSurfaceControl: TWinControl;
     function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
       out BufferStride: Integer; out ErrorMessage: string): Boolean;
     procedure SetCanNavigateNext(Value: Boolean);
@@ -63,11 +64,17 @@ type
     property OnSkipForwardClick: TNotifyEvent write SetOnSkipForwardClick;
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent write SetOnVolumeChange;
     property PlaybackActive: Boolean write SetPlaybackActive;
+    property SurfaceControl: TWinControl read GetSurfaceControl;
     property Muted: Boolean write SetMuted;
     property VolumePercent: Integer write SetVolumePercent;
   end;
 
 implementation
+
+function TVideoMinerVideoView.GetSurfaceControl: TWinControl;
+begin
+  Result := FSurface;
+end;
 
 function TVideoMinerVideoView.PrepareFrameBuffer(Decoder: TFFmpegDecoder;
   out Buffer: Pointer; out BufferStride: Integer;

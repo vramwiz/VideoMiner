@@ -100,6 +100,8 @@ type
   TVideoMinerOverlayFileNavButton = class(TVideoMinerOverlayButton)
   private
     FDirection: TVideoMinerOverlayFileNavDirection;
+    procedure DrawAlphaRect(Canvas: TCanvas; const DrawRect: TRect;
+      Alpha: Byte);
     procedure DrawAlphaPolyline(Canvas: TCanvas; const Points: array of TPoint;
       PenWidth: Integer; Alpha: Byte);
     function IconAlpha: Byte;
@@ -204,6 +206,15 @@ type
 function ClampByte(Value: Integer): Byte;
 begin
   Result := Byte(Max(0, Min(255, Value)));
+end;
+
+function OverlayCenterStep(const PreviewRect: TRect): Integer;
+var
+  BaseSize: Integer;
+begin
+  BaseSize := Min(PreviewRect.Width, PreviewRect.Height);
+  Result := Round(BaseSize * 0.145);
+  Result := Max(58, Min(112, Result));
 end;
 
 procedure AlphaBlendMask(Canvas: TCanvas; const DestBounds: TRect;
@@ -538,18 +549,18 @@ function TVideoMinerOverlaySkipButton.CalculateBounds(
 var
   CenterX: Integer;
   CenterY: Integer;
-  Offset: Integer;
   Size: Integer;
+  Step: Integer;
 begin
   Size := Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.095);
   Size := Max(36, Min(92, Size));
-  Offset := Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.22);
+  Step := OverlayCenterStep(PreviewRect);
 
   CenterX := PreviewRect.Left + PreviewRect.Width div 2;
   if FDirection = sdBackward then
-    Dec(CenterX, Offset)
+    Dec(CenterX, Step)
   else
-    Inc(CenterX, Offset);
+    Inc(CenterX, Step);
   CenterY := PreviewRect.Top + PreviewRect.Height div 2;
 
   Result.Left := CenterX - Size div 2;
@@ -684,18 +695,18 @@ function TVideoMinerOverlayEdgeButton.CalculateBounds(
 var
   CenterX: Integer;
   CenterY: Integer;
-  Offset: Integer;
   Size: Integer;
+  Step: Integer;
 begin
   Size := Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.075);
   Size := Max(30, Min(72, Size));
-  Offset := Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.34);
+  Step := OverlayCenterStep(PreviewRect);
 
   CenterX := PreviewRect.Left + PreviewRect.Width div 2;
   if FDirection = edFirst then
-    Dec(CenterX, Offset)
+    Dec(CenterX, Step * 2)
   else
-    Inc(CenterX, Offset);
+    Inc(CenterX, Step * 2);
   CenterY := PreviewRect.Top + PreviewRect.Height div 2;
 
   Result.Left := CenterX - Size div 2;
@@ -813,10 +824,10 @@ begin
   if PreviewRect.IsEmpty then
     Exit;
 
-  Width := Round(PreviewRect.Width * 0.12);
-  Width := Max(56, Min(150, Width));
-  Height := Round(PreviewRect.Height * 0.52);
-  Height := Max(120, Min(360, Height));
+  Width := Round(PreviewRect.Width * 0.065);
+  Width := Max(38, Min(84, Width));
+  Height := Round(PreviewRect.Height * 0.64);
+  Height := Max(150, Min(430, Height));
 
   if FDirection = fndPrevious then
   begin
@@ -830,6 +841,47 @@ begin
   end;
   Result.Top := PreviewRect.Top + (PreviewRect.Height - Height) div 2;
   Result.Bottom := Result.Top + Height;
+end;
+
+procedure TVideoMinerOverlayFileNavButton.DrawAlphaRect(Canvas: TCanvas;
+  const DrawRect: TRect; Alpha: Byte);
+var
+  Bitmap: TBitmap;
+  Blend: TBlendFunction;
+  Line: PBgraQuadArray;
+  X: Integer;
+  Y: Integer;
+begin
+  if Bounds.IsEmpty or DrawRect.IsEmpty then
+    Exit;
+
+  Bitmap := TBitmap.Create;
+  try
+    Bitmap.PixelFormat := pf32bit;
+    Bitmap.SetSize(DrawRect.Width, DrawRect.Height);
+    Bitmap.AlphaFormat := afPremultiplied;
+    for Y := 0 to Bitmap.Height - 1 do
+    begin
+      Line := Bitmap.ScanLine[Y];
+      for X := 0 to Bitmap.Width - 1 do
+      begin
+        Line[X].B := 0;
+        Line[X].G := 0;
+        Line[X].R := 0;
+        Line[X].A := Alpha;
+      end;
+    end;
+
+    Blend.BlendOp := AC_SRC_OVER;
+    Blend.BlendFlags := 0;
+    Blend.SourceConstantAlpha := 255;
+    Blend.AlphaFormat := AC_SRC_ALPHA;
+    AlphaBlend(Canvas.Handle, Bounds.Left + DrawRect.Left,
+      Bounds.Top + DrawRect.Top, DrawRect.Width, DrawRect.Height,
+      Bitmap.Canvas.Handle, 0, 0, DrawRect.Width, DrawRect.Height, Blend);
+  finally
+    Bitmap.Free;
+  end;
 end;
 
 procedure TVideoMinerOverlayFileNavButton.DrawAlphaPolyline(Canvas: TCanvas;
@@ -869,7 +921,10 @@ end;
 procedure TVideoMinerOverlayFileNavButton.PaintControl(Canvas: TCanvas);
 var
   Alpha: Byte;
+  BackgroundAlpha: Byte;
+  BackgroundRect: TRect;
   Chevron: array[0..2] of TPoint;
+  IconCenterX: Integer;
   IconHeight: Integer;
   IconWidth: Integer;
   IconLeft: Integer;
@@ -880,21 +935,31 @@ begin
     Exit;
 
   Alpha := IconAlpha;
-  IconWidth := Max(24, Min(54, Round(Bounds.Width * 0.34)));
-  IconHeight := Max(48, Min(110, Round(Bounds.Height * 0.34)));
+  IconWidth := Max(18, Min(36, Round(Bounds.Width * 0.46)));
+  IconHeight := Max(58, Min(130, Round(Bounds.Height * 0.34)));
   IconTop := (Bounds.Height - IconHeight) div 2;
-  PenWidth := Max(4, Round(IconWidth * 0.16));
+  PenWidth := Max(3, Round(IconWidth * 0.16));
+  BackgroundRect := Rect(5, Max(8, IconTop - 28), Bounds.Width - 5,
+    Min(Bounds.Height - 8, IconTop + IconHeight + 28));
+  BackgroundAlpha := 72;
+  if Hovered then
+    BackgroundAlpha := 104;
+  if Pressed then
+    BackgroundAlpha := 132;
+  DrawAlphaRect(Canvas, BackgroundRect, BackgroundAlpha);
 
   if FDirection = fndPrevious then
   begin
-    IconLeft := Max(18, Round(Bounds.Width * 0.28));
+    IconCenterX := BackgroundRect.Left + BackgroundRect.Width div 2;
+    IconLeft := IconCenterX - IconWidth div 2;
     Chevron[0] := Point(IconLeft + IconWidth, IconTop);
     Chevron[1] := Point(IconLeft, IconTop + IconHeight div 2);
     Chevron[2] := Point(IconLeft + IconWidth, IconTop + IconHeight);
   end
   else
   begin
-    IconLeft := Bounds.Width - Max(18, Round(Bounds.Width * 0.28)) - IconWidth;
+    IconCenterX := BackgroundRect.Left + BackgroundRect.Width div 2;
+    IconLeft := IconCenterX - IconWidth div 2;
     Chevron[0] := Point(IconLeft, IconTop);
     Chevron[1] := Point(IconLeft + IconWidth, IconTop + IconHeight div 2);
     Chevron[2] := Point(IconLeft, IconTop + IconHeight);
