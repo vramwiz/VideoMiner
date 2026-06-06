@@ -8,8 +8,10 @@ uses
 
 type
   TVideoMinerOverlayEdgeDirection = (edFirst, edLast);
+  TVideoMinerOverlayFileNavDirection = (fndPrevious, fndNext);
   TVideoMinerOverlaySeekEvent = procedure(Sender: TObject; PositionMs: Integer) of object;
   TVideoMinerOverlaySkipDirection = (sdBackward, sdForward);
+  TVideoMinerOverlayVolumeEvent = procedure(Sender: TObject; VolumePercent: Integer) of object;
 
   TVideoMinerOverlayControl = class abstract
   private
@@ -95,18 +97,40 @@ type
     property Direction: TVideoMinerOverlayEdgeDirection read FDirection write FDirection;
   end;
 
+  TVideoMinerOverlayFileNavButton = class(TVideoMinerOverlayButton)
+  private
+    FDirection: TVideoMinerOverlayFileNavDirection;
+    procedure DrawAlphaPolyline(Canvas: TCanvas; const Points: array of TPoint;
+      PenWidth: Integer; Alpha: Byte);
+    function IconAlpha: Byte;
+  protected
+    function CalculateBounds(const PreviewRect: TRect): TRect; override;
+    procedure PaintControl(Canvas: TCanvas); override;
+  public
+    constructor Create(Direction: TVideoMinerOverlayFileNavDirection); reintroduce;
+    property Direction: TVideoMinerOverlayFileNavDirection read FDirection write FDirection;
+  end;
+
   TVideoMinerOverlaySeekBar = class(TVideoMinerOverlayControl)
   private
     FDragPositionMs: Integer;
     FDragging: Boolean;
+    FEndActionButtonHovered: Boolean;
+    FEndActionButtonPressed: Boolean;
+    FEndActionText: string;
     FFullScreen: Boolean;
     FFullScreenButtonHovered: Boolean;
     FFullScreenButtonPressed: Boolean;
     FHovered: Boolean;
     FMaxMs: Integer;
+    FOnEndActionClick: TNotifyEvent;
     FOnFullScreenClick: TNotifyEvent;
     FOnSeek: TVideoMinerOverlaySeekEvent;
+    FOnVolumeChange: TVideoMinerOverlayVolumeEvent;
     FPositionMs: Integer;
+    FVolumeDragging: Boolean;
+    FVolumeHovered: Boolean;
+    FVolumePercent: Integer;
     procedure DrawAlphaEllipse(Canvas: TCanvas; const DrawRect: TRect;
       Alpha: Byte);
     procedure DrawAlphaPanel(Canvas: TCanvas; const DrawRect: TRect;
@@ -118,13 +142,20 @@ type
     procedure DrawFullScreenIcon(Canvas: TCanvas; const DrawRect: TRect;
       Alpha: Byte);
     function DisplayPositionMs: Integer;
+    function EndActionButtonHitTest(const Point: TPoint): Boolean;
+    function EndActionButtonRect: TRect;
     function FormatTimeMs(ValueMs: Integer): string;
     function FullScreenButtonAlpha: Byte;
     function FullScreenButtonHitTest(const Point: TPoint): Boolean;
     function FullScreenButtonRect: TRect;
     function PositionFromPoint(const Point: TPoint): Integer;
+    procedure SetEndActionText(const Value: string);
     procedure SetFullScreen(Value: Boolean);
+    procedure SetVolumePercent(Value: Integer);
     function TrackRect: TRect;
+    function VolumeFromPoint(const Point: TPoint): Integer;
+    function VolumeHitTest(const Point: TPoint): Boolean;
+    function VolumeTrackRect: TRect;
   protected
     function CalculateBounds(const PreviewRect: TRect): TRect; override;
     procedure PaintControl(Canvas: TCanvas); override;
@@ -134,9 +165,13 @@ type
     function MouseUp(const Point: TPoint): Boolean; override;
     procedure SetProgress(PositionMs, MaxMs: Integer);
     property Dragging: Boolean read FDragging;
+    property EndActionText: string read FEndActionText write SetEndActionText;
     property FullScreen: Boolean read FFullScreen write SetFullScreen;
+    property OnEndActionClick: TNotifyEvent read FOnEndActionClick write FOnEndActionClick;
     property OnFullScreenClick: TNotifyEvent read FOnFullScreenClick write FOnFullScreenClick;
     property OnSeek: TVideoMinerOverlaySeekEvent read FOnSeek write FOnSeek;
+    property OnVolumeChange: TVideoMinerOverlayVolumeEvent read FOnVolumeChange write FOnVolumeChange;
+    property VolumePercent: Integer read FVolumePercent write SetVolumePercent;
   end;
 
 implementation
@@ -746,6 +781,115 @@ begin
   DrawAlphaPolygon(Canvas, TrianglePoints, Alpha);
 end;
 
+{ TVideoMinerOverlayFileNavButton }
+
+constructor TVideoMinerOverlayFileNavButton.Create(
+  Direction: TVideoMinerOverlayFileNavDirection);
+begin
+  inherited Create;
+  FDirection := Direction;
+end;
+
+function TVideoMinerOverlayFileNavButton.CalculateBounds(
+  const PreviewRect: TRect): TRect;
+var
+  Height: Integer;
+  Width: Integer;
+begin
+  Result := TRect.Empty;
+  if PreviewRect.IsEmpty then
+    Exit;
+
+  Width := Round(PreviewRect.Width * 0.12);
+  Width := Max(56, Min(150, Width));
+  Height := Round(PreviewRect.Height * 0.52);
+  Height := Max(120, Min(360, Height));
+
+  if FDirection = fndPrevious then
+  begin
+    Result.Left := PreviewRect.Left;
+    Result.Right := PreviewRect.Left + Width;
+  end
+  else
+  begin
+    Result.Left := PreviewRect.Right - Width;
+    Result.Right := PreviewRect.Right;
+  end;
+  Result.Top := PreviewRect.Top + (PreviewRect.Height - Height) div 2;
+  Result.Bottom := Result.Top + Height;
+end;
+
+procedure TVideoMinerOverlayFileNavButton.DrawAlphaPolyline(Canvas: TCanvas;
+  const Points: array of TPoint; PenWidth: Integer; Alpha: Byte);
+var
+  MaskBitmap: TBitmap;
+begin
+  if Bounds.IsEmpty or (Length(Points) <= 1) then
+    Exit;
+
+  MaskBitmap := TBitmap.Create;
+  try
+    MaskBitmap.PixelFormat := pf24bit;
+    MaskBitmap.SetSize(Bounds.Width, Bounds.Height);
+    MaskBitmap.Canvas.Brush.Color := clBlack;
+    MaskBitmap.Canvas.FillRect(Rect(0, 0, Bounds.Width, Bounds.Height));
+    MaskBitmap.Canvas.Pen.Color := clWhite;
+    MaskBitmap.Canvas.Pen.Width := PenWidth;
+    MaskBitmap.Canvas.Pen.Style := psSolid;
+    MaskBitmap.Canvas.Polyline(Points);
+    AlphaBlendMask(Canvas, Bounds, MaskBitmap, Alpha);
+  finally
+    MaskBitmap.Free;
+  end;
+end;
+
+function TVideoMinerOverlayFileNavButton.IconAlpha: Byte;
+begin
+  Result := 120;
+  if Hovered then
+    Result := 190;
+  if Pressed then
+    Result := 230;
+  Result := ClampByte(Result);
+end;
+
+procedure TVideoMinerOverlayFileNavButton.PaintControl(Canvas: TCanvas);
+var
+  Alpha: Byte;
+  Chevron: array[0..2] of TPoint;
+  IconHeight: Integer;
+  IconWidth: Integer;
+  IconLeft: Integer;
+  IconTop: Integer;
+  PenWidth: Integer;
+begin
+  if Bounds.IsEmpty then
+    Exit;
+
+  Alpha := IconAlpha;
+  IconWidth := Max(24, Min(54, Round(Bounds.Width * 0.34)));
+  IconHeight := Max(48, Min(110, Round(Bounds.Height * 0.34)));
+  IconTop := (Bounds.Height - IconHeight) div 2;
+  PenWidth := Max(4, Round(IconWidth * 0.16));
+
+  if FDirection = fndPrevious then
+  begin
+    IconLeft := Max(18, Round(Bounds.Width * 0.28));
+    Chevron[0] := Point(IconLeft + IconWidth, IconTop);
+    Chevron[1] := Point(IconLeft, IconTop + IconHeight div 2);
+    Chevron[2] := Point(IconLeft + IconWidth, IconTop + IconHeight);
+  end
+  else
+  begin
+    IconLeft := Bounds.Width - Max(18, Round(Bounds.Width * 0.28)) - IconWidth;
+    Chevron[0] := Point(IconLeft, IconTop);
+    Chevron[1] := Point(IconLeft + IconWidth, IconTop + IconHeight div 2);
+    Chevron[2] := Point(IconLeft, IconTop + IconHeight);
+  end;
+
+  DrawAlphaPolyline(Canvas, Chevron, PenWidth, Alpha);
+end;
+
 { TVideoMinerOverlaySeekBar }
 
 function TVideoMinerOverlaySeekBar.CalculateBounds(
@@ -1044,6 +1188,22 @@ begin
   Result := ClampByte(Result);
 end;
 
+function TVideoMinerOverlaySeekBar.EndActionButtonHitTest(
+  const Point: TPoint): Boolean;
+begin
+  Result := BoundsHitTest(Point) and PtInRect(EndActionButtonRect,
+    System.Types.Point(Point.X - Bounds.Left, Point.Y - Bounds.Top));
+end;
+
+function TVideoMinerOverlaySeekBar.EndActionButtonRect: TRect;
+var
+  FullScreenRect: TRect;
+begin
+  FullScreenRect := FullScreenButtonRect;
+  Result := Rect(FullScreenRect.Left - 62, FullScreenRect.Top,
+    FullScreenRect.Left - 8, FullScreenRect.Bottom);
+end;
+
 function TVideoMinerOverlaySeekBar.FullScreenButtonHitTest(
   const Point: TPoint): Boolean;
 begin
@@ -1060,7 +1220,44 @@ begin
     Bounds.Width - 10, Bounds.Height - 10);
 end;
 
+function TVideoMinerOverlaySeekBar.VolumeTrackRect: TRect;
+var
+  Top: Integer;
+begin
+  Top := TrackRect.Bottom + 24;
+  Result := Rect(118, Top, 188, Top + 6);
+end;
+
+function TVideoMinerOverlaySeekBar.VolumeHitTest(const Point: TPoint): Boolean;
+var
+  HitRect: TRect;
+begin
+  HitRect := VolumeTrackRect;
+  HitRect.Left := 34;
+  InflateRect(HitRect, 8, 12);
+  Result := BoundsHitTest(Point) and PtInRect(HitRect,
+    System.Types.Point(Point.X - Bounds.Left, Point.Y - Bounds.Top));
+end;
+
+function TVideoMinerOverlaySeekBar.VolumeFromPoint(const Point: TPoint): Integer;
+var
+  LocalX: Integer;
+  Track: TRect;
+begin
+  Track := VolumeTrackRect;
+  LocalX := Point.X - Bounds.Left;
+  if LocalX < Track.Left then
+    LocalX := Track.Left
+  else if LocalX > Track.Right then
+    LocalX := Track.Right;
+
+  Result := Round((LocalX - Track.Left) / Max(1, Track.Width) * 100);
+  Result := Max(0, Min(100, Result));
+end;
+
 function TVideoMinerOverlaySeekBar.MouseDown(const Point: TPoint): Boolean;
+var
+  NewVolume: Integer;
 begin
   Result := BoundsHitTest(Point);
   if not Result then
@@ -1074,6 +1271,29 @@ begin
     Exit;
   end;
 
+  if EndActionButtonHitTest(Point) then
+  begin
+    FEndActionButtonPressed := True;
+    FEndActionButtonHovered := True;
+    FHovered := True;
+    Exit;
+  end;
+
+  if VolumeHitTest(Point) then
+  begin
+    FVolumeDragging := True;
+    FVolumeHovered := True;
+    FHovered := True;
+    NewVolume := VolumeFromPoint(Point);
+    if NewVolume <> FVolumePercent then
+    begin
+      FVolumePercent := NewVolume;
+      if Assigned(FOnVolumeChange) then
+        FOnVolumeChange(Self, FVolumePercent);
+    end;
+    Exit;
+  end;
+
   FDragging := True;
   FHovered := True;
   FDragPositionMs := PositionFromPoint(Point);
@@ -1081,13 +1301,30 @@ end;
 
 function TVideoMinerOverlaySeekBar.MouseMove(const Point: TPoint): Boolean;
 var
+  NewEndActionButtonHovered: Boolean;
   NewFullScreenButtonHovered: Boolean;
   NewHovered: Boolean;
   NewPositionMs: Integer;
+  NewVolume: Integer;
+  NewVolumeHovered: Boolean;
 begin
-  NewHovered := FDragging or BoundsHitTest(Point);
+  NewHovered := FDragging or FVolumeDragging or BoundsHitTest(Point);
   Result := NewHovered <> FHovered;
   FHovered := NewHovered;
+
+  NewEndActionButtonHovered := EndActionButtonHitTest(Point);
+  if NewEndActionButtonHovered <> FEndActionButtonHovered then
+  begin
+    FEndActionButtonHovered := NewEndActionButtonHovered;
+    Result := True;
+  end;
+
+  NewVolumeHovered := VolumeHitTest(Point);
+  if NewVolumeHovered <> FVolumeHovered then
+  begin
+    FVolumeHovered := NewVolumeHovered;
+    Result := True;
+  end;
 
   NewFullScreenButtonHovered := FullScreenButtonHitTest(Point);
   if NewFullScreenButtonHovered <> FFullScreenButtonHovered then
@@ -1105,14 +1342,27 @@ begin
       Result := True;
     end;
   end;
+
+  if FVolumeDragging then
+  begin
+    NewVolume := VolumeFromPoint(Point);
+    if NewVolume <> FVolumePercent then
+    begin
+      FVolumePercent := NewVolume;
+      if Assigned(FOnVolumeChange) then
+        FOnVolumeChange(Self, FVolumePercent);
+      Result := True;
+    end;
+  end;
 end;
 
 function TVideoMinerOverlaySeekBar.MouseUp(const Point: TPoint): Boolean;
 var
+  EndActionButtonClicked: Boolean;
   FullScreenButtonClicked: Boolean;
   SeekPositionMs: Integer;
 begin
-  Result := FDragging or BoundsHitTest(Point);
+  Result := FDragging or FVolumeDragging or BoundsHitTest(Point);
 
   if FFullScreenButtonPressed then
   begin
@@ -1122,6 +1372,28 @@ begin
     Result := True;
     if FullScreenButtonClicked and Assigned(FOnFullScreenClick) then
       FOnFullScreenClick(Self);
+    Exit;
+  end;
+
+  if FEndActionButtonPressed then
+  begin
+    EndActionButtonClicked := EndActionButtonHitTest(Point);
+    FEndActionButtonPressed := False;
+    FEndActionButtonHovered := EndActionButtonClicked;
+    Result := True;
+    if EndActionButtonClicked and Assigned(FOnEndActionClick) then
+      FOnEndActionClick(Self);
+    Exit;
+  end;
+
+  if FVolumeDragging then
+  begin
+    FVolumePercent := VolumeFromPoint(Point);
+    FVolumeDragging := False;
+    FVolumeHovered := VolumeHitTest(Point);
+    FHovered := BoundsHitTest(Point);
+    if Assigned(FOnVolumeChange) then
+      FOnVolumeChange(Self, FVolumePercent);
     Exit;
   end;
 
@@ -1140,6 +1412,7 @@ end;
 procedure TVideoMinerOverlaySeekBar.PaintControl(Canvas: TCanvas);
 var
   ButtonRect: TRect;
+  EndActionRect: TRect;
   FilledRect: TRect;
   KnobCenterX: Integer;
   KnobRadius: Integer;
@@ -1149,6 +1422,9 @@ var
   TextSize: TSize;
   Track: TRect;
   TrackCenterY: Integer;
+  VolumeFilledRect: TRect;
+  VolumeText: string;
+  VolumeTrack: TRect;
 begin
   if Bounds.IsEmpty then
     Exit;
@@ -1159,6 +1435,7 @@ begin
 
   DrawAlphaPanel(Canvas, Rect(0, 0, Bounds.Width, Bounds.Height), 18, 96);
   ButtonRect := FullScreenButtonRect;
+  EndActionRect := EndActionButtonRect;
 
   if FMaxMs > 0 then
     PositionRatio := DisplayPositionMs / FMaxMs
@@ -1197,9 +1474,35 @@ begin
   Canvas.TextOut(Bounds.Left + (Track.Left + Track.Right - TextSize.cx) div 2,
     Bounds.Top + Track.Bottom + 18, Text);
 
+  VolumeTrack := VolumeTrackRect;
+  VolumeText := Format('Vol %d%%', [FVolumePercent]);
+  Canvas.TextOut(Bounds.Left + 38,
+    Bounds.Top + Track.Bottom + 18, VolumeText);
+  DrawAlphaRoundRect(Canvas, VolumeTrack, VolumeTrack.Height, 72);
+  VolumeFilledRect := VolumeTrack;
+  VolumeFilledRect.Right := VolumeTrack.Left +
+    Round(VolumeTrack.Width * Max(0, Min(100, FVolumePercent)) / 100);
+  if VolumeFilledRect.Right > VolumeFilledRect.Left then
+    DrawAlphaRoundRect(Canvas, VolumeFilledRect, VolumeTrack.Height, 210);
+
   if FFullScreenButtonHovered or FFullScreenButtonPressed then
     DrawAlphaRoundRect(Canvas, ButtonRect, 8, 38);
   DrawFullScreenIcon(Canvas, ButtonRect, FullScreenButtonAlpha);
+
+  if FEndActionButtonHovered or FEndActionButtonPressed then
+    DrawAlphaRoundRect(Canvas, EndActionRect, 8, 38);
+  Text := FEndActionText;
+  if Text = '' then
+    Text := 'Stop';
+  Canvas.Font.Name := 'Segoe UI';
+  Canvas.Font.Size := 9;
+  Canvas.Font.Style := [];
+  Canvas.Font.Color := clWhite;
+  TextSize := Canvas.TextExtent(Text);
+  Canvas.TextOut(Bounds.Left + EndActionRect.Left +
+    (EndActionRect.Width - TextSize.cx) div 2,
+    Bounds.Top + EndActionRect.Top + (EndActionRect.Height - TextSize.cy) div 2,
+    Text);
 end;
 
 function TVideoMinerOverlaySeekBar.PositionFromPoint(const Point: TPoint): Integer;
@@ -1235,6 +1538,16 @@ begin
   FFullScreen := Value;
 end;
 
+procedure TVideoMinerOverlaySeekBar.SetEndActionText(const Value: string);
+begin
+  FEndActionText := Value;
+end;
+
+procedure TVideoMinerOverlaySeekBar.SetVolumePercent(Value: Integer);
+begin
+  FVolumePercent := Max(0, Min(100, Value));
+end;
+
 function TVideoMinerOverlaySeekBar.TrackRect: TRect;
 var
   PadX: Integer;
@@ -1247,7 +1560,7 @@ begin
     Exit;
 
   PadX := 12;
-  RightReserve := 52;
+  RightReserve := 116;
   TrackHeight := 7;
   if FHovered or FDragging then
     TrackHeight := 8;

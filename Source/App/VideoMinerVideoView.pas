@@ -12,15 +12,23 @@ type
     FSurface: TVideoMinerVideoSurface;
     function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
       out BufferStride: Integer; out ErrorMessage: string): Boolean;
+    procedure SetCanNavigateNext(Value: Boolean);
+    procedure SetCanNavigatePrevious(Value: Boolean);
+    procedure SetEndActionText(const Value: string);
     procedure SetFullScreen(Value: Boolean);
+    procedure SetOnEndActionClick(Value: TNotifyEvent);
     procedure SetOnFirstFrameClick(Value: TNotifyEvent);
     procedure SetOnFullScreenClick(Value: TNotifyEvent);
     procedure SetOnLastFrameClick(Value: TNotifyEvent);
+    procedure SetOnNavigateNextClick(Value: TNotifyEvent);
+    procedure SetOnNavigatePreviousClick(Value: TNotifyEvent);
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
     procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
     procedure SetOnSkipBackwardClick(Value: TNotifyEvent);
     procedure SetOnSkipForwardClick(Value: TNotifyEvent);
+    procedure SetOnVolumeChange(Value: TVideoMinerOverlayVolumeEvent);
     procedure SetPlaybackActive(Value: Boolean);
+    procedure SetVolumePercent(Value: Integer);
   public
     constructor Create(Image: TImage);
     destructor Destroy; override;
@@ -34,15 +42,23 @@ type
     procedure Present(Bitmap: TBitmap);
     procedure PresentImmediate(Bitmap: TBitmap);
     procedure SetSeekProgress(PositionMs, MaxMs: Integer);
+    property CanNavigateNext: Boolean write SetCanNavigateNext;
+    property CanNavigatePrevious: Boolean write SetCanNavigatePrevious;
+    property EndActionText: string write SetEndActionText;
     property FullScreen: Boolean write SetFullScreen;
+    property OnEndActionClick: TNotifyEvent write SetOnEndActionClick;
     property OnFirstFrameClick: TNotifyEvent write SetOnFirstFrameClick;
     property OnFullScreenClick: TNotifyEvent write SetOnFullScreenClick;
     property OnLastFrameClick: TNotifyEvent write SetOnLastFrameClick;
+    property OnNavigateNextClick: TNotifyEvent write SetOnNavigateNextClick;
+    property OnNavigatePreviousClick: TNotifyEvent write SetOnNavigatePreviousClick;
     property OnPlayPauseClick: TNotifyEvent write SetOnPlayPauseClick;
     property OnSeek: TVideoMinerOverlaySeekEvent write SetOnSeek;
     property OnSkipBackwardClick: TNotifyEvent write SetOnSkipBackwardClick;
     property OnSkipForwardClick: TNotifyEvent write SetOnSkipForwardClick;
+    property OnVolumeChange: TVideoMinerOverlayVolumeEvent write SetOnVolumeChange;
     property PlaybackActive: Boolean write SetPlaybackActive;
+    property VolumePercent: Integer write SetVolumePercent;
   end;
 
 implementation
@@ -131,10 +147,23 @@ begin
     FSurface.OnFullScreenClick := Value;
 end;
 
+procedure TVideoMinerVideoView.SetOnEndActionClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnEndActionClick := Value;
+end;
+
 procedure TVideoMinerVideoView.SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
 begin
   if FSurface <> nil then
     FSurface.OnSeek := Value;
+end;
+
+procedure TVideoMinerVideoView.SetOnVolumeChange(
+  Value: TVideoMinerOverlayVolumeEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnVolumeChange := Value;
 end;
 
 procedure TVideoMinerVideoView.SetOnFirstFrameClick(Value: TNotifyEvent);
@@ -147,6 +176,18 @@ procedure TVideoMinerVideoView.SetOnLastFrameClick(Value: TNotifyEvent);
 begin
   if FSurface <> nil then
     FSurface.OnLastFrameClick := Value;
+end;
+
+procedure TVideoMinerVideoView.SetOnNavigatePreviousClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnNavigatePreviousClick := Value;
+end;
+
+procedure TVideoMinerVideoView.SetOnNavigateNextClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnNavigateNextClick := Value;
 end;
 
 procedure TVideoMinerVideoView.SetOnSkipBackwardClick(Value: TNotifyEvent);
@@ -167,10 +208,34 @@ begin
     FSurface.PlaybackActive := Value;
 end;
 
+procedure TVideoMinerVideoView.SetCanNavigatePrevious(Value: Boolean);
+begin
+  if FSurface <> nil then
+    FSurface.CanNavigatePrevious := Value;
+end;
+
+procedure TVideoMinerVideoView.SetCanNavigateNext(Value: Boolean);
+begin
+  if FSurface <> nil then
+    FSurface.CanNavigateNext := Value;
+end;
+
+procedure TVideoMinerVideoView.SetEndActionText(const Value: string);
+begin
+  if FSurface <> nil then
+    FSurface.EndActionText := Value;
+end;
+
 procedure TVideoMinerVideoView.SetSeekProgress(PositionMs, MaxMs: Integer);
 begin
   if FSurface <> nil then
     FSurface.SetSeekProgress(PositionMs, MaxMs);
+end;
+
+procedure TVideoMinerVideoView.SetVolumePercent(Value: Integer);
+begin
+  if FSurface <> nil then
+    FSurface.VolumePercent := Value;
 end;
 
 function TVideoMinerVideoView.ShowFrameAt(Decoder: TFFmpegDecoder;

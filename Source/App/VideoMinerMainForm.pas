@@ -65,6 +65,7 @@ type
     FPendingRestartMs: Integer;
     FRestartPlaybackTimer: TTimer;
     FFullScreen: Boolean;
+    FEndAction: TVideoMinerEndAction;
     FNormalWindowBounds: TVideoMinerWindowBounds;
     FShortcuts: TShortcutAction;
     procedure ApplySavedWindowBounds;
@@ -73,8 +74,11 @@ type
     procedure InitializeShortcuts;
     procedure RememberNormalWindowBounds;
     procedure SetCaptionButtonColor(Sender: TObject; Color: TColor);
+    procedure CycleEndAction;
+    procedure EndActionOverlayClick(Sender: TObject);
     procedure ToggleFullScreen;
     procedure TogglePlayPause;
+    procedure UpdateEndActionButton;
     procedure UpdateMaximizeButton;
     function LoadVideoFile(const FileName: string; AutoPlay: Boolean): Boolean;
     procedure DropFiles(Sender: TObject; Control: TWinControl; const FileNames: TArray<string>);
@@ -86,19 +90,24 @@ type
     procedure FirstFrameOverlayClick(Sender: TObject);
     procedure FullScreenOverlayClick(Sender: TObject);
     procedure LastFrameOverlayClick(Sender: TObject);
+    procedure NavigateNextOverlayClick(Sender: TObject);
+    procedure NavigatePreviousOverlayClick(Sender: TObject);
     procedure PlayPauseOverlayClick(Sender: TObject);
     procedure PlayFromCurrentPosition;
     procedure SeekBarSeek(Sender: TObject; PositionMs: Integer);
     procedure ShortcutNavigateNext;
     procedure ShortcutNavigatePrevious;
     procedure ShortcutOpenDialog;
-    procedure ShortcutSeekBackward;
-    procedure ShortcutSeekForward;
     procedure ShortcutSeekToFirstFrame;
     procedure ShortcutSeekToLastFrame;
+    procedure ShortcutToggleMute;
+    procedure ShortcutVolumeDown;
+    procedure ShortcutVolumeUp;
     procedure SkipBackwardOverlayClick(Sender: TObject);
     procedure SkipForwardOverlayClick(Sender: TObject);
     procedure StopPlayback;
+    procedure VolumeOverlayChange(Sender: TObject; VolumePercent: Integer);
+    procedure ChangeVolumeBy(DeltaPercent: Integer);
     function PlaybackActiveOrPending: Boolean;
     function CurrentPlaybackPositionMs: Integer;
     procedure SetTitleBarText(const Text: string);
@@ -158,6 +167,7 @@ begin
   PanelMaximizeButton.Color := TITLE_BAR_COLOR;
   PanelMinimizeButton.Color := TITLE_BAR_COLOR;
   UpdateMaximizeButton;
+  FEndAction := LoadEndAction;
   ApplySavedWindowBounds;
   FShortcuts := TShortcutAction.Create;
   InitializeShortcuts;
@@ -169,11 +179,16 @@ begin
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
   FVideoView.OnFirstFrameClick := FirstFrameOverlayClick;
   FVideoView.OnFullScreenClick := FullScreenOverlayClick;
+  FVideoView.OnNavigateNextClick := NavigateNextOverlayClick;
+  FVideoView.OnNavigatePreviousClick := NavigatePreviousOverlayClick;
   FVideoView.OnPlayPauseClick := PlayPauseOverlayClick;
   FVideoView.OnSeek := SeekBarSeek;
   FVideoView.OnSkipBackwardClick := SkipBackwardOverlayClick;
   FVideoView.OnSkipForwardClick := SkipForwardOverlayClick;
   FVideoView.OnLastFrameClick := LastFrameOverlayClick;
+  FVideoView.OnVolumeChange := VolumeOverlayChange;
+  FVideoView.OnEndActionClick := EndActionOverlayClick;
+  UpdateEndActionButton;
   FPendingOpenFiles := TStringList.Create;
   FRestartPlaybackTimer := TTimer.Create(Self);
   FRestartPlaybackTimer.Enabled := False;
@@ -186,6 +201,7 @@ begin
   FPendingRestartMs := -1;
   FAudioPlayback.VolumePercent := 100;
   FAudioPlayback.Muted := False;
+  FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
   FDropAgent := TDropAgent.Create;
   if FOleInitialized then
   begin
@@ -213,6 +229,7 @@ begin
   FDecoder.Free;
   RememberNormalWindowBounds;
   SaveMainFormBounds(FNormalWindowBounds);
+  SaveEndAction(FEndAction);
   if FOleInitialized then
     OleUninitialize;
 end;
@@ -338,12 +355,15 @@ begin
   FShortcuts.Add(VK_RIGHT, [ssCtrl], ShortcutNavigateNext);
   FShortcuts.Add(VK_F11, [], ToggleFullScreen);
   FShortcuts.Add(VK_SPACE, [], TogglePlayPause);
-  FShortcuts.Add(VK_LEFT, [], ShortcutSeekBackward);
-  FShortcuts.Add(VK_RIGHT, [], ShortcutSeekForward);
+  FShortcuts.Add(VK_LEFT, [], ShortcutNavigatePrevious);
+  FShortcuts.Add(VK_RIGHT, [], ShortcutNavigateNext);
   FShortcuts.Add(VK_PRIOR, [], ShortcutNavigatePrevious);
   FShortcuts.Add(VK_NEXT, [], ShortcutNavigateNext);
   FShortcuts.Add(VK_HOME, [], ShortcutSeekToFirstFrame);
   FShortcuts.Add(VK_END, [], ShortcutSeekToLastFrame);
+  FShortcuts.Add(VK_UP, [], ShortcutVolumeUp);
+  FShortcuts.Add(VK_DOWN, [], ShortcutVolumeDown);
+  FShortcuts.Add(Ord('M'), [], ShortcutToggleMute);
 end;
 
 // 指定ミリ秒位置のフレームを表示する
@@ -428,6 +448,40 @@ end;
 procedure TVideoMinerMainForm.MinimizeButtonClick(Sender: TObject);
 begin
   WindowState := wsMinimized;
+end;
+
+procedure TVideoMinerMainForm.CycleEndAction;
+begin
+  case FEndAction of
+    eaStop:
+      FEndAction := eaLoop;
+    eaLoop:
+      FEndAction := eaNext;
+  else
+    FEndAction := eaStop;
+  end;
+  UpdateEndActionButton;
+  SaveEndAction(FEndAction);
+end;
+
+procedure TVideoMinerMainForm.EndActionOverlayClick(Sender: TObject);
+begin
+  CycleEndAction;
+end;
+
+procedure TVideoMinerMainForm.UpdateEndActionButton;
+begin
+  if FVideoView = nil then
+    Exit;
+
+  case FEndAction of
+    eaLoop:
+      FVideoView.EndActionText := 'Loop';
+    eaNext:
+      FVideoView.EndActionText := 'Next';
+  else
+    FVideoView.EndActionText := 'Stop';
+  end;
 end;
 
 procedure TVideoMinerMainForm.UpdateMaximizeButton;
@@ -814,6 +868,16 @@ begin
   SeekToLastFrame;
 end;
 
+procedure TVideoMinerMainForm.NavigatePreviousOverlayClick(Sender: TObject);
+begin
+  NavigateBy(-1);
+end;
+
+procedure TVideoMinerMainForm.NavigateNextOverlayClick(Sender: TObject);
+begin
+  NavigateBy(1);
+end;
+
 procedure TVideoMinerMainForm.SkipBackwardOverlayClick(Sender: TObject);
 begin
   SeekByMs(-10000);
@@ -844,16 +908,6 @@ begin
   NavigateBy(1);
 end;
 
-procedure TVideoMinerMainForm.ShortcutSeekBackward;
-begin
-  SeekByMs(-10000);
-end;
-
-procedure TVideoMinerMainForm.ShortcutSeekForward;
-begin
-  SeekByMs(10000);
-end;
-
 procedure TVideoMinerMainForm.ShortcutSeekToFirstFrame;
 begin
   SeekToFirstFrame;
@@ -864,9 +918,44 @@ begin
   SeekToLastFrame;
 end;
 
+procedure TVideoMinerMainForm.ShortcutVolumeUp;
+begin
+  ChangeVolumeBy(5);
+end;
+
+procedure TVideoMinerMainForm.ShortcutVolumeDown;
+begin
+  ChangeVolumeBy(-5);
+end;
+
+procedure TVideoMinerMainForm.ShortcutToggleMute;
+begin
+  FAudioPlayback.Muted := not FAudioPlayback.Muted;
+  if FAudioPlayback.Muted then
+    FVideoView.VolumePercent := 0
+  else
+    FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
+end;
+
 procedure TVideoMinerMainForm.SkipForwardOverlayClick(Sender: TObject);
 begin
   SeekByMs(10000);
+end;
+
+procedure TVideoMinerMainForm.ChangeVolumeBy(DeltaPercent: Integer);
+begin
+  FAudioPlayback.Muted := False;
+  FAudioPlayback.VolumePercent := Max(0,
+    Min(100, FAudioPlayback.VolumePercent + DeltaPercent));
+  FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
+end;
+
+procedure TVideoMinerMainForm.VolumeOverlayChange(Sender: TObject;
+  VolumePercent: Integer);
+begin
+  FAudioPlayback.Muted := False;
+  FAudioPlayback.VolumePercent := VolumePercent;
+  FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
 end;
 
 // 再生を停止する
@@ -1042,6 +1131,18 @@ end;
 
 procedure TVideoMinerMainForm.UpdateNavigationButtons;
 begin
+  if FVideoView = nil then
+    Exit;
+
+  if FMediaList = nil then
+  begin
+    FVideoView.CanNavigatePrevious := False;
+    FVideoView.CanNavigateNext := False;
+    Exit;
+  end;
+
+  FVideoView.CanNavigatePrevious := FMediaList.CanNavigate(-1);
+  FVideoView.CanNavigateNext := FMediaList.CanNavigate(1);
 end;
 
 procedure TVideoMinerMainForm.NavigateBy(Delta: Integer);
@@ -1246,6 +1347,28 @@ end;
 
 procedure TVideoMinerMainForm.FinishPlaybackAtEnd;
 begin
+  case FEndAction of
+    eaLoop:
+      begin
+        FUpdatingSeek := True;
+        try
+          FSeekPositionMs := 0;
+        finally
+          FUpdatingSeek := False;
+        end;
+        StartPlaybackAtMs(0);
+        Exit;
+      end;
+    eaNext:
+      begin
+        if (FMediaList <> nil) and FMediaList.CanNavigate(1) then
+        begin
+          NavigateBy(1);
+          Exit;
+        end;
+      end;
+  end;
+
   FUpdatingSeek := True;
   try
     FSeekPositionMs := FSeekMaxMs;

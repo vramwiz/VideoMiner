@@ -13,39 +13,56 @@ type
     FPaintBuffer: TBitmap;
     FFirstFrameButton: TVideoMinerOverlayEdgeButton;
     FLastFrameButton: TVideoMinerOverlayEdgeButton;
+    FNextFileButton: TVideoMinerOverlayFileNavButton;
+    FOnEndActionClick: TNotifyEvent;
     FOnFirstFrameClick: TNotifyEvent;
     FOnFullScreenClick: TNotifyEvent;
     FOnLastFrameClick: TNotifyEvent;
+    FOnNavigateNextClick: TNotifyEvent;
+    FOnNavigatePreviousClick: TNotifyEvent;
     FOnPlayPauseClick: TNotifyEvent;
     FOnSeek: TVideoMinerOverlaySeekEvent;
     FOnSkipBackwardClick: TNotifyEvent;
     FOnSkipForwardClick: TNotifyEvent;
+    FOnVolumeChange: TVideoMinerOverlayVolumeEvent;
     FOverlayVisible: Boolean;
     FPlayPauseButton: TVideoMinerOverlayPlayPauseButton;
+    FPreviousFileButton: TVideoMinerOverlayFileNavButton;
     FPreviewRect: TRect;
     FSeekBar: TVideoMinerOverlaySeekBar;
     FSeekBarVisible: Boolean;
     FSkipBackwardButton: TVideoMinerOverlaySkipButton;
     FSkipForwardButton: TVideoMinerOverlaySkipButton;
+    function HitNextFileButton(const Point: TPoint): Boolean;
+    function HitPreviousFileButton(const Point: TPoint): Boolean;
     procedure DrawFrame(Canvas: TCanvas; const DestRect: TRect);
     function FitRect: TRect;
     function HitAnyOverlayButton(const Point: TPoint): Boolean;
     function HitSeekBar(const Point: TPoint): Boolean;
     procedure InvalidateAllOverlayControls;
     procedure InvalidateOverlayControl(Control: TVideoMinerOverlayControl);
+    procedure SetCanNavigateNext(Value: Boolean);
+    procedure SetCanNavigatePrevious(Value: Boolean);
+    procedure SetEndActionText(const Value: string);
     procedure SetSeekBarVisible(Value: Boolean);
     procedure SetFullScreen(Value: Boolean);
     procedure SetOverlayVisible(Value: Boolean);
     procedure SetOnFirstFrameClick(Value: TNotifyEvent);
+    procedure SetOnEndActionClick(Value: TNotifyEvent);
     procedure SetOnFullScreenClick(Value: TNotifyEvent);
     procedure SetOnLastFrameClick(Value: TNotifyEvent);
+    procedure SetOnNavigateNextClick(Value: TNotifyEvent);
+    procedure SetOnNavigatePreviousClick(Value: TNotifyEvent);
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
     procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
     procedure SetOnSkipBackwardClick(Value: TNotifyEvent);
     procedure SetOnSkipForwardClick(Value: TNotifyEvent);
+    procedure SetOnVolumeChange(Value: TVideoMinerOverlayVolumeEvent);
     procedure SetPlaybackActive(Value: Boolean);
+    procedure SetVolumePercent(Value: Integer);
     procedure WMEraseBkgnd(var Message: TWMEraseBkgnd); message WM_ERASEBKGND;
   protected
+    procedure DblClick; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X,
       Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -62,15 +79,23 @@ type
     procedure PresentImmediate;
     procedure SetSeekProgress(PositionMs, MaxMs: Integer);
     property Bitmap: TBitmap read FBitmap;
+    property CanNavigateNext: Boolean write SetCanNavigateNext;
+    property CanNavigatePrevious: Boolean write SetCanNavigatePrevious;
+    property EndActionText: string write SetEndActionText;
     property FullScreen: Boolean write SetFullScreen;
+    property OnEndActionClick: TNotifyEvent read FOnEndActionClick write SetOnEndActionClick;
     property OnFirstFrameClick: TNotifyEvent read FOnFirstFrameClick write SetOnFirstFrameClick;
     property OnFullScreenClick: TNotifyEvent read FOnFullScreenClick write SetOnFullScreenClick;
     property OnLastFrameClick: TNotifyEvent read FOnLastFrameClick write SetOnLastFrameClick;
+    property OnNavigateNextClick: TNotifyEvent read FOnNavigateNextClick write SetOnNavigateNextClick;
+    property OnNavigatePreviousClick: TNotifyEvent read FOnNavigatePreviousClick write SetOnNavigatePreviousClick;
     property OnPlayPauseClick: TNotifyEvent read FOnPlayPauseClick write SetOnPlayPauseClick;
     property OnSeek: TVideoMinerOverlaySeekEvent read FOnSeek write SetOnSeek;
     property OnSkipBackwardClick: TNotifyEvent read FOnSkipBackwardClick write SetOnSkipBackwardClick;
     property OnSkipForwardClick: TNotifyEvent read FOnSkipForwardClick write SetOnSkipForwardClick;
+    property OnVolumeChange: TVideoMinerOverlayVolumeEvent read FOnVolumeChange write SetOnVolumeChange;
     property PlaybackActive: Boolean write SetPlaybackActive;
+    property VolumePercent: Integer write SetVolumePercent;
   end;
 
 implementation
@@ -89,31 +114,44 @@ begin
   FPaintBuffer.PixelFormat := pf32bit;
   FOverlayVisible := False;
   FSeekBarVisible := False;
+  FPreviousFileButton := TVideoMinerOverlayFileNavButton.Create(fndPrevious);
   FFirstFrameButton := TVideoMinerOverlayEdgeButton.Create(edFirst);
   FSkipBackwardButton := TVideoMinerOverlaySkipButton.Create(sdBackward);
   FPlayPauseButton := TVideoMinerOverlayPlayPauseButton.Create;
   FSkipForwardButton := TVideoMinerOverlaySkipButton.Create(sdForward);
   FLastFrameButton := TVideoMinerOverlayEdgeButton.Create(edLast);
+  FNextFileButton := TVideoMinerOverlayFileNavButton.Create(fndNext);
   FSeekBar := TVideoMinerOverlaySeekBar.Create;
+  FPreviousFileButton.Visible := False;
   FFirstFrameButton.Visible := False;
   FSkipBackwardButton.Visible := False;
   FPlayPauseButton.Visible := False;
   FSkipForwardButton.Visible := False;
   FLastFrameButton.Visible := False;
+  FNextFileButton.Visible := False;
   FSeekBar.Visible := False;
 end;
 
 destructor TVideoMinerVideoSurface.Destroy;
 begin
   FSeekBar.Free;
+  FNextFileButton.Free;
   FLastFrameButton.Free;
   FSkipForwardButton.Free;
   FPlayPauseButton.Free;
   FSkipBackwardButton.Free;
   FFirstFrameButton.Free;
+  FPreviousFileButton.Free;
   FPaintBuffer.Free;
   FBitmap.Free;
   inherited Destroy;
+end;
+
+procedure TVideoMinerVideoSurface.DblClick;
+begin
+  inherited DblClick;
+  if Assigned(FOnFullScreenClick) then
+    FOnFullScreenClick(Self);
 end;
 
 procedure TVideoMinerVideoSurface.Clear;
@@ -194,11 +232,13 @@ end;
 
 procedure TVideoMinerVideoSurface.InvalidateAllOverlayControls;
 begin
+  InvalidateOverlayControl(FPreviousFileButton);
   InvalidateOverlayControl(FFirstFrameButton);
   InvalidateOverlayControl(FSkipBackwardButton);
   InvalidateOverlayControl(FPlayPauseButton);
   InvalidateOverlayControl(FSkipForwardButton);
   InvalidateOverlayControl(FLastFrameButton);
+  InvalidateOverlayControl(FNextFileButton);
 end;
 
 function TVideoMinerVideoSurface.HitAnyOverlayButton(const Point: TPoint): Boolean;
@@ -209,6 +249,19 @@ begin
     ((FPlayPauseButton <> nil) and FPlayPauseButton.BoundsHitTest(Point)) or
     ((FSkipForwardButton <> nil) and FSkipForwardButton.BoundsHitTest(Point)) or
     ((FLastFrameButton <> nil) and FLastFrameButton.BoundsHitTest(Point));
+end;
+
+function TVideoMinerVideoSurface.HitPreviousFileButton(
+  const Point: TPoint): Boolean;
+begin
+  Result := (FPreviousFileButton <> nil) and
+    FPreviousFileButton.BoundsHitTest(Point);
+end;
+
+function TVideoMinerVideoSurface.HitNextFileButton(
+  const Point: TPoint): Boolean;
+begin
+  Result := (FNextFileButton <> nil) and FNextFileButton.BoundsHitTest(Point);
 end;
 
 function TVideoMinerVideoSurface.HitSeekBar(const Point: TPoint): Boolean;
@@ -271,6 +324,14 @@ begin
     if (FLastFrameButton <> nil) and FLastFrameButton.MouseDown(Point(X, Y)) then
       InvalidateOverlayControl(FLastFrameButton);
   end;
+
+  if Button = mbLeft then
+  begin
+    if (FPreviousFileButton <> nil) and FPreviousFileButton.MouseDown(Point(X, Y)) then
+      InvalidateOverlayControl(FPreviousFileButton);
+    if (FNextFileButton <> nil) and FNextFileButton.MouseDown(Point(X, Y)) then
+      InvalidateOverlayControl(FNextFileButton);
+  end;
 end;
 
 procedure TVideoMinerVideoSurface.MouseMove(Shift: TShiftState; X, Y: Integer);
@@ -283,6 +344,19 @@ begin
   SetOverlayVisible(HitAnyOverlayButton(MousePoint));
   SetSeekBarVisible(HitSeekBar(MousePoint) or
     ((FSeekBar <> nil) and FSeekBar.Dragging));
+
+  if FPreviousFileButton <> nil then
+  begin
+    FPreviousFileButton.Visible := HitPreviousFileButton(MousePoint);
+    if FPreviousFileButton.MouseMove(MousePoint) then
+      InvalidateOverlayControl(FPreviousFileButton);
+  end;
+  if FNextFileButton <> nil then
+  begin
+    FNextFileButton.Visible := HitNextFileButton(MousePoint);
+    if FNextFileButton.MouseMove(MousePoint) then
+      InvalidateOverlayControl(FNextFileButton);
+  end;
 
   if FOverlayVisible then
   begin
@@ -328,6 +402,14 @@ begin
     if (FLastFrameButton <> nil) and FLastFrameButton.MouseUp(Point(X, Y)) then
       InvalidateOverlayControl(FLastFrameButton);
   end;
+
+  if Button = mbLeft then
+  begin
+    if (FPreviousFileButton <> nil) and FPreviousFileButton.MouseUp(Point(X, Y)) then
+      InvalidateOverlayControl(FPreviousFileButton);
+    if (FNextFileButton <> nil) and FNextFileButton.MouseUp(Point(X, Y)) then
+      InvalidateOverlayControl(FNextFileButton);
+  end;
 end;
 
 procedure TVideoMinerVideoSurface.Paint;
@@ -370,6 +452,8 @@ begin
     DrawCanvas.FillRect(Rect(DestRect.Right, DestRect.Top, ClientWidth, DestRect.Bottom));
 
   DrawFrame(DrawCanvas, DestRect);
+  if FPreviousFileButton <> nil then
+    FPreviousFileButton.UpdateLayout(ClientRect);
   if FFirstFrameButton <> nil then
     FFirstFrameButton.UpdateLayout(FPreviewRect);
   if FSkipBackwardButton <> nil then
@@ -380,9 +464,13 @@ begin
     FSkipForwardButton.UpdateLayout(FPreviewRect);
   if FLastFrameButton <> nil then
     FLastFrameButton.UpdateLayout(FPreviewRect);
+  if FNextFileButton <> nil then
+    FNextFileButton.UpdateLayout(ClientRect);
   if FSeekBar <> nil then
     FSeekBar.UpdateLayout(FPreviewRect);
 
+  if (FPreviousFileButton <> nil) and FPreviousFileButton.Visible then
+    FPreviousFileButton.Paint(DrawCanvas);
   if FOverlayVisible and (FFirstFrameButton <> nil) then
   begin
     FFirstFrameButton.Paint(DrawCanvas);
@@ -403,6 +491,8 @@ begin
   begin
     FLastFrameButton.Paint(DrawCanvas);
   end;
+  if (FNextFileButton <> nil) and FNextFileButton.Visible then
+    FNextFileButton.Paint(DrawCanvas);
   if FSeekBarVisible and (FSeekBar <> nil) then
     FSeekBar.Paint(DrawCanvas);
   Canvas.Draw(0, 0, FPaintBuffer);
@@ -453,11 +543,60 @@ begin
   end;
 end;
 
+procedure TVideoMinerVideoSurface.SetCanNavigatePrevious(Value: Boolean);
+begin
+  if FPreviousFileButton <> nil then
+  begin
+    FPreviousFileButton.Enabled := Value;
+    if not Value then
+      FPreviousFileButton.Visible := False;
+    InvalidateOverlayControl(FPreviousFileButton);
+  end;
+end;
+
+procedure TVideoMinerVideoSurface.SetCanNavigateNext(Value: Boolean);
+begin
+  if FNextFileButton <> nil then
+  begin
+    FNextFileButton.Enabled := Value;
+    if not Value then
+      FNextFileButton.Visible := False;
+    InvalidateOverlayControl(FNextFileButton);
+  end;
+end;
+
+procedure TVideoMinerVideoSurface.SetEndActionText(const Value: string);
+begin
+  if FSeekBar <> nil then
+  begin
+    FSeekBar.EndActionText := Value;
+    if FSeekBarVisible then
+      InvalidateOverlayControl(FSeekBar);
+  end;
+end;
+
+procedure TVideoMinerVideoSurface.SetVolumePercent(Value: Integer);
+begin
+  if FSeekBar <> nil then
+  begin
+    FSeekBar.VolumePercent := Value;
+    if FSeekBarVisible then
+      InvalidateOverlayControl(FSeekBar);
+  end;
+end;
+
 procedure TVideoMinerVideoSurface.SetOnPlayPauseClick(Value: TNotifyEvent);
 begin
   FOnPlayPauseClick := Value;
   if FPlayPauseButton <> nil then
     FPlayPauseButton.OnClick := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnEndActionClick(Value: TNotifyEvent);
+begin
+  FOnEndActionClick := Value;
+  if FSeekBar <> nil then
+    FSeekBar.OnEndActionClick := Value;
 end;
 
 procedure TVideoMinerVideoSurface.SetOnFullScreenClick(Value: TNotifyEvent);
@@ -474,6 +613,14 @@ begin
     FSeekBar.OnSeek := Value;
 end;
 
+procedure TVideoMinerVideoSurface.SetOnVolumeChange(
+  Value: TVideoMinerOverlayVolumeEvent);
+begin
+  FOnVolumeChange := Value;
+  if FSeekBar <> nil then
+    FSeekBar.OnVolumeChange := Value;
+end;
+
 procedure TVideoMinerVideoSurface.SetOnFirstFrameClick(Value: TNotifyEvent);
 begin
   FOnFirstFrameClick := Value;
@@ -486,6 +633,20 @@ begin
   FOnLastFrameClick := Value;
   if FLastFrameButton <> nil then
     FLastFrameButton.OnClick := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnNavigatePreviousClick(Value: TNotifyEvent);
+begin
+  FOnNavigatePreviousClick := Value;
+  if FPreviousFileButton <> nil then
+    FPreviousFileButton.OnClick := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnNavigateNextClick(Value: TNotifyEvent);
+begin
+  FOnNavigateNextClick := Value;
+  if FNextFileButton <> nil then
+    FNextFileButton.OnClick := Value;
 end;
 
 procedure TVideoMinerVideoSurface.SetOnSkipBackwardClick(Value: TNotifyEvent);

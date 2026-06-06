@@ -4,6 +4,7 @@ interface
 
 type
   TVideoDecoderMode = (vdmAuto, vdmQsv, vdmSoftware);
+  TVideoMinerEndAction = (eaStop, eaLoop, eaNext);
 
   TVideoMinerLastMedia = record
     Available: Boolean;
@@ -20,8 +21,10 @@ type
   end;
 
 function GetVideoDecoderMode: TVideoDecoderMode;
+function LoadEndAction: TVideoMinerEndAction;
 function LoadLastMedia: TVideoMinerLastMedia;
 function LoadMainFormBounds: TVideoMinerWindowBounds;
+procedure SaveEndAction(Value: TVideoMinerEndAction);
 procedure SaveLastMedia(const Folder, FileName: string);
 procedure SaveMainFormBounds(const Bounds: TVideoMinerWindowBounds);
 function VideoDecoderModeToText(Mode: TVideoDecoderMode): string;
@@ -42,6 +45,8 @@ const
   LAST_MEDIA_SECTION = 'LastMedia';
   LAST_MEDIA_FOLDER = 'Folder';
   LAST_MEDIA_FILE = 'FileName';
+  PLAYBACK_SECTION = 'Playback';
+  PLAYBACK_END_ACTION = 'EndAction';
 
 var
   CurrentVideoDecoderMode: TVideoDecoderMode = vdmAuto;
@@ -84,6 +89,28 @@ begin
   end;
 end;
 
+function TextToEndAction(const Value: string): TVideoMinerEndAction;
+begin
+  if SameText(Value, 'loop') then
+    Result := eaLoop
+  else if SameText(Value, 'next') then
+    Result := eaNext
+  else
+    Result := eaStop;
+end;
+
+function EndActionToText(Value: TVideoMinerEndAction): string;
+begin
+  case Value of
+    eaLoop:
+      Result := 'loop';
+    eaNext:
+      Result := 'next';
+  else
+    Result := 'stop';
+  end;
+end;
+
 procedure LoadSettings;
 var
   Ini: TIniFile;
@@ -105,6 +132,19 @@ function GetVideoDecoderMode: TVideoDecoderMode;
 begin
   LoadSettings;
   Result := CurrentVideoDecoderMode;
+end;
+
+function LoadEndAction: TVideoMinerEndAction;
+var
+  Ini: TIniFile;
+begin
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    Result := TextToEndAction(Ini.ReadString(PLAYBACK_SECTION,
+      PLAYBACK_END_ACTION, 'stop'));
+  finally
+    Ini.Free;
+  end;
 end;
 
 function LoadMainFormBounds: TVideoMinerWindowBounds;
@@ -145,6 +185,19 @@ begin
     Result.Folder := Ini.ReadString(LAST_MEDIA_SECTION, LAST_MEDIA_FOLDER, '');
     Result.FileName := Ini.ReadString(LAST_MEDIA_SECTION, LAST_MEDIA_FILE, '');
     Result.Available := (Result.Folder <> '') or (Result.FileName <> '');
+  finally
+    Ini.Free;
+  end;
+end;
+
+procedure SaveEndAction(Value: TVideoMinerEndAction);
+var
+  Ini: TIniFile;
+begin
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    Ini.WriteString(PLAYBACK_SECTION, PLAYBACK_END_ACTION,
+      EndActionToText(Value));
   finally
     Ini.Free;
   end;
