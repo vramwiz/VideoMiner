@@ -1,6 +1,7 @@
 object VideoMinerMainForm: TVideoMinerMainForm
   Left = 0
   Top = 0
+  BorderStyle = bsNone
   Caption = 'VideoMiner'
   ClientHeight = 545
   ClientWidth = 720
@@ -9754,13 +9755,140 @@ object VideoMinerMainForm: TVideoMinerMainForm
   TextHeight = 13
   object ImagePreview: TImage
     Left = 0
-    Top = 0
+    Top = 34
     Width = 720
-    Height = 545
+    Height = 511
     Align = alClient
     Center = True
     Proportional = True
     Stretch = True
+  end
+  object PanelTitleBar: TPanel
+    Left = 0
+    Top = 0
+    Width = 720
+    Height = 34
+    Align = alTop
+    BevelOuter = bvNone
+    Color = 1513239
+    ParentBackground = False
+    TabOrder = 0
+    OnMouseDown = TitleBarMouseDown
+    object LabelAppTitle: TLabel
+      Left = 14
+      Top = 0
+      Width = 61
+      Height = 15
+      Align = alClient
+      Caption = 'VideoMiner'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWhite
+      Font.Height = -12
+      Font.Name = 'Yu Gothic UI'
+      Font.Style = []
+      ParentFont = False
+      Layout = tlCenter
+      OnMouseDown = TitleBarMouseDown
+    end
+    object PanelCloseButton: TPanel
+      Left = 674
+      Top = 0
+      Width = 46
+      Height = 34
+      Align = alRight
+      BevelOuter = bvNone
+      Color = 1513239
+      ParentBackground = False
+      TabOrder = 0
+      OnClick = CloseButtonClick
+      OnMouseEnter = CloseButtonMouseEnter
+      OnMouseLeave = CloseButtonMouseLeave
+      object LabelCloseButton: TLabel
+        Left = 0
+        Top = 0
+        Width = 8
+        Height = 17
+        Align = alClient
+        Alignment = taCenter
+        Caption = 'X'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -13
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+        Layout = tlCenter
+        OnClick = CloseButtonClick
+        OnMouseEnter = CloseButtonMouseEnter
+        OnMouseLeave = CloseButtonMouseLeave
+      end
+    end
+    object PanelMaximizeButton: TPanel
+      Left = 628
+      Top = 0
+      Width = 46
+      Height = 34
+      Align = alRight
+      BevelOuter = bvNone
+      Color = 1513239
+      ParentBackground = False
+      TabOrder = 1
+      OnClick = MaximizeButtonClick
+      OnMouseEnter = CaptionButtonMouseEnter
+      OnMouseLeave = CaptionButtonMouseLeave
+      object LabelMaximizeButton: TLabel
+        Left = 0
+        Top = 0
+        Width = 11
+        Height = 17
+        Align = alClient
+        Alignment = taCenter
+        Caption = #9633
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -13
+        Font.Name = 'Segoe UI Symbol'
+        Font.Style = []
+        ParentFont = False
+        Layout = tlCenter
+        OnClick = MaximizeButtonClick
+        OnMouseEnter = CaptionButtonMouseEnter
+        OnMouseLeave = CaptionButtonMouseLeave
+      end
+    end
+    object PanelMinimizeButton: TPanel
+      Left = 582
+      Top = 0
+      Width = 46
+      Height = 34
+      Align = alRight
+      BevelOuter = bvNone
+      Color = 1513239
+      ParentBackground = False
+      TabOrder = 2
+      OnClick = MinimizeButtonClick
+      OnMouseEnter = CaptionButtonMouseEnter
+      OnMouseLeave = CaptionButtonMouseLeave
+      object LabelMinimizeButton: TLabel
+        Left = 0
+        Top = 0
+        Width = 10
+        Height = 20
+        Align = alClient
+        Alignment = taCenter
+        Caption = #8722
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -15
+        Font.Name = 'Segoe UI Symbol'
+        Font.Style = []
+        ParentFont = False
+        Layout = tlCenter
+        OnClick = MinimizeButtonClick
+        OnMouseEnter = CaptionButtonMouseEnter
+        OnMouseLeave = CaptionButtonMouseLeave
+      end
+    end
   end
   object TimerPlayback: TTimer
     Enabled = False

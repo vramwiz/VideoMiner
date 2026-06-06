@@ -12,6 +12,8 @@ type
     FSurface: TVideoMinerVideoSurface;
     function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
       out BufferStride: Integer; out ErrorMessage: string): Boolean;
+    procedure SetOnFirstFrameClick(Value: TNotifyEvent);
+    procedure SetOnLastFrameClick(Value: TNotifyEvent);
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
     procedure SetOnSkipBackwardClick(Value: TNotifyEvent);
     procedure SetOnSkipForwardClick(Value: TNotifyEvent);
@@ -28,6 +30,8 @@ type
       out ErrorMessage: string): Boolean;
     procedure Present(Bitmap: TBitmap);
     procedure PresentImmediate(Bitmap: TBitmap);
+    property OnFirstFrameClick: TNotifyEvent write SetOnFirstFrameClick;
+    property OnLastFrameClick: TNotifyEvent write SetOnLastFrameClick;
     property OnPlayPauseClick: TNotifyEvent write SetOnPlayPauseClick;
     property OnSkipBackwardClick: TNotifyEvent write SetOnSkipBackwardClick;
     property OnSkipForwardClick: TNotifyEvent write SetOnSkipForwardClick;
@@ -106,6 +110,18 @@ procedure TVideoMinerVideoView.SetOnPlayPauseClick(Value: TNotifyEvent);
 begin
   if FSurface <> nil then
     FSurface.OnPlayPauseClick := Value;
+end;
+
+procedure TVideoMinerVideoView.SetOnFirstFrameClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnFirstFrameClick := Value;
+end;
+
+procedure TVideoMinerVideoView.SetOnLastFrameClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnLastFrameClick := Value;
 end;
 
 procedure TVideoMinerVideoView.SetOnSkipBackwardClick(Value: TNotifyEvent);

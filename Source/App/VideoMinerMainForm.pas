@@ -6,7 +6,7 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   System.Diagnostics, System.Math,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
-  Vcl.ExtCtrls, ActiveX, DropAgent, FFmpegDecoder,
+  Vcl.ExtCtrls, Vcl.Graphics, Vcl.StdCtrls, ActiveX, DropAgent, FFmpegDecoder,
   FFmpegDecoderTypes, VideoMinerAudioPlayback, VideoMinerMediaList,
   VideoMinerDebugLog, VideoMinerVideoView;
 
@@ -15,6 +15,14 @@ const
 
 type
   TVideoMinerMainForm = class(TForm)
+    PanelTitleBar: TPanel;
+    LabelAppTitle: TLabel;
+    PanelCloseButton: TPanel;
+    LabelCloseButton: TLabel;
+    PanelMaximizeButton: TPanel;
+    LabelMaximizeButton: TLabel;
+    PanelMinimizeButton: TPanel;
+    LabelMinimizeButton: TLabel;
     ImagePreview: TImage; // デコードしたフレームを表示する画像領域
     OpenDialogVideo: TOpenDialog; // 読み込む動画ファイルを選択するダイアログ
     TimerPlayback: TTimer; // 再生中に次フレームを読むためのタイマー
@@ -25,6 +33,15 @@ type
     // 再生中に次フレームを順方向デコードする
     procedure TimerPlaybackTimer(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure TitleBarMouseDown(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
+    procedure CloseButtonClick(Sender: TObject);
+    procedure CloseButtonMouseEnter(Sender: TObject);
+    procedure CloseButtonMouseLeave(Sender: TObject);
+    procedure MaximizeButtonClick(Sender: TObject);
+    procedure MinimizeButtonClick(Sender: TObject);
+    procedure CaptionButtonMouseEnter(Sender: TObject);
+    procedure CaptionButtonMouseLeave(Sender: TObject);
   private
     FDecoder: TFFmpegDecoder; // 開いた動画を保持するFFmpegデコーダ
     FPreviewDecoder: TFFmpegDecoder;
@@ -47,11 +64,15 @@ type
     FPendingRestartPlayback: Boolean;
     FPendingRestartMs: Integer;
     FRestartPlaybackTimer: TTimer;
+    procedure SetCaptionButtonColor(Sender: TObject; Color: TColor);
+    procedure UpdateMaximizeButton;
     function LoadVideoFile(const FileName: string; AutoPlay: Boolean): Boolean;
     procedure DropFiles(Sender: TObject; Control: TWinControl; const FileNames: TArray<string>);
     procedure UpdateNavigationButtons;
     procedure NavigateBy(Delta: Integer);
     procedure OpenFromDialog;
+    procedure FirstFrameOverlayClick(Sender: TObject);
+    procedure LastFrameOverlayClick(Sender: TObject);
     procedure PlayPauseOverlayClick(Sender: TObject);
     procedure PlayFromCurrentPosition;
     procedure SkipBackwardOverlayClick(Sender: TObject);
@@ -59,6 +80,7 @@ type
     procedure StopPlayback;
     function PlaybackActiveOrPending: Boolean;
     function CurrentPlaybackPositionMs: Integer;
+    procedure SetTitleBarText(const Text: string);
     procedure SetStatusCaption(const Text: string);
     procedure SeekToMs(PositionMs: Integer; ResumeIfPlaying: Boolean = True);
     procedure SeekByMs(DeltaMs: Integer);
@@ -72,7 +94,9 @@ type
     procedure QueueOpenAndPlayFile(const FileName: string);
     procedure ProcessOpenQueue;
     procedure WMCopyData(var Message: TWMCopyData); message WM_COPYDATA;
+    procedure WMNCHitTest(var Message: TWMNCHitTest); message WM_NCHITTEST;
     procedure WMOpenPending(var Message: TMessage); message WM_VM_OPEN_PENDING;
+    procedure WMSize(var Message: TWMSize); message WM_SIZE;
     // 指定ミリ秒位置のフレームを表示する
     function ShowFrameAtMs(const PositionMs: Integer): Boolean;
     function TryShowFrameNearMs(const PositionMs: Integer; out ShownPositionMs: Integer;
@@ -95,6 +119,10 @@ const
   VIDEO_END_TOLERANCE_MS = 1500;
   VIDEO_DROP_FRAME_MAX = 90;
   VIDEO_DROP_FRAME_BUDGET_MS = 25;
+  CUSTOM_RESIZE_BORDER = 6;
+  TITLE_BAR_COLOR = $00171617;
+  CLOSE_BUTTON_HOVER_COLOR = $00232323;
+  CAPTION_BUTTON_HOVER_COLOR = $00232323;
 
 {$R *.dfm}
 
@@ -102,15 +130,22 @@ const
 procedure TVideoMinerMainForm.FormCreate(Sender: TObject);
 begin
   ClearVideoMinerDebugLog('form_create');
+  PanelTitleBar.Color := TITLE_BAR_COLOR;
+  PanelCloseButton.Color := TITLE_BAR_COLOR;
+  PanelMaximizeButton.Color := TITLE_BAR_COLOR;
+  PanelMinimizeButton.Color := TITLE_BAR_COLOR;
+  UpdateMaximizeButton;
   FOleInitialized := OleInitialize(nil) >= 0;
   FDecoder := TFFmpegDecoder.Create;
   FPreviewDecoder := TFFmpegDecoder.Create;
   FAudioPlayback := TVideoMinerAudioPlayback.Create;
   FMediaList := TVideoMinerMediaList.Create;
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
+  FVideoView.OnFirstFrameClick := FirstFrameOverlayClick;
   FVideoView.OnPlayPauseClick := PlayPauseOverlayClick;
   FVideoView.OnSkipBackwardClick := SkipBackwardOverlayClick;
   FVideoView.OnSkipForwardClick := SkipForwardOverlayClick;
+  FVideoView.OnLastFrameClick := LastFrameOverlayClick;
   FPendingOpenFiles := TStringList.Create;
   FRestartPlaybackTimer := TTimer.Create(Self);
   FRestartPlaybackTimer.Enabled := False;
@@ -170,6 +205,80 @@ begin
   FCurrentVideoPositionMs := ShownPositionMs;
   UpdateInfoLabel;
   Result := True;
+end;
+
+procedure TVideoMinerMainForm.TitleBarMouseDown(Sender: TObject;
+  Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  if Button <> mbLeft then
+    Exit;
+
+  ReleaseCapture;
+  SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+end;
+
+procedure TVideoMinerMainForm.CloseButtonClick(Sender: TObject);
+begin
+  Close;
+end;
+
+procedure TVideoMinerMainForm.CloseButtonMouseEnter(Sender: TObject);
+begin
+  PanelCloseButton.Color := CLOSE_BUTTON_HOVER_COLOR;
+end;
+
+procedure TVideoMinerMainForm.CloseButtonMouseLeave(Sender: TObject);
+begin
+  PanelCloseButton.Color := TITLE_BAR_COLOR;
+end;
+
+procedure TVideoMinerMainForm.SetCaptionButtonColor(Sender: TObject; Color: TColor);
+var
+  Control: TControl;
+begin
+  if Sender is TPanel then
+    TPanel(Sender).Color := Color
+  else if Sender is TLabel then
+  begin
+    Control := TLabel(Sender).Parent;
+    if Control is TPanel then
+      TPanel(Control).Color := Color;
+  end;
+end;
+
+procedure TVideoMinerMainForm.CaptionButtonMouseEnter(Sender: TObject);
+begin
+  SetCaptionButtonColor(Sender, CAPTION_BUTTON_HOVER_COLOR);
+end;
+
+procedure TVideoMinerMainForm.CaptionButtonMouseLeave(Sender: TObject);
+begin
+  SetCaptionButtonColor(Sender, TITLE_BAR_COLOR);
+end;
+
+procedure TVideoMinerMainForm.MaximizeButtonClick(Sender: TObject);
+begin
+  if WindowState = wsMaximized then
+    WindowState := wsNormal
+  else
+    WindowState := wsMaximized;
+  UpdateMaximizeButton;
+end;
+
+procedure TVideoMinerMainForm.MinimizeButtonClick(Sender: TObject);
+begin
+  WindowState := wsMinimized;
+end;
+
+procedure TVideoMinerMainForm.UpdateMaximizeButton;
+begin
+  if LabelMaximizeButton = nil then
+    Exit;
+
+  if WindowState = wsMaximized then
+    LabelMaximizeButton.Caption := WideChar($2750)
+  else
+    LabelMaximizeButton.Caption := WideChar($25A1);
 end;
 
 function TVideoMinerMainForm.TryShowFrameNearMs(const PositionMs: Integer;
@@ -266,6 +375,8 @@ begin
      CurrentPositionMs / 1000, FSeekMaxMs / 1000,
      VideoPositionMs / 1000, AudioPositionMs / 1000,
      FVideoInfo.Width, FVideoInfo.Height, FVideoInfo.Fps, AudioText]);
+  SetTitleBarText(Format('%s (%d/%d)', [ExtractFileName(FVideoFile),
+    FMediaList.CurrentIndex + 1, FMediaList.Count]));
 end;
 
 procedure TVideoMinerMainForm.OpenFromDialog;
@@ -304,9 +415,20 @@ end;
 procedure TVideoMinerMainForm.SetStatusCaption(const Text: string);
 begin
   if Text = '' then
+  begin
     Caption := 'VideoMiner'
+  end
   else
+  begin
     Caption := 'VideoMiner - ' + Text;
+  end;
+  SetTitleBarText(Caption);
+end;
+
+procedure TVideoMinerMainForm.SetTitleBarText(const Text: string);
+begin
+  if LabelAppTitle <> nil then
+    LabelAppTitle.Caption := Text;
 end;
 
 function TVideoMinerMainForm.LoadVideoFile(const FileName: string; AutoPlay: Boolean): Boolean;
@@ -347,6 +469,7 @@ begin
     FMediaList.Clear;
     FVideoView.PlaybackActive := False;
     Caption := 'VideoMiner';
+    SetTitleBarText(Caption);
     UpdateNavigationButtons;
     SetStatusCaption('Failed to open video: ' + ErrorMessage);
     Exit;
@@ -358,6 +481,7 @@ begin
     FVideoFile := '';
     FMediaList.Clear;
     Caption := 'VideoMiner';
+    SetTitleBarText(Caption);
     UpdateNavigationButtons;
     SetStatusCaption('Failed to open preview decoder: ' + ErrorMessage);
     Exit;
@@ -367,6 +491,7 @@ begin
   FVideoFile := FileName;
   Caption := Format('%s (%d/%d)', [ExtractFileName(FVideoFile),
     FMediaList.CurrentIndex + 1, FMediaList.Count]);
+  SetTitleBarText(Caption);
 
   FUpdatingSeek := True;
   try
@@ -429,6 +554,16 @@ begin
     StopPlayback
   else
     PlayFromCurrentPosition;
+end;
+
+procedure TVideoMinerMainForm.FirstFrameOverlayClick(Sender: TObject);
+begin
+  SeekToFirstFrame;
+end;
+
+procedure TVideoMinerMainForm.LastFrameOverlayClick(Sender: TObject);
+begin
+  SeekToLastFrame;
 end;
 
 procedure TVideoMinerMainForm.SkipBackwardOverlayClick(Sender: TObject);
@@ -950,6 +1085,46 @@ begin
 
   WriteVideoMinerDebugLog(Format('restart_playback target_ms=%d', [TargetMs]));
   StartPlaybackAtMs(TargetMs);
+end;
+
+procedure TVideoMinerMainForm.WMNCHitTest(var Message: TWMNCHitTest);
+var
+  ClientPoint: TPoint;
+  ScreenPoint: TPoint;
+begin
+  inherited;
+  if Message.Result <> HTCLIENT then
+    Exit;
+
+  GetCursorPos(ScreenPoint);
+  ClientPoint := ScreenToClient(ScreenPoint);
+
+  if (ClientPoint.X < CUSTOM_RESIZE_BORDER) and
+     (ClientPoint.Y < CUSTOM_RESIZE_BORDER) then
+    Message.Result := HTTOPLEFT
+  else if (ClientPoint.X >= ClientWidth - CUSTOM_RESIZE_BORDER) and
+          (ClientPoint.Y < CUSTOM_RESIZE_BORDER) then
+    Message.Result := HTTOPRIGHT
+  else if (ClientPoint.X < CUSTOM_RESIZE_BORDER) and
+          (ClientPoint.Y >= ClientHeight - CUSTOM_RESIZE_BORDER) then
+    Message.Result := HTBOTTOMLEFT
+  else if (ClientPoint.X >= ClientWidth - CUSTOM_RESIZE_BORDER) and
+          (ClientPoint.Y >= ClientHeight - CUSTOM_RESIZE_BORDER) then
+    Message.Result := HTBOTTOMRIGHT
+  else if ClientPoint.Y < CUSTOM_RESIZE_BORDER then
+    Message.Result := HTTOP
+  else if ClientPoint.Y >= ClientHeight - CUSTOM_RESIZE_BORDER then
+    Message.Result := HTBOTTOM
+  else if ClientPoint.X < CUSTOM_RESIZE_BORDER then
+    Message.Result := HTLEFT
+  else if ClientPoint.X >= ClientWidth - CUSTOM_RESIZE_BORDER then
+    Message.Result := HTRIGHT;
+end;
+
+procedure TVideoMinerMainForm.WMSize(var Message: TWMSize);
+begin
+  inherited;
+  UpdateMaximizeButton;
 end;
 
 procedure TVideoMinerMainForm.WMCopyData(var Message: TWMCopyData);

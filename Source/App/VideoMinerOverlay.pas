@@ -6,6 +6,7 @@ uses
   System.Classes, System.Math, System.Types, Winapi.Windows, Vcl.Graphics;
 
 type
+  TVideoMinerOverlayEdgeDirection = (edFirst, edLast);
   TVideoMinerOverlaySkipDirection = (sdBackward, sdForward);
 
   TVideoMinerOverlayControl = class abstract
@@ -75,6 +76,21 @@ type
   public
     constructor Create(Direction: TVideoMinerOverlaySkipDirection); reintroduce;
     property Direction: TVideoMinerOverlaySkipDirection read FDirection write FDirection;
+  end;
+
+  TVideoMinerOverlayEdgeButton = class(TVideoMinerOverlayButton)
+  private
+    FDirection: TVideoMinerOverlayEdgeDirection;
+    procedure DrawAlphaPolygon(Canvas: TCanvas; const Points: array of TPoint;
+      Alpha: Byte);
+    procedure DrawAlphaRect(Canvas: TCanvas; const DrawRect: TRect; Alpha: Byte);
+    function IconAlpha: Byte;
+  protected
+    function CalculateBounds(const PreviewRect: TRect): TRect; override;
+    procedure PaintControl(Canvas: TCanvas); override;
+  public
+    constructor Create(Direction: TVideoMinerOverlayEdgeDirection); reintroduce;
+    property Direction: TVideoMinerOverlayEdgeDirection read FDirection write FDirection;
   end;
 
 implementation
@@ -558,6 +574,130 @@ begin
     HeadPoints[2] := Point(Round(Size * 0.34), Round(Size * 0.57));
   end;
   DrawAlphaPolygon(Canvas, HeadPoints, Alpha);
+end;
+
+{ TVideoMinerOverlayEdgeButton }
+
+constructor TVideoMinerOverlayEdgeButton.Create(
+  Direction: TVideoMinerOverlayEdgeDirection);
+begin
+  inherited Create;
+  FDirection := Direction;
+end;
+
+function TVideoMinerOverlayEdgeButton.CalculateBounds(
+  const PreviewRect: TRect): TRect;
+var
+  CenterX: Integer;
+  CenterY: Integer;
+  Offset: Integer;
+  Size: Integer;
+begin
+  Size := Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.075);
+  Size := Max(30, Min(72, Size));
+  Offset := Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.34);
+
+  CenterX := PreviewRect.Left + PreviewRect.Width div 2;
+  if FDirection = edFirst then
+    Dec(CenterX, Offset)
+  else
+    Inc(CenterX, Offset);
+  CenterY := PreviewRect.Top + PreviewRect.Height div 2;
+
+  Result.Left := CenterX - Size div 2;
+  Result.Top := CenterY - Size div 2;
+  Result.Right := Result.Left + Size;
+  Result.Bottom := Result.Top + Size;
+end;
+
+procedure TVideoMinerOverlayEdgeButton.DrawAlphaPolygon(Canvas: TCanvas;
+  const Points: array of TPoint; Alpha: Byte);
+var
+  MaskBitmap: TBitmap;
+begin
+  if Bounds.IsEmpty then
+    Exit;
+
+  MaskBitmap := TBitmap.Create;
+  try
+    MaskBitmap.PixelFormat := pf24bit;
+    MaskBitmap.SetSize(Bounds.Width, Bounds.Height);
+    MaskBitmap.Canvas.Brush.Color := clBlack;
+    MaskBitmap.Canvas.FillRect(Rect(0, 0, Bounds.Width, Bounds.Height));
+    MaskBitmap.Canvas.Pen.Style := psClear;
+    MaskBitmap.Canvas.Brush.Color := clWhite;
+    MaskBitmap.Canvas.Polygon(Points);
+    AlphaBlendMask(Canvas, Bounds, MaskBitmap, Alpha);
+  finally
+    MaskBitmap.Free;
+  end;
+end;
+
+procedure TVideoMinerOverlayEdgeButton.DrawAlphaRect(Canvas: TCanvas;
+  const DrawRect: TRect; Alpha: Byte);
+var
+  MaskBitmap: TBitmap;
+begin
+  if Bounds.IsEmpty or DrawRect.IsEmpty then
+    Exit;
+
+  MaskBitmap := TBitmap.Create;
+  try
+    MaskBitmap.PixelFormat := pf24bit;
+    MaskBitmap.SetSize(Bounds.Width, Bounds.Height);
+    MaskBitmap.Canvas.Brush.Color := clBlack;
+    MaskBitmap.Canvas.FillRect(Rect(0, 0, Bounds.Width, Bounds.Height));
+    MaskBitmap.Canvas.Pen.Style := psClear;
+    MaskBitmap.Canvas.Brush.Color := clWhite;
+    MaskBitmap.Canvas.FillRect(DrawRect);
+    AlphaBlendMask(Canvas, Bounds, MaskBitmap, Alpha);
+  finally
+    MaskBitmap.Free;
+  end;
+end;
+
+function TVideoMinerOverlayEdgeButton.IconAlpha: Byte;
+begin
+  Result := 135;
+  if Hovered then
+    Result := 195;
+  if Pressed then
+    Result := 235;
+  Result := ClampByte(Result);
+end;
+
+procedure TVideoMinerOverlayEdgeButton.PaintControl(Canvas: TCanvas);
+var
+  Alpha: Byte;
+  BarRect: TRect;
+  IconSize: Integer;
+  TrianglePoints: array[0..2] of TPoint;
+begin
+  if Bounds.IsEmpty then
+    Exit;
+
+  Alpha := IconAlpha;
+  IconSize := Min(Bounds.Width, Bounds.Height);
+
+  if FDirection = edFirst then
+  begin
+    BarRect := Rect(Round(IconSize * 0.22), Round(IconSize * 0.28),
+      Round(IconSize * 0.29), Round(IconSize * 0.72));
+    TrianglePoints[0] := Point(Round(IconSize * 0.73), Round(IconSize * 0.24));
+    TrianglePoints[1] := Point(Round(IconSize * 0.73), Round(IconSize * 0.76));
+    TrianglePoints[2] := Point(Round(IconSize * 0.37), Round(IconSize * 0.50));
+  end
+  else
+  begin
+    BarRect := Rect(Round(IconSize * 0.71), Round(IconSize * 0.28),
+      Round(IconSize * 0.78), Round(IconSize * 0.72));
+    TrianglePoints[0] := Point(Round(IconSize * 0.27), Round(IconSize * 0.24));
+    TrianglePoints[1] := Point(Round(IconSize * 0.27), Round(IconSize * 0.76));
+    TrianglePoints[2] := Point(Round(IconSize * 0.63), Round(IconSize * 0.50));
+  end;
+
+  DrawAlphaRect(Canvas, BarRect, Alpha);
+  DrawAlphaPolygon(Canvas, TrianglePoints, Alpha);
 end;
 
 end.

@@ -10,6 +10,10 @@ type
   TVideoMinerVideoSurface = class(TCustomControl)
   private
     FBitmap: TBitmap;
+    FFirstFrameButton: TVideoMinerOverlayEdgeButton;
+    FLastFrameButton: TVideoMinerOverlayEdgeButton;
+    FOnFirstFrameClick: TNotifyEvent;
+    FOnLastFrameClick: TNotifyEvent;
     FOnPlayPauseClick: TNotifyEvent;
     FOnSkipBackwardClick: TNotifyEvent;
     FOnSkipForwardClick: TNotifyEvent;
@@ -24,6 +28,8 @@ type
     procedure InvalidateAllOverlayControls;
     procedure InvalidateOverlayControl(Control: TVideoMinerOverlayControl);
     procedure SetOverlayVisible(Value: Boolean);
+    procedure SetOnFirstFrameClick(Value: TNotifyEvent);
+    procedure SetOnLastFrameClick(Value: TNotifyEvent);
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
     procedure SetOnSkipBackwardClick(Value: TNotifyEvent);
     procedure SetOnSkipForwardClick(Value: TNotifyEvent);
@@ -45,6 +51,8 @@ type
     procedure Present;
     procedure PresentImmediate;
     property Bitmap: TBitmap read FBitmap;
+    property OnFirstFrameClick: TNotifyEvent read FOnFirstFrameClick write SetOnFirstFrameClick;
+    property OnLastFrameClick: TNotifyEvent read FOnLastFrameClick write SetOnLastFrameClick;
     property OnPlayPauseClick: TNotifyEvent read FOnPlayPauseClick write SetOnPlayPauseClick;
     property OnSkipBackwardClick: TNotifyEvent read FOnSkipBackwardClick write SetOnSkipBackwardClick;
     property OnSkipForwardClick: TNotifyEvent read FOnSkipForwardClick write SetOnSkipForwardClick;
@@ -64,19 +72,25 @@ begin
 
   FBitmap := TBitmap.Create;
   FOverlayVisible := False;
+  FFirstFrameButton := TVideoMinerOverlayEdgeButton.Create(edFirst);
   FSkipBackwardButton := TVideoMinerOverlaySkipButton.Create(sdBackward);
   FPlayPauseButton := TVideoMinerOverlayPlayPauseButton.Create;
   FSkipForwardButton := TVideoMinerOverlaySkipButton.Create(sdForward);
+  FLastFrameButton := TVideoMinerOverlayEdgeButton.Create(edLast);
+  FFirstFrameButton.Visible := False;
   FSkipBackwardButton.Visible := False;
   FPlayPauseButton.Visible := False;
   FSkipForwardButton.Visible := False;
+  FLastFrameButton.Visible := False;
 end;
 
 destructor TVideoMinerVideoSurface.Destroy;
 begin
+  FLastFrameButton.Free;
   FSkipForwardButton.Free;
   FPlayPauseButton.Free;
   FSkipBackwardButton.Free;
+  FFirstFrameButton.Free;
   FBitmap.Free;
   inherited Destroy;
 end;
@@ -156,17 +170,21 @@ end;
 
 procedure TVideoMinerVideoSurface.InvalidateAllOverlayControls;
 begin
+  InvalidateOverlayControl(FFirstFrameButton);
   InvalidateOverlayControl(FSkipBackwardButton);
   InvalidateOverlayControl(FPlayPauseButton);
   InvalidateOverlayControl(FSkipForwardButton);
+  InvalidateOverlayControl(FLastFrameButton);
 end;
 
 function TVideoMinerVideoSurface.HitAnyOverlayButton(const Point: TPoint): Boolean;
 begin
   Result :=
+    ((FFirstFrameButton <> nil) and FFirstFrameButton.BoundsHitTest(Point)) or
     ((FSkipBackwardButton <> nil) and FSkipBackwardButton.BoundsHitTest(Point)) or
     ((FPlayPauseButton <> nil) and FPlayPauseButton.BoundsHitTest(Point)) or
-    ((FSkipForwardButton <> nil) and FSkipForwardButton.BoundsHitTest(Point));
+    ((FSkipForwardButton <> nil) and FSkipForwardButton.BoundsHitTest(Point)) or
+    ((FLastFrameButton <> nil) and FLastFrameButton.BoundsHitTest(Point));
 end;
 
 procedure TVideoMinerVideoSurface.SetOverlayVisible(Value: Boolean);
@@ -175,12 +193,16 @@ begin
     Exit;
 
   FOverlayVisible := Value;
+  if FFirstFrameButton <> nil then
+    FFirstFrameButton.Visible := Value;
   if FSkipBackwardButton <> nil then
     FSkipBackwardButton.Visible := Value;
   if FPlayPauseButton <> nil then
     FPlayPauseButton.Visible := Value;
   if FSkipForwardButton <> nil then
     FSkipForwardButton.Visible := Value;
+  if FLastFrameButton <> nil then
+    FLastFrameButton.Visible := Value;
   InvalidateAllOverlayControls;
 end;
 
@@ -190,12 +212,16 @@ begin
   inherited MouseDown(Button, Shift, X, Y);
   if (Button = mbLeft) and FOverlayVisible then
   begin
+    if (FFirstFrameButton <> nil) and FFirstFrameButton.MouseDown(Point(X, Y)) then
+      InvalidateOverlayControl(FFirstFrameButton);
     if (FSkipBackwardButton <> nil) and FSkipBackwardButton.MouseDown(Point(X, Y)) then
       InvalidateOverlayControl(FSkipBackwardButton);
     if (FPlayPauseButton <> nil) and FPlayPauseButton.MouseDown(Point(X, Y)) then
       InvalidateOverlayControl(FPlayPauseButton);
     if (FSkipForwardButton <> nil) and FSkipForwardButton.MouseDown(Point(X, Y)) then
       InvalidateOverlayControl(FSkipForwardButton);
+    if (FLastFrameButton <> nil) and FLastFrameButton.MouseDown(Point(X, Y)) then
+      InvalidateOverlayControl(FLastFrameButton);
   end;
 end;
 
@@ -209,12 +235,16 @@ begin
   if not FOverlayVisible then
     Exit;
 
+  if (FFirstFrameButton <> nil) and FFirstFrameButton.MouseMove(MousePoint) then
+    InvalidateOverlayControl(FFirstFrameButton);
   if (FSkipBackwardButton <> nil) and FSkipBackwardButton.MouseMove(MousePoint) then
     InvalidateOverlayControl(FSkipBackwardButton);
   if (FPlayPauseButton <> nil) and FPlayPauseButton.MouseMove(MousePoint) then
     InvalidateOverlayControl(FPlayPauseButton);
   if (FSkipForwardButton <> nil) and FSkipForwardButton.MouseMove(MousePoint) then
     InvalidateOverlayControl(FSkipForwardButton);
+  if (FLastFrameButton <> nil) and FLastFrameButton.MouseMove(MousePoint) then
+    InvalidateOverlayControl(FLastFrameButton);
 end;
 
 procedure TVideoMinerVideoSurface.MouseUp(Button: TMouseButton;
@@ -223,12 +253,16 @@ begin
   inherited MouseUp(Button, Shift, X, Y);
   if (Button = mbLeft) and FOverlayVisible then
   begin
+    if (FFirstFrameButton <> nil) and FFirstFrameButton.MouseUp(Point(X, Y)) then
+      InvalidateOverlayControl(FFirstFrameButton);
     if (FSkipBackwardButton <> nil) and FSkipBackwardButton.MouseUp(Point(X, Y)) then
       InvalidateOverlayControl(FSkipBackwardButton);
     if (FPlayPauseButton <> nil) and FPlayPauseButton.MouseUp(Point(X, Y)) then
       InvalidateOverlayControl(FPlayPauseButton);
     if (FSkipForwardButton <> nil) and FSkipForwardButton.MouseUp(Point(X, Y)) then
       InvalidateOverlayControl(FSkipForwardButton);
+    if (FLastFrameButton <> nil) and FLastFrameButton.MouseUp(Point(X, Y)) then
+      InvalidateOverlayControl(FLastFrameButton);
   end;
 end;
 
@@ -262,16 +296,24 @@ begin
     Canvas.FillRect(Rect(DestRect.Right, DestRect.Top, ClientWidth, DestRect.Bottom));
 
   DrawFrame(Canvas, DestRect);
+  if FFirstFrameButton <> nil then
+    FFirstFrameButton.UpdateLayout(FPreviewRect);
   if FSkipBackwardButton <> nil then
     FSkipBackwardButton.UpdateLayout(FPreviewRect);
   if FPlayPauseButton <> nil then
     FPlayPauseButton.UpdateLayout(FPreviewRect);
   if FSkipForwardButton <> nil then
     FSkipForwardButton.UpdateLayout(FPreviewRect);
+  if FLastFrameButton <> nil then
+    FLastFrameButton.UpdateLayout(FPreviewRect);
 
   if not FOverlayVisible then
     Exit;
 
+  if FFirstFrameButton <> nil then
+  begin
+    FFirstFrameButton.Paint(Canvas);
+  end;
   if FSkipBackwardButton <> nil then
   begin
     FSkipBackwardButton.Paint(Canvas);
@@ -283,6 +325,10 @@ begin
   if FSkipForwardButton <> nil then
   begin
     FSkipForwardButton.Paint(Canvas);
+  end;
+  if FLastFrameButton <> nil then
+  begin
+    FLastFrameButton.Paint(Canvas);
   end;
 {$IFDEF DEBUG}
   WriteVideoMinerDebugLog(Format('paint width=%d height=%d client_w=%d client_h=%d paint_ms=%.3f',
@@ -316,6 +362,20 @@ begin
   FOnPlayPauseClick := Value;
   if FPlayPauseButton <> nil then
     FPlayPauseButton.OnClick := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnFirstFrameClick(Value: TNotifyEvent);
+begin
+  FOnFirstFrameClick := Value;
+  if FFirstFrameButton <> nil then
+    FFirstFrameButton.OnClick := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnLastFrameClick(Value: TNotifyEvent);
+begin
+  FOnLastFrameClick := Value;
+  if FLastFrameButton <> nil then
+    FLastFrameButton.OnClick := Value;
 end;
 
 procedure TVideoMinerVideoSurface.SetOnSkipBackwardClick(Value: TNotifyEvent);
