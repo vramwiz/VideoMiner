@@ -30,6 +30,11 @@ function QueueAudioPcm16Stereo48k(
 
 procedure SetAudioOutputVolume(WaveOut: HWAVEOUT; VolumePercent: Integer);
 
+function QueuedAudioSampleCount(WaveOut: HWAVEOUT;
+  AudioBuffers: TList<PAudioWaveBuffer>): Integer;
+
+function PlayedAudioSampleCount(WaveOut: HWAVEOUT): Integer;
+
 implementation
 
 procedure SetAudioOutputVolume(WaveOut: HWAVEOUT; VolumePercent: Integer);
@@ -72,6 +77,41 @@ begin
     end;
     Dec(I);
   end;
+end;
+
+function QueuedAudioSampleCount(WaveOut: HWAVEOUT;
+  AudioBuffers: TList<PAudioWaveBuffer>): Integer;
+var
+  Buffer: PAudioWaveBuffer;
+begin
+  Result := 0;
+  CleanupDoneBuffers(WaveOut, AudioBuffers);
+
+  if AudioBuffers = nil then
+    Exit;
+
+  for Buffer in AudioBuffers do
+    if Buffer <> nil then
+      Inc(Result, Buffer.Size div (AUDIO_OUTPUT_CHANNELS * SizeOf(SmallInt)));
+end;
+
+function PlayedAudioSampleCount(WaveOut: HWAVEOUT): Integer;
+var
+  Time: TMMTime;
+begin
+  Result := 0;
+  if WaveOut = 0 then
+    Exit;
+
+  FillChar(Time, SizeOf(Time), 0);
+  Time.wType := TIME_SAMPLES;
+  if waveOutGetPosition(WaveOut, @Time, SizeOf(Time)) <> MMSYSERR_NOERROR then
+    Exit;
+
+  if Time.wType = TIME_SAMPLES then
+    Result := Time.sample
+  else if Time.wType = TIME_BYTES then
+    Result := Time.cb div (AUDIO_OUTPUT_CHANNELS * SizeOf(SmallInt));
 end;
 
 function StartAudioPlayback(
@@ -122,6 +162,7 @@ begin
     Exit;
   end;
 
+  SetAudioOutputVolume(WaveOut, 100);
   AudioPlaybackActive := True;
   Result := True;
 end;
@@ -208,9 +249,6 @@ var
   Buffer: PAudioWaveBuffer;
 begin
   AudioPlaybackActive := False;
-
-  if WaveOut <> 0 then
-    SetAudioOutputVolume(WaveOut, 0);
 
   if WaveOut <> 0 then
     waveOutReset(WaveOut);

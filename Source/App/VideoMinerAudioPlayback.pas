@@ -9,11 +9,12 @@ type
   TVideoMinerAudioPlayback = class
   private const
     AUDIO_OUTPUT_SAMPLE_RATE = 48000;
-    AUDIO_PUMP_MS = 120;
+    AUDIO_TARGET_QUEUE_MS = 240;
     AUDIO_FADE_IN_MS = 12;
   private
     FDecoder: TFFmpegDecoder;
     FFinished: Boolean;
+    FStartSamples: Integer;
     FQueuedSamples: Integer;
     FVolumePercent: Integer;
     FMuted: Boolean;
@@ -89,7 +90,8 @@ begin
   end;
 
   FFinished := False;
-  FQueuedSamples := Round(PositionMs * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
+  FStartSamples := Round(PositionMs * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
+  FQueuedSamples := FStartSamples;
   FApplyFadeInNext := True;
   Result := Pump(ErrorMessage) and Pump(ErrorMessage);
 end;
@@ -98,11 +100,11 @@ procedure TVideoMinerAudioPlayback.Stop;
 begin
   if FDecoder <> nil then
   begin
-    FDecoder.SetAudioOutputVolume(0);
     FDecoder.StopAudioPlayback;
     FDecoder.Close;
   end;
   FFinished := True;
+  FStartSamples := 0;
   FQueuedSamples := 0;
   FApplyFadeInNext := False;
 end;
@@ -169,6 +171,9 @@ function TVideoMinerAudioPlayback.Pump(out ErrorMessage: string): Boolean;
 var
   Pcm: TBytes;
   SampleCount: Integer;
+  PlayedSampleCount: Integer;
+  QueuedSampleCount: Integer;
+  TargetQueuedSampleCount: Integer;
   TargetSampleCount: Integer;
   Finished: Boolean;
 begin
@@ -180,7 +185,15 @@ begin
 
   Pcm := nil;
   SampleCount := FQueuedSamples;
-  TargetSampleCount := FQueuedSamples + Round(AUDIO_PUMP_MS * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
+  PlayedSampleCount := FDecoder.PlayedAudioSampleCount;
+  QueuedSampleCount := FQueuedSamples - FStartSamples - PlayedSampleCount;
+  if QueuedSampleCount < 0 then
+    QueuedSampleCount := 0;
+  TargetQueuedSampleCount := Round(AUDIO_TARGET_QUEUE_MS * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
+  if QueuedSampleCount >= TargetQueuedSampleCount then
+    Exit;
+
+  TargetSampleCount := FQueuedSamples + (TargetQueuedSampleCount - QueuedSampleCount);
 
   if not FDecoder.DecodeAudioPcm16Stereo48kUntil(TargetSampleCount, Pcm,
     SampleCount, Finished, ErrorMessage) then

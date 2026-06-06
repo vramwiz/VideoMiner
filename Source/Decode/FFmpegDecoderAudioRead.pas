@@ -17,7 +17,7 @@ function DecodeAudioPcm16Stereo48kUntil(
 implementation
 
 uses
-  FFmpegAudioConvert;
+  FFmpegAudioConvert, FFmpegAudioOpen;
 
 function DecodeAudioPcm16Stereo48kUntil(
   Context: TFFmpegDecoderContext;
@@ -33,8 +33,57 @@ var
   ChunkSampleCount: Integer;
   OldBytes: Integer;
 
-  procedure AppendDecodedAudioFrame;
-begin
+  function EnsureAudioResamplerForFrame: Boolean;
+  var
+    AudioFrame: PAVFrame;
+    AudioStream: PAVStream;
+    AudioCodecPar: PAVCodecParameters;
+    NewSwrContext: PSwrContext;
+    OldSwrContext: PSwrContext;
+    ActualSampleFormat: Integer;
+  begin
+    Result := False;
+    AudioFrame := PAVFrame(Context.AudioFrame);
+    AudioStream := PAVStream(Context.AudioStream);
+    if (AudioFrame = nil) or (AudioStream = nil) or (AudioStream.codecpar = nil) then
+    begin
+      ErrorMessage := 'Audio frame or stream is nil.';
+      Exit;
+    end;
+
+    ActualSampleFormat := AudioFrame.format;
+    if ActualSampleFormat < 0 then
+      ActualSampleFormat := Context.Info.Audio.SampleFormat;
+
+    if (Context.SwrContext <> nil) and
+       (ActualSampleFormat = Context.Info.Audio.SampleFormat) then
+    begin
+      Result := True;
+      Exit;
+    end;
+
+    AudioCodecPar := AudioStream.codecpar;
+    if not PrepareAudioResampler(AudioCodecPar, ActualSampleFormat, NewSwrContext,
+      ErrorMessage) then
+      Exit;
+
+    OldSwrContext := PSwrContext(Context.SwrContext);
+    if OldSwrContext <> nil then
+      TFFmpegApi.swr_free(@OldSwrContext);
+
+    Context.SwrContext := NewSwrContext;
+    Context.Info.Audio.SampleFormat := ActualSampleFormat;
+    Context.Info.Audio.SampleFormatName := SampleFormatName(ActualSampleFormat);
+    Result := True;
+  end;
+
+  function AppendDecodedAudioFrame: Boolean;
+  begin
+    Result := False;
+
+    if not EnsureAudioResamplerForFrame then
+      Exit;
+
     if not ConvertAudioFrameToPcm16Stereo48k(PAVFrame(Context.AudioFrame),
       PSwrContext(Context.SwrContext), Context.Info.Audio.SampleRate, Chunk,
       ChunkSampleCount) then
@@ -45,6 +94,7 @@ begin
     if Length(Chunk) > 0 then
       Move(Chunk[0], Pcm[OldBytes], Length(Chunk));
     Inc(SampleCount, ChunkSampleCount);
+    Result := True;
   end;
 
 begin
@@ -86,7 +136,8 @@ begin
         while (SampleCount < TargetSampleCount) and
           (TFFmpegApi.avcodec_receive_frame(PAVCodecContext(Context.AudioCodecContext),
             PAVFrame(Context.AudioFrame)) = 0) do
-          AppendDecodedAudioFrame;
+          if not AppendDecodedAudioFrame then
+            Exit;
       finally
         TFFmpegApi.av_packet_unref(PAVPacket(Context.Packet));
       end;
@@ -99,7 +150,8 @@ begin
         while (SampleCount < TargetSampleCount) and
           (TFFmpegApi.avcodec_receive_frame(PAVCodecContext(Context.AudioCodecContext),
             PAVFrame(Context.AudioFrame)) = 0) do
-          AppendDecodedAudioFrame;
+          if not AppendDecodedAudioFrame then
+            Exit;
       Finished := True;
     end;
 

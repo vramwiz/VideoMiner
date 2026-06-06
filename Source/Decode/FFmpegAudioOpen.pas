@@ -8,6 +8,11 @@ interface
 uses
   FFmpegApi, FFmpegDecoderTypes;
 
+// 入力音声をPCM16 stereo 48kHzへ変換するswrコンテキストを準備する。
+function PrepareAudioResampler(AudioCodecPar: PAVCodecParameters;
+  InputSampleFormat: Integer; out SwrContext: PSwrContext;
+  out ErrorMessage: string): Boolean;
+
 // 音声ストリームが存在する場合に音声デコーダとPCM変換コンテキストを開く。
 procedure OpenAudioDecoder(FormatContext: PAVFormatContext; var Info: TVideoInfo;
   out AudioCodecContext: PAVCodecContext; out AudioStream: PAVStream;
@@ -42,7 +47,8 @@ begin
 end;
 
 // 入力音声をPCM16 stereo 48kHzへ変換するswrコンテキストを準備する。
-function PrepareAudioResampler(AudioCodecPar: PAVCodecParameters; out SwrContext: PSwrContext;
+function PrepareAudioResampler(AudioCodecPar: PAVCodecParameters;
+  InputSampleFormat: Integer; out SwrContext: PSwrContext;
   out ErrorMessage: string): Boolean;
 var
   InLayout: TAVChannelLayout; // 入力音声のチャンネルレイアウト
@@ -72,11 +78,11 @@ begin
   try
     TFFmpegApi.av_channel_layout_default(@OutLayout, AUDIO_OUTPUT_CHANNELS);
     Ret := TFFmpegApi.swr_alloc_set_opts2(@SwrContext, @OutLayout, AV_SAMPLE_FMT_S16,
-      AUDIO_OUTPUT_SAMPLE_RATE, @InLayout, AudioCodecPar.format, AudioCodecPar.sample_rate, 0, nil);
+      AUDIO_OUTPUT_SAMPLE_RATE, @InLayout, InputSampleFormat, AudioCodecPar.sample_rate, 0, nil);
     if (Ret < 0) or not Assigned(SwrContext) then
     begin
       ErrorMessage := Format('swr_alloc_set_opts2 failed: %s rate=%d fmt=%d channels=%d',
-        [TFFmpegApi.ErrorText(Ret), AudioCodecPar.sample_rate, AudioCodecPar.format,
+        [TFFmpegApi.ErrorText(Ret), AudioCodecPar.sample_rate, InputSampleFormat,
          AudioCodecPar.ch_layout.nb_channels]);
       Exit;
     end;
@@ -87,7 +93,7 @@ begin
       TFFmpegApi.swr_free(@SwrContext);
       SwrContext := nil;
       ErrorMessage := Format('swr_init failed: %s rate=%d fmt=%d channels=%d',
-        [TFFmpegApi.ErrorText(Ret), AudioCodecPar.sample_rate, AudioCodecPar.format,
+        [TFFmpegApi.ErrorText(Ret), AudioCodecPar.sample_rate, InputSampleFormat,
          AudioCodecPar.ch_layout.nb_channels]);
       Exit;
     end;
@@ -172,7 +178,7 @@ begin
   end;
 
   if Info.Audio.OpenError = '' then
-    PrepareAudioResampler(AudioCodecPar, SwrContext, Info.Audio.OpenError);
+    PrepareAudioResampler(AudioCodecPar, AudioCodecPar.format, SwrContext, Info.Audio.OpenError);
 
   if Info.Audio.OpenError <> '' then
   begin

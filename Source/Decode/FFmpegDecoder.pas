@@ -86,6 +86,8 @@ type
     // óğ’‹ËY‹
     function StartAudioPlayback(out ErrorMessage: string): Boolean;
     function QueueAudioPcm16Stereo48k(const Pcm: TBytes; out ErrorMessage: string): Boolean;
+    function QueuedAudioSampleCount: Integer;
+    function PlayedAudioSampleCount: Integer;
     procedure SetAudioOutputVolume(VolumePercent: Integer);
     // óğ’\bY‹
     procedure StopAudioPlayback;
@@ -212,6 +214,17 @@ function TFFmpegDecoder.QueueAudioPcm16Stereo48k(const Pcm: TBytes; out ErrorMes
 begin
   Result := FFmpegDecoderAudioPlayback.QueueAudioPcm16Stereo48k(FWaveOut,
     FAudioPlaybackActive, FAudioBuffers, Pcm, ErrorMessage);
+end;
+
+function TFFmpegDecoder.QueuedAudioSampleCount: Integer;
+begin
+  Result := FFmpegDecoderAudioPlayback.QueuedAudioSampleCount(FWaveOut,
+    FAudioBuffers);
+end;
+
+function TFFmpegDecoder.PlayedAudioSampleCount: Integer;
+begin
+  Result := FFmpegDecoderAudioPlayback.PlayedAudioSampleCount(FWaveOut);
 end;
 
 procedure TFFmpegDecoder.SetAudioOutputVolume(VolumePercent: Integer);
@@ -762,6 +775,7 @@ begin
     Finished,
     ErrorMessage
   );
+  SyncFieldsFromContext;
 end;
 
 // ä¸€æ™‚ãƒ‡ã‚³ãƒ¼ãƒ€ã§å‹•ç”»æƒ…å ±ã ã‘ã‚’èª­ã‚€
