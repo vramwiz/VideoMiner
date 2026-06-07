@@ -3,6 +3,7 @@
 interface
 
 type
+  TVideoMinerChapterPositions = TArray<Integer>;
   TVideoDecoderMode = (vdmAuto, vdmQsv, vdmSoftware);
   TVideoMinerEndAction = (eaStop, eaLoop, eaNext);
 
@@ -23,9 +24,12 @@ type
 function GetVideoDecoderMode: TVideoDecoderMode;
 function LoadEndAction: TVideoMinerEndAction;
 function LoadLastMedia: TVideoMinerLastMedia;
+function LoadManualChapterPositions(const FileName: string): TVideoMinerChapterPositions;
 function LoadMainFormBounds: TVideoMinerWindowBounds;
 procedure SaveEndAction(Value: TVideoMinerEndAction);
 procedure SaveLastMedia(const Folder, FileName: string);
+procedure SaveManualChapterPositions(const FileName: string;
+  const Positions: TVideoMinerChapterPositions);
 procedure SaveMainFormBounds(const Bounds: TVideoMinerWindowBounds);
 function VideoDecoderModeToText(Mode: TVideoDecoderMode): string;
 
@@ -47,6 +51,10 @@ const
   LAST_MEDIA_FILE = 'FileName';
   PLAYBACK_SECTION = 'Playback';
   PLAYBACK_END_ACTION = 'EndAction';
+  MANUAL_CHAPTER_SECTION_PREFIX = 'ManualChapters:';
+  MANUAL_CHAPTER_FILE = 'FileName';
+  MANUAL_CHAPTER_COUNT = 'Count';
+  MANUAL_CHAPTER_POSITION_PREFIX = 'Position';
 
 var
   CurrentVideoDecoderMode: TVideoDecoderMode = vdmAuto;
@@ -109,6 +117,11 @@ begin
   else
     Result := 'stop';
   end;
+end;
+
+function ManualChapterSectionName(const FileName: string): string;
+begin
+  Result := MANUAL_CHAPTER_SECTION_PREFIX + ExpandFileName(FileName);
 end;
 
 procedure LoadSettings;
@@ -190,6 +203,44 @@ begin
   end;
 end;
 
+function LoadManualChapterPositions(
+  const FileName: string): TVideoMinerChapterPositions;
+var
+  Count: Integer;
+  I: Integer;
+  Ini: TIniFile;
+  PositionMs: Integer;
+  Section: string;
+begin
+  SetLength(Result, 0);
+  if FileName = '' then
+    Exit;
+
+  Section := ManualChapterSectionName(FileName);
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    Count := Ini.ReadInteger(Section, MANUAL_CHAPTER_COUNT, 0);
+    if Count <= 0 then
+      Exit;
+
+    SetLength(Result, Count);
+    Count := 0;
+    for I := 0 to High(Result) do
+    begin
+      PositionMs := Ini.ReadInteger(Section,
+        MANUAL_CHAPTER_POSITION_PREFIX + IntToStr(I), -1);
+      if PositionMs < 0 then
+        Continue;
+
+      Result[Count] := PositionMs;
+      Inc(Count);
+    end;
+    SetLength(Result, Count);
+  finally
+    Ini.Free;
+  end;
+end;
+
 procedure SaveEndAction(Value: TVideoMinerEndAction);
 var
   Ini: TIniFile;
@@ -214,6 +265,30 @@ begin
   try
     Ini.WriteString(LAST_MEDIA_SECTION, LAST_MEDIA_FOLDER, Folder);
     Ini.WriteString(LAST_MEDIA_SECTION, LAST_MEDIA_FILE, FileName);
+  finally
+    Ini.Free;
+  end;
+end;
+
+procedure SaveManualChapterPositions(const FileName: string;
+  const Positions: TVideoMinerChapterPositions);
+var
+  I: Integer;
+  Ini: TIniFile;
+  Section: string;
+begin
+  if FileName = '' then
+    Exit;
+
+  Section := ManualChapterSectionName(FileName);
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    Ini.EraseSection(Section);
+    Ini.WriteString(Section, MANUAL_CHAPTER_FILE, ExpandFileName(FileName));
+    Ini.WriteInteger(Section, MANUAL_CHAPTER_COUNT, Length(Positions));
+    for I := 0 to High(Positions) do
+      Ini.WriteInteger(Section, MANUAL_CHAPTER_POSITION_PREFIX + IntToStr(I),
+        Positions[I]);
   finally
     Ini.Free;
   end;

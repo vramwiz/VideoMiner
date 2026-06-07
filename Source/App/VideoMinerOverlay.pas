@@ -9,6 +9,14 @@ uses
 type
   TVideoMinerOverlayEdgeDirection = (edFirst, edLast);
   TVideoMinerOverlayFileNavDirection = (fndPrevious, fndNext);
+  TVideoMinerOverlayChapterSeverity = (csGreen, csYellow, csRed);
+  TVideoMinerOverlayChapterSource = (chsAutoCheck, chsUser);
+  TVideoMinerOverlayChapter = record
+    PositionMs: Integer;
+    Severity: TVideoMinerOverlayChapterSeverity;
+    Source: TVideoMinerOverlayChapterSource;
+  end;
+  TVideoMinerOverlayChapters = TArray<TVideoMinerOverlayChapter>;
   TVideoMinerOverlaySeekEvent = procedure(Sender: TObject; PositionMs: Integer) of object;
   TVideoMinerOverlaySkipDirection = (sdBackward, sdForward);
   TVideoMinerOverlayVolumeEvent = procedure(Sender: TObject; VolumePercent: Integer) of object;
@@ -117,6 +125,14 @@ type
   private
     FDragPositionMs: Integer;
     FDragging: Boolean;
+    FAddChapterButtonHovered: Boolean;
+    FAddChapterButtonPressed: Boolean;
+    FChapters: TVideoMinerOverlayChapters;
+    FCheckButtonHovered: Boolean;
+    FCheckButtonPressed: Boolean;
+    FCheckEnabled: Boolean;
+    FDeleteChapterButtonHovered: Boolean;
+    FDeleteChapterButtonPressed: Boolean;
     FEndActionButtonHovered: Boolean;
     FEndActionButtonPressed: Boolean;
     FEndActionText: string;
@@ -128,6 +144,9 @@ type
     FMuted: Boolean;
     FMuteButtonHovered: Boolean;
     FMuteButtonPressed: Boolean;
+    FOnAddChapterClick: TNotifyEvent;
+    FOnCheckClick: TNotifyEvent;
+    FOnDeleteChapterClick: TNotifyEvent;
     FOnEndActionClick: TNotifyEvent;
     FOnFullScreenClick: TNotifyEvent;
     FOnMuteClick: TNotifyEvent;
@@ -149,6 +168,13 @@ type
       Alpha: Byte);
     procedure DrawMuteIcon(Canvas: TCanvas; const DrawRect: TRect;
       Alpha: Byte);
+    function AddChapterButtonHitTest(const Point: TPoint): Boolean;
+    function AddChapterButtonRect: TRect;
+    function ChapterColor(Severity: TVideoMinerOverlayChapterSeverity): TColor;
+    function CheckButtonHitTest(const Point: TPoint): Boolean;
+    function CheckButtonRect: TRect;
+    function DeleteChapterButtonHitTest(const Point: TPoint): Boolean;
+    function DeleteChapterButtonRect: TRect;
     function DisplayPositionMs: Integer;
     function EndActionButtonHitTest(const Point: TPoint): Boolean;
     function EndActionButtonRect: TRect;
@@ -160,7 +186,12 @@ type
     function MuteButtonHitTest(const Point: TPoint): Boolean;
     function MuteButtonRect: TRect;
     function PositionFromPoint(const Point: TPoint): Integer;
+    procedure DrawChapterMarkers(Canvas: TCanvas; const Track: TRect);
+    procedure DrawTextButton(Canvas: TCanvas; const ButtonRect: TRect;
+      const Text: string; Active, Hovered, Pressed: Boolean; ActiveColor: TColor);
     procedure SetEndActionText(const Value: string);
+    procedure SetCheckEnabled(Value: Boolean);
+    procedure SetChapters(const Value: TVideoMinerOverlayChapters);
     procedure SetFullScreen(Value: Boolean);
     procedure SetMuted(Value: Boolean);
     procedure SetVolumePercent(Value: Integer);
@@ -177,9 +208,14 @@ type
     function MouseMove(const Point: TPoint): Boolean; override;
     function MouseUp(const Point: TPoint): Boolean; override;
     procedure SetProgress(PositionMs, MaxMs: Integer);
+    property CheckEnabled: Boolean read FCheckEnabled write SetCheckEnabled;
+    property Chapters: TVideoMinerOverlayChapters read FChapters write SetChapters;
     property Dragging: Boolean read FDragging;
     property EndActionText: string read FEndActionText write SetEndActionText;
     property FullScreen: Boolean read FFullScreen write SetFullScreen;
+    property OnAddChapterClick: TNotifyEvent read FOnAddChapterClick write FOnAddChapterClick;
+    property OnCheckClick: TNotifyEvent read FOnCheckClick write FOnCheckClick;
+    property OnDeleteChapterClick: TNotifyEvent read FOnDeleteChapterClick write FOnDeleteChapterClick;
     property OnEndActionClick: TNotifyEvent read FOnEndActionClick write FOnEndActionClick;
     property OnFullScreenClick: TNotifyEvent read FOnFullScreenClick write FOnFullScreenClick;
     property OnMuteClick: TNotifyEvent read FOnMuteClick write FOnMuteClick;
@@ -1315,6 +1351,67 @@ begin
   Result := ClampByte(Result);
 end;
 
+function TVideoMinerOverlaySeekBar.AddChapterButtonHitTest(
+  const Point: TPoint): Boolean;
+begin
+  Result := BoundsHitTest(Point) and PtInRect(AddChapterButtonRect,
+    System.Types.Point(Point.X - Bounds.Left, Point.Y - Bounds.Top));
+end;
+
+function TVideoMinerOverlaySeekBar.AddChapterButtonRect: TRect;
+var
+  DeleteRect: TRect;
+begin
+  DeleteRect := DeleteChapterButtonRect;
+  Result := Rect(DeleteRect.Left - 38, DeleteRect.Top, DeleteRect.Left - 6,
+    DeleteRect.Bottom);
+end;
+
+function TVideoMinerOverlaySeekBar.ChapterColor(
+  Severity: TVideoMinerOverlayChapterSeverity): TColor;
+begin
+  case Severity of
+    csGreen:
+      Result := $0046D56A;
+    csYellow:
+      Result := $0024D9F0;
+  else
+    Result := $002424E8;
+  end;
+end;
+
+function TVideoMinerOverlaySeekBar.CheckButtonHitTest(
+  const Point: TPoint): Boolean;
+begin
+  Result := BoundsHitTest(Point) and PtInRect(CheckButtonRect,
+    System.Types.Point(Point.X - Bounds.Left, Point.Y - Bounds.Top));
+end;
+
+function TVideoMinerOverlaySeekBar.CheckButtonRect: TRect;
+var
+  EndRect: TRect;
+begin
+  EndRect := EndActionButtonRect;
+  Result := Rect(EndRect.Left - 64, EndRect.Top, EndRect.Left - 8,
+    EndRect.Bottom);
+end;
+
+function TVideoMinerOverlaySeekBar.DeleteChapterButtonHitTest(
+  const Point: TPoint): Boolean;
+begin
+  Result := BoundsHitTest(Point) and PtInRect(DeleteChapterButtonRect,
+    System.Types.Point(Point.X - Bounds.Left, Point.Y - Bounds.Top));
+end;
+
+function TVideoMinerOverlaySeekBar.DeleteChapterButtonRect: TRect;
+var
+  CheckRect: TRect;
+begin
+  CheckRect := CheckButtonRect;
+  Result := Rect(CheckRect.Left - 38, CheckRect.Top, CheckRect.Left - 6,
+    CheckRect.Bottom);
+end;
+
 function TVideoMinerOverlaySeekBar.EndActionButtonHitTest(
   const Point: TPoint): Boolean;
 begin
@@ -1412,6 +1509,56 @@ begin
   Result := Max(0, Min(100, Result));
 end;
 
+procedure TVideoMinerOverlaySeekBar.DrawChapterMarkers(Canvas: TCanvas;
+  const Track: TRect);
+var
+  Chapter: TVideoMinerOverlayChapter;
+  MarkerColor: TColor;
+  MarkerX: Integer;
+  Ratio: Double;
+begin
+  if (FMaxMs <= 0) or Track.IsEmpty then
+    Exit;
+
+  for Chapter in FChapters do
+  begin
+    Ratio := Chapter.PositionMs / FMaxMs;
+    Ratio := Max(0.0, Min(1.0, Ratio));
+    MarkerX := Track.Left + Round(Track.Width * Ratio);
+    MarkerColor := ChapterColor(Chapter.Severity);
+    Canvas.Brush.Color := MarkerColor;
+    Canvas.Pen.Color := MarkerColor;
+    Canvas.Polygon([Point(Bounds.Left + MarkerX, Bounds.Top + Track.Top - 9),
+      Point(Bounds.Left + MarkerX - 5, Bounds.Top + Track.Top - 1),
+      Point(Bounds.Left + MarkerX + 5, Bounds.Top + Track.Top - 1)]);
+    Canvas.Rectangle(Bounds.Left + MarkerX - 2, Bounds.Top + Track.Top - 1,
+      Bounds.Left + MarkerX + 3, Bounds.Top + Track.Bottom + 10);
+  end;
+end;
+
+procedure TVideoMinerOverlaySeekBar.DrawTextButton(Canvas: TCanvas;
+  const ButtonRect: TRect; const Text: string; Active, Hovered, Pressed: Boolean;
+  ActiveColor: TColor);
+var
+  TextSize: TSize;
+begin
+  if Hovered or Pressed or Active then
+    DrawAlphaRoundRect(Canvas, ButtonRect, 8, 38);
+
+  Canvas.Font.Name := 'Segoe UI';
+  Canvas.Font.Size := 9;
+  Canvas.Font.Style := [];
+  if Active then
+    Canvas.Font.Color := ActiveColor
+  else
+    Canvas.Font.Color := clWhite;
+  TextSize := Canvas.TextExtent(Text);
+  Canvas.TextOut(Bounds.Left + ButtonRect.Left +
+    (ButtonRect.Width - TextSize.cx) div 2,
+    Bounds.Top + ButtonRect.Top + (ButtonRect.Height - TextSize.cy) div 2,
+    Text);
+end;
+
 function TVideoMinerOverlaySeekBar.MouseDown(const Point: TPoint): Boolean;
 var
   NewVolume: Integer;
@@ -1432,6 +1579,30 @@ begin
   begin
     FEndActionButtonPressed := True;
     FEndActionButtonHovered := True;
+    FHovered := True;
+    Exit;
+  end;
+
+  if CheckButtonHitTest(Point) then
+  begin
+    FCheckButtonPressed := True;
+    FCheckButtonHovered := True;
+    FHovered := True;
+    Exit;
+  end;
+
+  if DeleteChapterButtonHitTest(Point) then
+  begin
+    FDeleteChapterButtonPressed := True;
+    FDeleteChapterButtonHovered := True;
+    FHovered := True;
+    Exit;
+  end;
+
+  if AddChapterButtonHitTest(Point) then
+  begin
+    FAddChapterButtonPressed := True;
+    FAddChapterButtonHovered := True;
     FHovered := True;
     Exit;
   end;
@@ -1466,6 +1637,8 @@ end;
 
 function TVideoMinerOverlaySeekBar.MouseMove(const Point: TPoint): Boolean;
 var
+  NewAddChapterButtonHovered: Boolean;
+  NewDeleteChapterButtonHovered: Boolean;
   NewEndActionButtonHovered: Boolean;
   NewFullScreenButtonHovered: Boolean;
   NewHovered: Boolean;
@@ -1482,6 +1655,27 @@ begin
   if NewEndActionButtonHovered <> FEndActionButtonHovered then
   begin
     FEndActionButtonHovered := NewEndActionButtonHovered;
+    Result := True;
+  end;
+
+  NewEndActionButtonHovered := CheckButtonHitTest(Point);
+  if NewEndActionButtonHovered <> FCheckButtonHovered then
+  begin
+    FCheckButtonHovered := NewEndActionButtonHovered;
+    Result := True;
+  end;
+
+  NewDeleteChapterButtonHovered := DeleteChapterButtonHitTest(Point);
+  if NewDeleteChapterButtonHovered <> FDeleteChapterButtonHovered then
+  begin
+    FDeleteChapterButtonHovered := NewDeleteChapterButtonHovered;
+    Result := True;
+  end;
+
+  NewAddChapterButtonHovered := AddChapterButtonHitTest(Point);
+  if NewAddChapterButtonHovered <> FAddChapterButtonHovered then
+  begin
+    FAddChapterButtonHovered := NewAddChapterButtonHovered;
     Result := True;
   end;
 
@@ -1531,7 +1725,10 @@ end;
 
 function TVideoMinerOverlaySeekBar.MouseUp(const Point: TPoint): Boolean;
 var
+  AddChapterButtonClicked: Boolean;
   EndActionButtonClicked: Boolean;
+  CheckButtonClicked: Boolean;
+  DeleteChapterButtonClicked: Boolean;
   FullScreenButtonClicked: Boolean;
   MuteButtonClicked: Boolean;
   SeekPositionMs: Integer;
@@ -1571,6 +1768,39 @@ begin
     Exit;
   end;
 
+  if FCheckButtonPressed then
+  begin
+    CheckButtonClicked := CheckButtonHitTest(Point);
+    FCheckButtonPressed := False;
+    FCheckButtonHovered := CheckButtonClicked;
+    Result := True;
+    if CheckButtonClicked and Assigned(FOnCheckClick) then
+      FOnCheckClick(Self);
+    Exit;
+  end;
+
+  if FDeleteChapterButtonPressed then
+  begin
+    DeleteChapterButtonClicked := DeleteChapterButtonHitTest(Point);
+    FDeleteChapterButtonPressed := False;
+    FDeleteChapterButtonHovered := DeleteChapterButtonClicked;
+    Result := True;
+    if DeleteChapterButtonClicked and Assigned(FOnDeleteChapterClick) then
+      FOnDeleteChapterClick(Self);
+    Exit;
+  end;
+
+  if FAddChapterButtonPressed then
+  begin
+    AddChapterButtonClicked := AddChapterButtonHitTest(Point);
+    FAddChapterButtonPressed := False;
+    FAddChapterButtonHovered := AddChapterButtonClicked;
+    Result := True;
+    if AddChapterButtonClicked and Assigned(FOnAddChapterClick) then
+      FOnAddChapterClick(Self);
+    Exit;
+  end;
+
   if FVolumeDragging then
   begin
     FVolumePercent := VolumeFromPoint(Point);
@@ -1596,7 +1826,10 @@ end;
 
 procedure TVideoMinerOverlaySeekBar.PaintControl(Canvas: TCanvas);
 var
+  AddChapterRect: TRect;
   ButtonRect: TRect;
+  CheckRect: TRect;
+  DeleteChapterRect: TRect;
   EndActionRect: TRect;
   FilledRect: TRect;
   KnobCenterX: Integer;
@@ -1624,6 +1857,9 @@ begin
   DrawAlphaPanel(Canvas, Rect(0, 0, Bounds.Width, Bounds.Height), 18, 96);
   ButtonRect := FullScreenButtonRect;
   EndActionRect := EndActionButtonRect;
+  CheckRect := CheckButtonRect;
+  DeleteChapterRect := DeleteChapterButtonRect;
+  AddChapterRect := AddChapterButtonRect;
   MuteRect := MuteButtonRect;
 
   if FMaxMs > 0 then
@@ -1639,6 +1875,7 @@ begin
   FilledRect := Track;
   FilledRect.Right := Max(FilledRect.Left + Track.Height, KnobCenterX);
   DrawAlphaRoundRect(Canvas, FilledRect, Track.Height, 230);
+  DrawChapterMarkers(Canvas, Track);
 
   ShadowRadius := 22;
   DrawAlphaEllipse(Canvas, Rect(KnobCenterX - ShadowRadius,
@@ -1700,6 +1937,13 @@ begin
     (EndActionRect.Width - TextSize.cx) div 2,
     Bounds.Top + EndActionRect.Top + (EndActionRect.Height - TextSize.cy) div 2,
     Text);
+
+  DrawTextButton(Canvas, CheckRect, 'Check', FCheckEnabled,
+    FCheckButtonHovered, FCheckButtonPressed, $002424E8);
+  DrawTextButton(Canvas, DeleteChapterRect, '-', False,
+    FDeleteChapterButtonHovered, FDeleteChapterButtonPressed, clWhite);
+  DrawTextButton(Canvas, AddChapterRect, '+', False,
+    FAddChapterButtonHovered, FAddChapterButtonPressed, clWhite);
 end;
 
 function TVideoMinerOverlaySeekBar.PositionFromPoint(const Point: TPoint): Integer;
@@ -1743,6 +1987,17 @@ end;
 procedure TVideoMinerOverlaySeekBar.SetEndActionText(const Value: string);
 begin
   FEndActionText := Value;
+end;
+
+procedure TVideoMinerOverlaySeekBar.SetCheckEnabled(Value: Boolean);
+begin
+  FCheckEnabled := Value;
+end;
+
+procedure TVideoMinerOverlaySeekBar.SetChapters(
+  const Value: TVideoMinerOverlayChapters);
+begin
+  FChapters := Copy(Value);
 end;
 
 procedure TVideoMinerOverlaySeekBar.SetVolumePercent(Value: Integer);

@@ -7,6 +7,8 @@ uses
 
 type
   TVideoMinerShortcutHandlers = record
+    ChapterPrevious: TShortcutActionProc;
+    ChapterNext: TShortcutActionProc;
     OpenDialog: TShortcutActionProc;
     NavigatePrevious: TShortcutActionProc;
     NavigateNext: TShortcutActionProc;
@@ -32,8 +34,8 @@ begin
 
   Shortcuts.Clear;
   Shortcuts.Add(Ord('O'), [ssCtrl], Handlers.OpenDialog);
-  Shortcuts.Add(VK_LEFT, [ssCtrl], Handlers.NavigatePrevious);
-  Shortcuts.Add(VK_RIGHT, [ssCtrl], Handlers.NavigateNext);
+  Shortcuts.Add(VK_LEFT, [ssCtrl], Handlers.ChapterPrevious);
+  Shortcuts.Add(VK_RIGHT, [ssCtrl], Handlers.ChapterNext);
   Shortcuts.Add(VK_F11, [], Handlers.ToggleFullScreen);
   Shortcuts.Add(VK_SPACE, [], Handlers.TogglePlayPause);
   Shortcuts.Add(VK_LEFT, [], Handlers.NavigatePrevious);

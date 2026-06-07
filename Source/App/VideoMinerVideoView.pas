@@ -19,6 +19,8 @@ type
     procedure SetBossMode(Value: Boolean);
     procedure SetCanNavigateNext(Value: Boolean);
     procedure SetCanNavigatePrevious(Value: Boolean);
+    procedure SetCheckEnabled(Value: Boolean);
+    procedure SetChapters(const Value: TVideoMinerOverlayChapters);
     procedure SetEndActionText(const Value: string);
     procedure SetFullScreen(Value: Boolean);
     procedure SetOnEndActionClick(Value: TNotifyEvent);
@@ -28,6 +30,9 @@ type
     procedure SetMuted(Value: Boolean);
     procedure SetOnBossExitClick(Value: TNotifyEvent);
     procedure SetOnBossGesture(Value: TNotifyEvent);
+    procedure SetOnAddChapterClick(Value: TNotifyEvent);
+    procedure SetOnCheckClick(Value: TNotifyEvent);
+    procedure SetOnDeleteChapterClick(Value: TNotifyEvent);
     procedure SetOnMuteClick(Value: TNotifyEvent);
     procedure SetOnNavigateNextClick(Value: TNotifyEvent);
     procedure SetOnNavigatePreviousClick(Value: TNotifyEvent);
@@ -48,6 +53,7 @@ type
       out PositionMs: Integer; out ErrorMessage: string): Boolean;
     function DecodeNextFrameToScratch(Decoder: TFFmpegDecoder;
       out PositionMs: Integer; out ErrorMessage: string): Boolean;
+    function CurrentFrameCornersMostlyDark: Boolean;
     function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean;
     function ShowNextFrame(Decoder: TFFmpegDecoder; out PositionMs: Integer;
@@ -59,10 +65,15 @@ type
     property BossMode: Boolean write SetBossMode;
     property CanNavigateNext: Boolean write SetCanNavigateNext;
     property CanNavigatePrevious: Boolean write SetCanNavigatePrevious;
+    property CheckEnabled: Boolean write SetCheckEnabled;
+    property Chapters: TVideoMinerOverlayChapters write SetChapters;
     property EndActionText: string write SetEndActionText;
     property FullScreen: Boolean write SetFullScreen;
     property OnBossExitClick: TNotifyEvent write SetOnBossExitClick;
     property OnBossGesture: TNotifyEvent write SetOnBossGesture;
+    property OnAddChapterClick: TNotifyEvent write SetOnAddChapterClick;
+    property OnCheckClick: TNotifyEvent write SetOnCheckClick;
+    property OnDeleteChapterClick: TNotifyEvent write SetOnDeleteChapterClick;
     property OnEndActionClick: TNotifyEvent write SetOnEndActionClick;
     property OnFirstFrameClick: TNotifyEvent write SetOnFirstFrameClick;
     property OnFullScreenClick: TNotifyEvent write SetOnFullScreenClick;
@@ -86,6 +97,11 @@ implementation
 function TVideoMinerVideoView.GetSurfaceControl: TWinControl;
 begin
   Result := FSurface;
+end;
+
+function TVideoMinerVideoView.CurrentFrameCornersMostlyDark: Boolean;
+begin
+  Result := (FSurface <> nil) and FSurface.CurrentFrameCornersMostlyDark;
 end;
 
 function TVideoMinerVideoView.PrepareBitmapFrameBuffer(Bitmap: TBitmap;
@@ -230,6 +246,24 @@ begin
     FSurface.OnEndActionClick := Value;
 end;
 
+procedure TVideoMinerVideoView.SetOnCheckClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnCheckClick := Value;
+end;
+
+procedure TVideoMinerVideoView.SetOnAddChapterClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnAddChapterClick := Value;
+end;
+
+procedure TVideoMinerVideoView.SetOnDeleteChapterClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnDeleteChapterClick := Value;
+end;
+
 procedure TVideoMinerVideoView.SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
 begin
   if FSurface <> nil then
@@ -301,6 +335,19 @@ procedure TVideoMinerVideoView.SetEndActionText(const Value: string);
 begin
   if FSurface <> nil then
     FSurface.EndActionText := Value;
+end;
+
+procedure TVideoMinerVideoView.SetCheckEnabled(Value: Boolean);
+begin
+  if FSurface <> nil then
+    FSurface.CheckEnabled := Value;
+end;
+
+procedure TVideoMinerVideoView.SetChapters(
+  const Value: TVideoMinerOverlayChapters);
+begin
+  if FSurface <> nil then
+    FSurface.Chapters := Value;
 end;
 
 procedure TVideoMinerVideoView.SetSeekProgress(PositionMs, MaxMs: Integer);
