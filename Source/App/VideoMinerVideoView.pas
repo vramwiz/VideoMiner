@@ -9,8 +9,11 @@ uses
 type
   TVideoMinerVideoView = class
   private
+    FDecodeScratch: TBitmap;
     FSurface: TVideoMinerVideoSurface;
     function GetSurfaceControl: TWinControl;
+    function PrepareBitmapFrameBuffer(Bitmap: TBitmap; Width, Height: Integer;
+      out Buffer: Pointer; out BufferStride: Integer): Boolean;
     function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
       out BufferStride: Integer; out ErrorMessage: string): Boolean;
     procedure SetBossMode(Value: Boolean);
@@ -40,13 +43,16 @@ type
     destructor Destroy; override;
     procedure Clear;
     function ShowFrameAt(Decoder: TFFmpegDecoder; PositionMs: Integer;
-      out ErrorMessage: string): Boolean;
+      out ErrorMessage: string; PresentFrame: Boolean = True): Boolean;
     function DecodeNextFrame(Decoder: TFFmpegDecoder; ConvertFrame: Boolean;
+      out PositionMs: Integer; out ErrorMessage: string): Boolean;
+    function DecodeNextFrameToScratch(Decoder: TFFmpegDecoder;
       out PositionMs: Integer; out ErrorMessage: string): Boolean;
     function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean;
     function ShowNextFrame(Decoder: TFFmpegDecoder; out PositionMs: Integer;
       out ErrorMessage: string): Boolean;
+    function PresentScratchFrame(out ErrorMessage: string): Boolean;
     procedure Present(Bitmap: TBitmap);
     procedure PresentImmediate(Bitmap: TBitmap);
     procedure SetSeekProgress(PositionMs, MaxMs: Integer);
@@ -82,6 +88,30 @@ begin
   Result := FSurface;
 end;
 
+function TVideoMinerVideoView.PrepareBitmapFrameBuffer(Bitmap: TBitmap;
+  Width, Height: Integer; out Buffer: Pointer; out BufferStride: Integer): Boolean;
+begin
+  Buffer := nil;
+  BufferStride := 0;
+  Result := False;
+
+  if (Bitmap = nil) or (Width <= 0) or (Height <= 0) then
+    Exit;
+
+  if Bitmap.PixelFormat <> pf32bit then
+    Bitmap.PixelFormat := pf32bit;
+  if (Bitmap.Width <> Width) or (Bitmap.Height <> Height) then
+    Bitmap.SetSize(Width, Height);
+
+  if Height > 1 then
+    BufferStride := Abs(NativeInt(Bitmap.ScanLine[1]) - NativeInt(Bitmap.ScanLine[0]))
+  else
+    BufferStride := Width * 4;
+
+  Buffer := Bitmap.ScanLine[Height - 1];
+  Result := (Buffer <> nil) and (BufferStride > 0);
+end;
+
 function TVideoMinerVideoView.PrepareFrameBuffer(Decoder: TFFmpegDecoder;
   out Buffer: Pointer; out BufferStride: Integer;
   out ErrorMessage: string): Boolean;
@@ -112,6 +142,7 @@ constructor TVideoMinerVideoView.Create(Image: TImage);
 begin
   inherited Create;
 
+  FDecodeScratch := TBitmap.Create;
   FSurface := TVideoMinerVideoSurface.Create(Image.Owner);
   FSurface.Parent := Image.Parent;
   FSurface.Align := Image.Align;
@@ -127,11 +158,14 @@ end;
 destructor TVideoMinerVideoView.Destroy;
 begin
   FSurface.Free;
+  FDecodeScratch.Free;
   inherited Destroy;
 end;
 
 procedure TVideoMinerVideoView.Clear;
 begin
+  if FDecodeScratch <> nil then
+    FDecodeScratch.SetSize(0, 0);
   if FSurface <> nil then
     FSurface.Clear;
 end;
@@ -288,7 +322,7 @@ begin
 end;
 
 function TVideoMinerVideoView.ShowFrameAt(Decoder: TFFmpegDecoder;
-  PositionMs: Integer; out ErrorMessage: string): Boolean;
+  PositionMs: Integer; out ErrorMessage: string; PresentFrame: Boolean): Boolean;
 var
   Buffer: Pointer;
   BufferStride: Integer;
@@ -302,11 +336,29 @@ begin
     Exit;
   end;
 
-  if (not PrepareFrameBuffer(Decoder, Buffer, BufferStride, ErrorMessage)) or
-     (not Decoder.DecodeFrameToBgrx32(PositionMs, Buffer, BufferStride, ErrorMessage)) then
+  if PresentFrame then
+  begin
+    if not PrepareFrameBuffer(Decoder, Buffer, BufferStride, ErrorMessage) then
+      Exit;
+  end
+  else
+  begin
+    if not PrepareBitmapFrameBuffer(FDecodeScratch, Decoder.Info.Width,
+      Decoder.Info.Height, Buffer, BufferStride) then
+    begin
+      ErrorMessage := 'Failed to prepare scratch frame buffer.';
+      Exit;
+    end;
+  end;
+
+  if not Decoder.DecodeFrameToBgrx32(PositionMs, Buffer, BufferStride,
+    ErrorMessage) then
     Exit;
 
-  PresentImmediate(FSurface.Bitmap);
+  if PresentFrame then
+    PresentImmediate(FSurface.Bitmap);
+  if (not PresentFrame) and (FSurface <> nil) then
+    FSurface.PresentImmediate;
   Result := True;
 end;
 
@@ -343,6 +395,33 @@ begin
   Result := True;
 end;
 
+function TVideoMinerVideoView.DecodeNextFrameToScratch(Decoder: TFFmpegDecoder;
+  out PositionMs: Integer; out ErrorMessage: string): Boolean;
+var
+  Buffer: Pointer;
+  BufferStride: Integer;
+begin
+  ErrorMessage := '';
+  PositionMs := -1;
+  Result := False;
+
+  if Decoder = nil then
+  begin
+    ErrorMessage := 'Decoder is nil.';
+    Exit;
+  end;
+
+  if not PrepareBitmapFrameBuffer(FDecodeScratch, Decoder.Info.Width,
+    Decoder.Info.Height, Buffer, BufferStride) then
+  begin
+    ErrorMessage := 'Failed to prepare scratch frame buffer.';
+    Exit;
+  end;
+
+  Result := Decoder.DecodeNextFrameToBgrx32Optional(Buffer, BufferStride,
+    True, PositionMs, ErrorMessage);
+end;
+
 function TVideoMinerVideoView.HandleMouseWheel(Shift: TShiftState;
   WheelDelta: Integer; MousePos: TPoint): Boolean;
 begin
@@ -354,6 +433,24 @@ function TVideoMinerVideoView.ShowNextFrame(Decoder: TFFmpegDecoder;
   out PositionMs: Integer; out ErrorMessage: string): Boolean;
 begin
   Result := DecodeNextFrame(Decoder, True, PositionMs, ErrorMessage);
+end;
+
+function TVideoMinerVideoView.PresentScratchFrame(
+  out ErrorMessage: string): Boolean;
+begin
+  ErrorMessage := '';
+  Result := False;
+
+  if (FSurface = nil) or (FDecodeScratch = nil) or
+     (FDecodeScratch.Width <= 0) or (FDecodeScratch.Height <= 0) then
+  begin
+    ErrorMessage := 'Scratch frame is empty.';
+    Exit;
+  end;
+
+  FSurface.Bitmap.Assign(FDecodeScratch);
+  Present(FSurface.Bitmap);
+  Result := True;
 end;
 
 end.

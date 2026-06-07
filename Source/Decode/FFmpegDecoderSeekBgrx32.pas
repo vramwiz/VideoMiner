@@ -68,6 +68,7 @@ begin
       ErrorMessage := TFFmpegApi.ErrorText(Ret);
       Exit;
     end;
+    TFFmpegApi.avformat_flush(FormatContext);
     TFFmpegApi.avcodec_flush_buffers(CodecContext);
     if Context.AudioCodecContext <> nil then
       TFFmpegApi.avcodec_flush_buffers(PAVCodecContext(Context.AudioCodecContext));

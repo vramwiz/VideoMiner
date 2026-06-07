@@ -16,7 +16,7 @@ const
   BOSS_GESTURE_AXIS_RATIO = 1.6;      // common    : 横/縦どちらの動きかを決める優勢比率
   BOSS_GESTURE_NOISE_PIXELS = 8;      // common    : 微小なマウス揺れを無視する距離 px
   BOSS_GESTURE_POINT_WINDOW_MS = 100; // point     : A-B-A 往復ジェスチャーの有効時間 ms
-  BOSS_GESTURE_POINT_DISTANCE = 75;   // point     : A から B 到達とみなす距離 px
+  BOSS_GESTURE_POINT_DISTANCE = 100;   // point     : A から B 到達とみなす距離 px
   BOSS_GESTURE_RETURN_RADIUS = 55;    // point     : A 付近へ戻ったとみなす半径 px
 
 type

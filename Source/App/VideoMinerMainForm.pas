@@ -132,7 +132,7 @@ type
     procedure SeekToFirstFrame;
     procedure SeekToLastFrame;
     function LastFrameSeekPositionMs: Integer;
-    procedure StartPlaybackAtMs(PositionMs: Integer);
+    procedure StartPlaybackAtMs(PositionMs: Integer; FrameAlreadyShown: Boolean = False);
     procedure RestartPlaybackTimer(Sender: TObject);
     function SyncVideoToAudio(var PositionMs: Integer; out ErrorMessage: string): Boolean;
     procedure FinishPlaybackAtEnd;
@@ -169,9 +169,13 @@ const
   VIDEO_AUDIO_SYNC_LAG_MS = 60;
   VIDEO_AUDIO_SEEK_LAG_MS = 120;
   VIDEO_END_TOLERANCE_MS = 1500;
+  VIDEO_SEEK_GUARD_TOLERANCE_MS = 1500;
+  VIDEO_SEEK_GUARD_FRAMES = 5;
+  VIDEO_BACKWARD_FRAME_TOLERANCE_MS = 5;
   VIDEO_DROP_FRAME_MAX = 90;
   VIDEO_DROP_FRAME_BUDGET_MS = 25;
   UI_INFO_UPDATE_INTERVAL_MS = 250;
+  SEEK_RESTART_DELAY_MS = 15;
   TITLE_BAR_COLOR = $00171617;
   CLOSE_BUTTON_HOVER_COLOR = $00232323;
   CAPTION_BUTTON_HOVER_COLOR = $00232323;
@@ -220,7 +224,7 @@ begin
   FPendingOpenFiles := TStringList.Create;
   FRestartPlaybackTimer := TTimer.Create(Self);
   FRestartPlaybackTimer.Enabled := False;
-  FRestartPlaybackTimer.Interval := 120;
+  FRestartPlaybackTimer.Interval := SEEK_RESTART_DELAY_MS;
   FRestartPlaybackTimer.OnTimer := RestartPlaybackTimer;
   FCurrentVideoPositionMs := -1;
   FSeekPositionMs := 0;
@@ -1036,7 +1040,7 @@ begin
   FPendingRestartPlayback := False;
   FPendingRestartMs := -1;
   FRestartPlaybackTimer.Enabled := False;
-  FAudioPlayback.Stop;
+  FAudioPlayback.StopOutput;
   UpdateInfoLabel;
 end;
 
@@ -1057,6 +1061,8 @@ var
   ConvertFrame: Boolean;
   DidSeekToAudio: Boolean;
   DebugLogEnabled: Boolean;
+  GuardingSeek: Boolean;
+  UseScratchFrame: Boolean;
 begin
   DebugLogEnabled := VideoMinerDebugLogEnabled;
   if DebugLogEnabled then
@@ -1095,6 +1101,10 @@ begin
   DidSeekToAudio := False;
   repeat
     ConvertFrame := True;
+    GuardingSeek := FSeekGuardRemaining > 0;
+    if GuardingSeek then
+      ConvertFrame := False;
+
     if (AudioPositionMs >= 0) and (FCurrentVideoPositionMs >= 0) and
        (FCurrentVideoPositionMs < AudioPositionMs - VIDEO_AUDIO_SYNC_LAG_MS) then
     begin
@@ -1128,14 +1138,31 @@ begin
       end;
     end;
 
+    UseScratchFrame := ConvertFrame and (AudioPositionMs < 0);
+
     if DebugLogEnabled then
       StepWatch := TStopwatch.StartNew;
-    if not FVideoView.DecodeNextFrame(FDecoder, ConvertFrame, PositionMs,
+    if UseScratchFrame then
+    begin
+      if not FVideoView.DecodeNextFrameToScratch(FDecoder, PositionMs,
+        ErrorMessage) then
+      begin
+        TimerPlayback.Enabled := False;
+        FVideoView.PlaybackActive := False;
+        FAudioPlayback.StopOutput;
+        if ErrorMessage = 'End of stream.' then
+          FinishPlaybackAtEnd
+        else
+          SetStatusCaption('Failed to decode next frame: ' + ErrorMessage);
+        Exit;
+      end;
+    end
+    else if not FVideoView.DecodeNextFrame(FDecoder, ConvertFrame, PositionMs,
       ErrorMessage) then
     begin
       TimerPlayback.Enabled := False;
       FVideoView.PlaybackActive := False;
-      FAudioPlayback.Stop;
+      FAudioPlayback.StopOutput;
       if ErrorMessage = 'End of stream.' then
         FinishPlaybackAtEnd
       else
@@ -1144,6 +1171,66 @@ begin
     end;
     if DebugLogEnabled then
       DecodeMs := DecodeMs + StepWatch.Elapsed.TotalMilliseconds;
+
+    if UseScratchFrame and (PositionMs >= 0) and
+       (FCurrentVideoPositionMs >= 0) and
+       (PositionMs + VIDEO_BACKWARD_FRAME_TOLERANCE_MS < FCurrentVideoPositionMs) then
+    begin
+      if DebugLogEnabled then
+        WriteVideoMinerDebugLog(Format(
+          'playback_backward_drop file="%s" current_ms=%d decoded_ms=%d',
+          [ExtractFileName(FVideoFile), FCurrentVideoPositionMs, PositionMs]));
+      ConvertFrame := False;
+      Continue;
+    end;
+
+    if GuardingSeek and (PositionMs >= 0) then
+    begin
+      Dec(FSeekGuardRemaining);
+      if Abs(PositionMs - FSeekGuardTargetMs) > VIDEO_SEEK_GUARD_TOLERANCE_MS then
+      begin
+        if DebugLogEnabled then
+          WriteVideoMinerDebugLog(Format(
+            'seek_guard_drop file="%s" target_ms=%d decoded_ms=%d remaining=%d',
+            [ExtractFileName(FVideoFile), FSeekGuardTargetMs, PositionMs,
+             FSeekGuardRemaining]));
+
+        if FSeekGuardRemaining <= 0 then
+        begin
+          if FVideoView.ShowFrameAt(FDecoder, FSeekGuardTargetMs,
+            ErrorMessage) then
+          begin
+            PositionMs := FSeekGuardTargetMs;
+            FCurrentVideoPositionMs := FSeekGuardTargetMs;
+            DidSeekToAudio := True;
+            Break;
+          end;
+
+          SetStatusCaption('Failed to guard seek frame: ' + ErrorMessage);
+          Exit;
+        end;
+
+        Continue;
+      end;
+
+      FSeekGuardRemaining := 0;
+      if not FVideoView.ShowFrameAt(FDecoder, PositionMs, ErrorMessage) then
+      begin
+        SetStatusCaption('Failed to present guarded frame: ' + ErrorMessage);
+        Exit;
+      end;
+      ConvertFrame := True;
+    end;
+
+    if UseScratchFrame then
+    begin
+      if not FVideoView.PresentScratchFrame(ErrorMessage) then
+      begin
+        SetStatusCaption('Failed to present next frame: ' + ErrorMessage);
+        Exit;
+      end;
+      ConvertFrame := True;
+    end;
 
     if PositionMs >= 0 then
       FCurrentVideoPositionMs := PositionMs;
@@ -1158,28 +1245,6 @@ begin
   end;
   if DebugLogEnabled then
     SyncMs := StepWatch.Elapsed.TotalMilliseconds;
-
-  if (FSeekGuardRemaining > 0) and (PositionMs >= 0) then
-  begin
-    Dec(FSeekGuardRemaining);
-    if Abs(PositionMs - FSeekGuardTargetMs) > 1500 then
-    begin
-      FSeeking := True;
-      try
-        FUpdatingSeek := True;
-        try
-          FSeekPositionMs := FSeekGuardTargetMs;
-        finally
-          FUpdatingSeek := False;
-        end;
-        ShowFrameAtMs(FSeekGuardTargetMs);
-      finally
-        FSeeking := False;
-      end;
-      Exit;
-    end;
-    FSeekGuardRemaining := 0;
-  end;
 
   if PositionMs >= 0 then
   begin
@@ -1247,17 +1312,25 @@ var
   ShownPositionMs: Integer;
   TargetMs: Integer;
   WasPlaying: Boolean;
+  TotalWatch: TStopwatch;
+  StepWatch: TStopwatch;
+  StopMs: Double;
+  PreviewMs: Double;
 begin
   if (FVideoFile = '') or (FSeekMaxMs <= 0) then
     Exit;
 
+  TotalWatch := TStopwatch.StartNew;
+
   WasPlaying := PlaybackActiveOrPending;
+  StepWatch := TStopwatch.StartNew;
   FAudioPlayback.SilenceOutput;
   TimerPlayback.Enabled := False;
   FRestartPlaybackTimer.Enabled := False;
   FPendingRestartPlayback := False;
   FPendingRestartMs := -1;
-  FAudioPlayback.Stop;
+  FAudioPlayback.StopOutput;
+  StopMs := StepWatch.Elapsed.TotalMilliseconds;
 
   TargetMs := PositionMs;
   if TargetMs < 0 then
@@ -1270,11 +1343,18 @@ begin
 
   FSeeking := True;
   try
+    StepWatch := TStopwatch.StartNew;
     if not TryShowFrameNearMs(TargetMs, ShownPositionMs, ErrorMessage) then
     begin
+      PreviewMs := StepWatch.Elapsed.TotalMilliseconds;
+      WriteVideoMinerDebugLog(Format(
+        'seek_failed step="preview" target_ms=%d was_playing=%s stop_ms=%.3f preview_ms=%.3f total_ms=%.3f err="%s"',
+        [TargetMs, BoolToStr(WasPlaying, True), StopMs, PreviewMs,
+         TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
       SetStatusCaption('Failed to decode frame: ' + ErrorMessage);
       Exit;
     end;
+    PreviewMs := StepWatch.Elapsed.TotalMilliseconds;
 
     FCurrentVideoPositionMs := ShownPositionMs;
     FUpdatingSeek := True;
@@ -1298,6 +1378,12 @@ begin
     FRestartPlaybackTimer.Enabled := False;
     FRestartPlaybackTimer.Enabled := True;
   end;
+
+  WriteVideoMinerDebugLog(Format(
+    'seek_done target_ms=%d shown_ms=%d was_playing=%s resume=%s stop_ms=%.3f preview_ms=%.3f total_ms=%.3f',
+    [TargetMs, ShownPositionMs, BoolToStr(WasPlaying, True),
+     BoolToStr(ResumeIfPlaying and WasPlaying and (ShownPositionMs < FSeekMaxMs), True),
+     StopMs, PreviewMs, TotalWatch.Elapsed.TotalMilliseconds]));
 end;
 
 procedure TVideoMinerMainForm.SeekByMs(DeltaMs: Integer);
@@ -1341,14 +1427,24 @@ begin
   Result := Max(0, FSeekMaxMs - FrameDurationMs);
 end;
 
-procedure TVideoMinerMainForm.StartPlaybackAtMs(PositionMs: Integer);
+procedure TVideoMinerMainForm.StartPlaybackAtMs(PositionMs: Integer;
+  FrameAlreadyShown: Boolean);
 var
   ErrorMessage: string;
   OpenInfo: TVideoInfo;
+  ReuseErrorMessage: string;
   TargetMs: Integer;
+  TotalWatch: TStopwatch;
+  StepWatch: TStopwatch;
+  VideoPrepareMs: Double;
+  VideoSeekMs: Double;
+  AudioStartMs: Double;
+  VideoReopened: Boolean;
 begin
   if FVideoFile = '' then
     Exit;
+
+  TotalWatch := TStopwatch.StartNew;
 
   TargetMs := PositionMs;
   if TargetMs < 0 then
@@ -1356,38 +1452,82 @@ begin
   else if TargetMs > FSeekMaxMs then
     TargetMs := FSeekMaxMs;
 
-  WriteVideoMinerDebugLog(Format('start_playback file="%s" requested_ms=%d target_ms=%d',
-    [ExtractFileName(FVideoFile), PositionMs, TargetMs]));
+  WriteVideoMinerDebugLog(Format(
+    'start_playback file="%s" requested_ms=%d target_ms=%d frame_already_shown=%s',
+    [ExtractFileName(FVideoFile), PositionMs, TargetMs,
+     BoolToStr(FrameAlreadyShown, True)]));
 
-  FDecoder.Close;
-  if not FDecoder.Open(FVideoFile, OpenInfo, ErrorMessage) then
-  begin
-    FVideoView.PlaybackActive := False;
-    SetStatusCaption('Failed to reopen video decoder: ' + ErrorMessage);
-    Exit;
-  end;
+  VideoPrepareMs := 0;
+  VideoReopened := False;
 
-  if not FVideoView.ShowFrameAt(FDecoder, TargetMs, ErrorMessage) then
+  StepWatch := TStopwatch.StartNew;
+  if not FVideoView.ShowFrameAt(FDecoder, TargetMs, ReuseErrorMessage,
+    not FrameAlreadyShown) then
   begin
-    FVideoView.PlaybackActive := False;
-    SetStatusCaption('Failed to seek video decoder: ' + ErrorMessage);
-    Exit;
+    VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
+    WriteVideoMinerDebugLog(Format(
+      'start_playback_reuse_failed file="%s" target_ms=%d video_seek_ms=%.3f total_ms=%.3f err="%s"',
+      [ExtractFileName(FVideoFile), TargetMs, VideoSeekMs,
+       TotalWatch.Elapsed.TotalMilliseconds, ReuseErrorMessage]));
+
+    StepWatch := TStopwatch.StartNew;
+    FDecoder.Close;
+    if not FDecoder.Open(FVideoFile, OpenInfo, ErrorMessage) then
+    begin
+      VideoPrepareMs := StepWatch.Elapsed.TotalMilliseconds;
+      WriteVideoMinerDebugLog(Format(
+        'start_playback_failed step="video_open_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f total_ms=%.3f err="%s"',
+        [ExtractFileName(FVideoFile), TargetMs, VideoPrepareMs,
+         TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+      FVideoView.PlaybackActive := False;
+      SetStatusCaption('Failed to reopen video decoder: ' + ErrorMessage);
+      Exit;
+    end;
+    VideoPrepareMs := StepWatch.Elapsed.TotalMilliseconds;
+    VideoReopened := True;
+
+    StepWatch := TStopwatch.StartNew;
+    if not FVideoView.ShowFrameAt(FDecoder, TargetMs, ErrorMessage,
+      not FrameAlreadyShown) then
+    begin
+      VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
+      WriteVideoMinerDebugLog(Format(
+        'start_playback_failed step="video_seek_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f total_ms=%.3f err="%s"',
+        [ExtractFileName(FVideoFile), TargetMs, VideoPrepareMs, VideoSeekMs,
+         TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+      FVideoView.PlaybackActive := False;
+      SetStatusCaption('Failed to seek video decoder: ' + ErrorMessage);
+      Exit;
+    end;
   end;
+  VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
   FCurrentVideoPositionMs := TargetMs;
   FSeekPositionMs := TargetMs;
 
+  StepWatch := TStopwatch.StartNew;
   if not FAudioPlayback.StartAt(FVideoFile, FVideoInfo, TargetMs,
     ErrorMessage) then
   begin
+    AudioStartMs := StepWatch.Elapsed.TotalMilliseconds;
+    WriteVideoMinerDebugLog(Format(
+      'start_playback_failed step="audio_start" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f audio_start_ms=%.3f total_ms=%.3f err="%s"',
+      [ExtractFileName(FVideoFile), TargetMs, VideoPrepareMs, VideoSeekMs,
+       AudioStartMs, TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
     FVideoView.PlaybackActive := False;
     SetStatusCaption('Failed to start audio playback: ' + ErrorMessage);
     Exit;
   end;
+  AudioStartMs := StepWatch.Elapsed.TotalMilliseconds;
 
-  FSeekGuardRemaining := 0;
+  FSeekGuardTargetMs := TargetMs;
+  FSeekGuardRemaining := VIDEO_SEEK_GUARD_FRAMES;
   TimerPlayback.Enabled := True;
   FVideoView.PlaybackActive := True;
-  TimerPlaybackTimer(TimerPlayback);
+  WriteVideoMinerDebugLog(Format(
+    'start_playback_done file="%s" target_ms=%d frame_already_shown=%s video_reopen=%s video_prepare_ms=%.3f video_seek_ms=%.3f audio_start_ms=%.3f total_ms=%.3f',
+    [ExtractFileName(FVideoFile), TargetMs, BoolToStr(FrameAlreadyShown, True),
+     BoolToStr(VideoReopened, True), VideoPrepareMs, VideoSeekMs,
+     AudioStartMs, TotalWatch.Elapsed.TotalMilliseconds]));
 end;
 
 function TVideoMinerMainForm.SyncVideoToAudio(var PositionMs: Integer;
@@ -1428,6 +1568,8 @@ begin
 end;
 
 procedure TVideoMinerMainForm.FinishPlaybackAtEnd;
+var
+  FrameShown: Boolean;
 begin
   case FEndAction of
     eaLoop:
@@ -1438,7 +1580,8 @@ begin
         finally
           FUpdatingSeek := False;
         end;
-        StartPlaybackAtMs(0);
+        FrameShown := ShowFrameAtMs(0);
+        StartPlaybackAtMs(0, FrameShown);
         Exit;
       end;
     eaNext:
@@ -1539,7 +1682,7 @@ begin
     Exit;
 
   WriteVideoMinerDebugLog(Format('restart_playback target_ms=%d', [TargetMs]));
-  StartPlaybackAtMs(TargetMs);
+  StartPlaybackAtMs(TargetMs, True);
 end;
 
 procedure TVideoMinerMainForm.WMNCHitTest(var Message: TWMNCHitTest);

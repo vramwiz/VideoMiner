@@ -159,6 +159,7 @@ type
   Tav_find_best_stream = function(ic: PAVFormatContext; media_type: Integer; wanted_stream_nb: Integer; related_stream: Integer; decoder_ret: Pointer; flags: Integer): Integer; cdecl;
   Tav_read_frame = function(s: PAVFormatContext; pkt: PAVPacket): Integer; cdecl;
   Tav_seek_frame = function(s: PAVFormatContext; stream_index: Integer; timestamp: Int64; flags: Integer): Integer; cdecl;
+  Tavformat_flush = function(s: PAVFormatContext): Integer; cdecl;
   Tavformat_alloc_output_context2 = function(ctx: PPAVFormatContext; oformat: Pointer; format_name, filename: PAnsiChar): Integer; cdecl;
   Tavformat_new_stream = function(ctx: PAVFormatContext; codec: PAVCodec): PAVStream; cdecl;
   Tavformat_write_header = function(ctx: PAVFormatContext; options: Pointer): Integer; cdecl;
@@ -257,6 +258,7 @@ type
     class var av_find_best_stream: Tav_find_best_stream; // 最適な映像ストリームを探す関数
     class var av_read_frame: Tav_read_frame; // 次のパケットを読む関数
     class var av_seek_frame: Tav_seek_frame; // 指定位置へシークする関数
+    class var avformat_flush: Tavformat_flush; // 入力側の内部バッファを捨てる関数
     class var avcodec_find_decoder: Tavcodec_find_decoder; // コーデックIDからデコーダを探す関数
     class var avcodec_alloc_context3: Tavcodec_alloc_context3; // デコードコンテキストを確保する関数
     class var avcodec_parameters_to_context: Tavcodec_parameters_to_context; // ストリーム情報をデコードコンテキストへコピーする関数
@@ -380,6 +382,7 @@ begin
   av_find_best_stream := Tav_find_best_stream(LoadProc(FAvFormat, 'av_find_best_stream'));
   av_read_frame := Tav_read_frame(LoadProc(FAvFormat, 'av_read_frame'));
   av_seek_frame := Tav_seek_frame(LoadProc(FAvFormat, 'av_seek_frame'));
+  avformat_flush := Tavformat_flush(LoadProc(FAvFormat, 'avformat_flush'));
 
   avcodec_find_decoder := Tavcodec_find_decoder(LoadProc(FAvCodec, 'avcodec_find_decoder'));
   avcodec_find_decoder_by_name := Tavcodec_find_decoder_by_name(LoadProc(FAvCodec, 'avcodec_find_decoder_by_name'));

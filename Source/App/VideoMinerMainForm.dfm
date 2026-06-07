@@ -9775,10 +9775,10 @@ object VideoMinerMainForm: TVideoMinerMainForm
     TabOrder = 0
     OnMouseDown = TitleBarMouseDown
     object LabelAppTitle: TLabel
-      Left = 14
+      Left = 0
       Top = 0
-      Width = 61
-      Height = 15
+      Width = 582
+      Height = 34
       Align = alClient
       Caption = 'VideoMiner'
       Font.Charset = DEFAULT_CHARSET
@@ -9789,6 +9789,9 @@ object VideoMinerMainForm: TVideoMinerMainForm
       ParentFont = False
       Layout = tlCenter
       OnMouseDown = TitleBarMouseDown
+      ExplicitLeft = 14
+      ExplicitWidth = 61
+      ExplicitHeight = 15
     end
     object PanelCloseButton: TPanel
       Left = 674
@@ -9806,8 +9809,8 @@ object VideoMinerMainForm: TVideoMinerMainForm
       object LabelCloseButton: TLabel
         Left = 0
         Top = 0
-        Width = 8
-        Height = 17
+        Width = 46
+        Height = 34
         Align = alClient
         Alignment = taCenter
         Caption = 'X'
@@ -9821,6 +9824,8 @@ object VideoMinerMainForm: TVideoMinerMainForm
         OnClick = CloseButtonClick
         OnMouseEnter = CloseButtonMouseEnter
         OnMouseLeave = CloseButtonMouseLeave
+        ExplicitWidth = 8
+        ExplicitHeight = 17
       end
     end
     object PanelMaximizeButton: TPanel
@@ -9839,8 +9844,8 @@ object VideoMinerMainForm: TVideoMinerMainForm
       object LabelMaximizeButton: TLabel
         Left = 0
         Top = 0
-        Width = 11
-        Height = 17
+        Width = 46
+        Height = 34
         Align = alClient
         Alignment = taCenter
         Caption = #9633
@@ -9854,6 +9859,8 @@ object VideoMinerMainForm: TVideoMinerMainForm
         OnClick = MaximizeButtonClick
         OnMouseEnter = CaptionButtonMouseEnter
         OnMouseLeave = CaptionButtonMouseLeave
+        ExplicitWidth = 11
+        ExplicitHeight = 17
       end
     end
     object PanelMinimizeButton: TPanel
@@ -9872,8 +9879,8 @@ object VideoMinerMainForm: TVideoMinerMainForm
       object LabelMinimizeButton: TLabel
         Left = 0
         Top = 0
-        Width = 10
-        Height = 20
+        Width = 46
+        Height = 34
         Align = alClient
         Alignment = taCenter
         Caption = #8722
@@ -9887,6 +9894,8 @@ object VideoMinerMainForm: TVideoMinerMainForm
         OnClick = MinimizeButtonClick
         OnMouseEnter = CaptionButtonMouseEnter
         OnMouseLeave = CaptionButtonMouseLeave
+        ExplicitWidth = 10
+        ExplicitHeight = 20
       end
     end
   end

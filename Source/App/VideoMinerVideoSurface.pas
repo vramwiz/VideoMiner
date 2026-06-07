@@ -1,4 +1,4 @@
-unit VideoMinerVideoSurface;
+﻿unit VideoMinerVideoSurface;
 
 interface
 
@@ -223,13 +223,31 @@ end;
 
 procedure TVideoMinerVideoSurface.Clear;
 begin
+  CancelPendingSurfaceClick;
   FBitmap.SetSize(0, 0);
   FPanning := False;
+  FPanMoved := False;
+  FOverlayVisible := False;
   ResetZoom;
+  if FPreviousFileButton <> nil then
+    FPreviousFileButton.Visible := False;
+  if FFirstFrameButton <> nil then
+    FFirstFrameButton.Visible := False;
+  if FSkipBackwardButton <> nil then
+    FSkipBackwardButton.Visible := False;
+  if FPlayPauseButton <> nil then
+    FPlayPauseButton.Visible := False;
+  if FSkipForwardButton <> nil then
+    FSkipForwardButton.Visible := False;
+  if FLastFrameButton <> nil then
+    FLastFrameButton.Visible := False;
+  if FNextFileButton <> nil then
+    FNextFileButton.Visible := False;
   if FSeekBar <> nil then
     FSeekBar.SetProgress(0, 0);
   SetSeekBarVisible(False);
   Invalidate;
+  Update;
 end;
 
 function TVideoMinerVideoSurface.PrepareBgrx32Frame(Width, Height: Integer;
