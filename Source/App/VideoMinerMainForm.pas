@@ -67,6 +67,7 @@ type
     FPendingRestartPlayback: Boolean;
     FPendingRestartMs: Integer;
     FRestartPlaybackTimer: TTimer;
+    FBossMode: Boolean;
     FFullScreen: Boolean;
     FEndAction: TVideoMinerEndAction;
     FNormalWindowBounds: TVideoMinerWindowBounds;
@@ -113,6 +114,14 @@ type
     procedure StopPlayback;
     procedure VolumeOverlayChange(Sender: TObject; VolumePercent: Integer);
     procedure ChangeVolumeBy(DeltaPercent: Integer);
+    // 偽装画面の Return ボタンからボスが来たモードを解除する
+    procedure BossExitClick(Sender: TObject);
+    // マウス往復ジェスチャー成立時にボスが来たモードへ入る
+    procedure BossGesture(Sender: TObject);
+    // 再生と音声を止め、動画面を偽装画面へ切り替える
+    procedure EnterBossMode;
+    // 偽装画面を閉じ、通常の動画表示へ戻す
+    procedure ExitBossMode;
     function PlaybackActiveOrPending: Boolean;
     function CurrentPlaybackPositionMs: Integer;
     procedure SetTitleBarText(const Text: string);
@@ -194,6 +203,8 @@ begin
   TResizeEdgeHelper.AttachEdges(FVideoView.SurfaceControl,
     VIDEO_MINER_RESIZE_BORDER, [rdBottom, rdLeft, rdRight]);
   FVideoView.OnFirstFrameClick := FirstFrameOverlayClick;
+  FVideoView.OnBossExitClick := BossExitClick;
+  FVideoView.OnBossGesture := BossGesture;
   FVideoView.OnFullScreenClick := FullScreenOverlayClick;
   FVideoView.OnNavigateNextClick := NavigateNextOverlayClick;
   FVideoView.OnNavigatePreviousClick := NavigatePreviousOverlayClick;
@@ -982,6 +993,41 @@ begin
   FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
 end;
 
+procedure TVideoMinerMainForm.BossGesture(Sender: TObject);
+begin
+  EnterBossMode;
+end;
+
+procedure TVideoMinerMainForm.BossExitClick(Sender: TObject);
+begin
+  ExitBossMode;
+end;
+
+procedure TVideoMinerMainForm.EnterBossMode;
+begin
+  if FBossMode then
+    Exit;
+
+  StopPlayback;
+  FBossMode := True;
+  if FVideoView <> nil then
+    FVideoView.BossMode := True;
+  PanelTitleBar.Visible := False;
+  SetFocus;
+end;
+
+procedure TVideoMinerMainForm.ExitBossMode;
+begin
+  if not FBossMode then
+    Exit;
+
+  FBossMode := False;
+  if FVideoView <> nil then
+    FVideoView.BossMode := False;
+  PanelTitleBar.Visible := not FFullScreen;
+  SetFocus;
+end;
+
 // 再生を停止する
 procedure TVideoMinerMainForm.StopPlayback;
 begin
@@ -1417,6 +1463,19 @@ end;
 
 procedure TVideoMinerMainForm.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
+  if (Key = VK_ESCAPE) and FBossMode then
+  begin
+    ExitBossMode;
+    Key := 0;
+    Exit;
+  end;
+
+  if FBossMode then
+  begin
+    Key := 0;
+    Exit;
+  end;
+
   if (Key = VK_ESCAPE) and FFullScreen then
   begin
     ExitFullScreen;

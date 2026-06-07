@@ -3,21 +3,30 @@ unit VideoMinerVideoSurface;
 interface
 
 uses
-  Winapi.Windows, Winapi.Messages, System.Classes, System.Types, Vcl.Controls, Vcl.Graphics,
-  VideoMinerOverlay;
+  Winapi.Windows, Winapi.Messages, System.Classes, System.Types, Vcl.Controls,
+  Vcl.ExtCtrls, Vcl.Graphics, VideoMinerBossGesture, VideoMinerOverlay;
 
 type
   TVideoMinerVideoSurface = class(TCustomControl)
   private
     FBitmap: TBitmap;
+    FBossExitButtonRect: TRect;                          // boss     : 偽装画面の解除ボタン位置
+    FBossGestureDetector: TVideoMinerBossGestureDetector; // boss     : マウス往復ジェスチャー検出器
+    FBossMode: Boolean;                                  // boss     : 動画を隠して偽装画面を表示中か
     FPaintBuffer: TBitmap;
     FFirstFrameButton: TVideoMinerOverlayEdgeButton;
     FLastFrameButton: TVideoMinerOverlayEdgeButton;
     FNextFileButton: TVideoMinerOverlayFileNavButton;
+    FPanMoved: Boolean;
     FPanning: Boolean;
     FPanStartCenterX: Double;
     FPanStartCenterY: Double;
     FPanStartPoint: TPoint;
+    FPendingSurfaceClick: Boolean;
+    FSurfaceClickArmed: Boolean;
+    FSurfaceClickTimer: TTimer;
+    FOnBossExitClick: TNotifyEvent;                      // boss     : 偽装画面の解除ボタンが押された
+    FOnBossGesture: TNotifyEvent;                        // boss     : ボスが来たジェスチャーが成立した
     FOnEndActionClick: TNotifyEvent;
     FOnFirstFrameClick: TNotifyEvent;
     FOnFullScreenClick: TNotifyEvent;
@@ -41,8 +50,10 @@ type
     FZoomCenterX: Double;
     FZoomCenterY: Double;
     FZoomScale: Double;
+    procedure CancelPendingSurfaceClick;
     procedure ClampZoomCenter;
     function CanStartPan(const Point: TPoint): Boolean;
+    function CanStartSurfaceClick(const Point: TPoint): Boolean;
     function HitNextFileButton(const Point: TPoint): Boolean;
     function HitPreviousFileButton(const Point: TPoint): Boolean;
     procedure DrawFrame(Canvas: TCanvas; const DestRect: TRect);
@@ -54,6 +65,8 @@ type
     procedure InvalidateAllOverlayControls;
     procedure InvalidateOverlayControl(Control: TVideoMinerOverlayControl);
     procedure ResetZoom;
+    // ボスが来たモード中の描画/入力状態へ切り替える
+    procedure SetBossMode(Value: Boolean);
     procedure SetCanNavigateNext(Value: Boolean);
     procedure SetCanNavigatePrevious(Value: Boolean);
     procedure SetEndActionText(const Value: string);
@@ -61,6 +74,8 @@ type
     procedure SetFullScreen(Value: Boolean);
     procedure SetOverlayVisible(Value: Boolean);
     procedure SetOnFirstFrameClick(Value: TNotifyEvent);
+    procedure SetOnBossExitClick(Value: TNotifyEvent);
+    procedure SetOnBossGesture(Value: TNotifyEvent);
     procedure SetOnEndActionClick(Value: TNotifyEvent);
     procedure SetOnFullScreenClick(Value: TNotifyEvent);
     procedure SetOnLastFrameClick(Value: TNotifyEvent);
@@ -75,6 +90,7 @@ type
     procedure SetOnVolumeChange(Value: TVideoMinerOverlayVolumeEvent);
     procedure SetPlaybackActive(Value: Boolean);
     procedure SetVolumePercent(Value: Integer);
+    procedure SurfaceClickTimer(Sender: TObject);
     procedure WMEraseBkgnd(var Message: TWMEraseBkgnd); message WM_ERASEBKGND;
   protected
     procedure DblClick; override;
@@ -97,11 +113,14 @@ type
     procedure Present;
     procedure PresentImmediate;
     procedure SetSeekProgress(PositionMs, MaxMs: Integer);
+    property BossMode: Boolean read FBossMode write SetBossMode;
     property Bitmap: TBitmap read FBitmap;
     property CanNavigateNext: Boolean write SetCanNavigateNext;
     property CanNavigatePrevious: Boolean write SetCanNavigatePrevious;
     property EndActionText: string write SetEndActionText;
     property FullScreen: Boolean write SetFullScreen;
+    property OnBossExitClick: TNotifyEvent read FOnBossExitClick write SetOnBossExitClick;
+    property OnBossGesture: TNotifyEvent read FOnBossGesture write SetOnBossGesture;
     property OnEndActionClick: TNotifyEvent read FOnEndActionClick write SetOnEndActionClick;
     property OnFirstFrameClick: TNotifyEvent read FOnFirstFrameClick write SetOnFirstFrameClick;
     property OnFullScreenClick: TNotifyEvent read FOnFullScreenClick write SetOnFullScreenClick;
@@ -122,7 +141,8 @@ type
 implementation
 
 uses
-  System.Diagnostics, System.Math, System.SysUtils, VideoMinerDebugLog;
+  System.Diagnostics, System.Math, System.SysUtils, VideoMinerBossOverlay,
+  VideoMinerDebugLog;
 
 const
   VIDEO_SURFACE_MAX_ZOOM = 8.0;
@@ -136,6 +156,7 @@ begin
   DoubleBuffered := False;
 
   FBitmap := TBitmap.Create;
+  FBossGestureDetector := TVideoMinerBossGestureDetector.Create;
   FPaintBuffer := TBitmap.Create;
   FPaintBuffer.PixelFormat := pf32bit;
   FOverlayVisible := False;
@@ -149,6 +170,10 @@ begin
   FLastFrameButton := TVideoMinerOverlayEdgeButton.Create(edLast);
   FNextFileButton := TVideoMinerOverlayFileNavButton.Create(fndNext);
   FSeekBar := TVideoMinerOverlaySeekBar.Create;
+  FSurfaceClickTimer := TTimer.Create(Self);
+  FSurfaceClickTimer.Enabled := False;
+  FSurfaceClickTimer.Interval := GetDoubleClickTime + 20;
+  FSurfaceClickTimer.OnTimer := SurfaceClickTimer;
   FPreviousFileButton.Visible := False;
   FFirstFrameButton.Visible := False;
   FSkipBackwardButton.Visible := False;
@@ -161,6 +186,9 @@ end;
 
 destructor TVideoMinerVideoSurface.Destroy;
 begin
+  CancelPendingSurfaceClick;
+  FSurfaceClickTimer.Free;
+  FBossGestureDetector.Free;
   FSeekBar.Free;
   FNextFileButton.Free;
   FLastFrameButton.Free;
@@ -177,8 +205,20 @@ end;
 procedure TVideoMinerVideoSurface.DblClick;
 begin
   inherited DblClick;
+  if FBossMode then
+    Exit;
+
+  CancelPendingSurfaceClick;
   if Assigned(FOnFullScreenClick) then
     FOnFullScreenClick(Self);
+end;
+
+procedure TVideoMinerVideoSurface.CancelPendingSurfaceClick;
+begin
+  FPendingSurfaceClick := False;
+  FSurfaceClickArmed := False;
+  if FSurfaceClickTimer <> nil then
+    FSurfaceClickTimer.Enabled := False;
 end;
 
 procedure TVideoMinerVideoSurface.Clear;
@@ -403,6 +443,18 @@ begin
     not HitPreviousFileButton(Point) and not HitNextFileButton(Point);
 end;
 
+function TVideoMinerVideoSurface.CanStartSurfaceClick(
+  const Point: TPoint): Boolean;
+begin
+  Result := not ((FSeekBarVisible or ((FSeekBar <> nil) and FSeekBar.Dragging)) and
+    HitSeekBar(Point)) and
+    not (FOverlayVisible and HitAnyOverlayButton(Point)) and
+    not ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible and
+      HitPreviousFileButton(Point)) and
+    not ((FNextFileButton <> nil) and FNextFileButton.Visible and
+      HitNextFileButton(Point));
+end;
+
 procedure TVideoMinerVideoSurface.SetOverlayVisible(Value: Boolean);
 begin
   if FOverlayVisible = Value then
@@ -422,6 +474,27 @@ begin
   InvalidateAllOverlayControls;
 end;
 
+procedure TVideoMinerVideoSurface.SetBossMode(Value: Boolean);
+begin
+  if FBossMode = Value then
+    Exit;
+
+  FBossMode := Value;
+  CancelPendingSurfaceClick;
+  if FBossGestureDetector <> nil then
+    FBossGestureDetector.Reset;
+  if Value then
+  begin
+    SetOverlayVisible(False);
+    SetSeekBarVisible(False);
+    if FPreviousFileButton <> nil then
+      FPreviousFileButton.Visible := False;
+    if FNextFileButton <> nil then
+      FNextFileButton.Visible := False;
+  end;
+  Invalidate;
+end;
+
 procedure TVideoMinerVideoSurface.SetSeekBarVisible(Value: Boolean);
 begin
   if FSeekBarVisible = Value then
@@ -437,9 +510,22 @@ procedure TVideoMinerVideoSurface.MouseDown(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseDown(Button, Shift, X, Y);
+  if FBossMode then
+  begin
+    CancelPendingSurfaceClick;
+    Exit;
+  end;
+
+  if Button = mbLeft then
+  begin
+    CancelPendingSurfaceClick;
+    FSurfaceClickArmed := CanStartSurfaceClick(Point(X, Y));
+  end;
+
   if (Button = mbLeft) and CanStartPan(Point(X, Y)) then
   begin
     FPanning := True;
+    FPanMoved := False;
     FPanStartPoint := Point(X, Y);
     FPanStartCenterX := FZoomCenterX;
     FPanStartCenterY := FZoomCenterY;
@@ -488,11 +574,17 @@ begin
   inherited MouseMove(Shift, X, Y);
   MousePoint := Point(X, Y);
 
+  if FBossMode then
+    Exit;
+
   if FPanning then
   begin
     DestRect := FitRect;
     if not DestRect.IsEmpty then
     begin
+      if (Abs(MousePoint.X - FPanStartPoint.X) > 2) or
+         (Abs(MousePoint.Y - FPanStartPoint.Y) > 2) then
+        FPanMoved := True;
       SourceWidth := FBitmap.Width / FZoomScale;
       SourceHeight := FBitmap.Height / FZoomScale;
       FZoomCenterX := FPanStartCenterX -
@@ -504,6 +596,17 @@ begin
       ClampZoomCenter;
       Invalidate;
     end;
+    Exit;
+  end;
+
+  if (FBossGestureDetector <> nil) and
+     FBossGestureDetector.MouseMove(MousePoint, (Shift = []) and
+       not FSeekBarVisible and
+       not ((FSeekBar <> nil) and FSeekBar.Dragging)) then
+  begin
+    CancelPendingSurfaceClick;
+    if Assigned(FOnBossGesture) then
+      FOnBossGesture(Self);
     Exit;
   end;
 
@@ -540,16 +643,33 @@ begin
 
   if FSeekBarVisible and (FSeekBar <> nil) and FSeekBar.MouseMove(MousePoint) then
     InvalidateOverlayControl(FSeekBar);
+
 end;
 
 procedure TVideoMinerVideoSurface.MouseUp(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
+  if FBossMode then
+  begin
+    CancelPendingSurfaceClick;
+    if (Button = mbLeft) and PtInRect(FBossExitButtonRect, Point(X, Y)) and
+       Assigned(FOnBossExitClick) then
+      FOnBossExitClick(Self);
+    Exit;
+  end;
+
   if (Button = mbLeft) and FPanning then
   begin
     FPanning := False;
     MouseCapture := False;
+    if FSurfaceClickArmed and not FPanMoved and
+       CanStartSurfaceClick(Point(X, Y)) then
+    begin
+      FPendingSurfaceClick := True;
+      FSurfaceClickTimer.Enabled := True;
+    end;
+    FSurfaceClickArmed := False;
     Exit;
   end;
 
@@ -582,6 +702,12 @@ begin
       InvalidateOverlayControl(FPreviousFileButton);
     if (FNextFileButton <> nil) and FNextFileButton.MouseUp(Point(X, Y)) then
       InvalidateOverlayControl(FNextFileButton);
+    if FSurfaceClickArmed and CanStartSurfaceClick(Point(X, Y)) then
+    begin
+      FPendingSurfaceClick := True;
+      FSurfaceClickTimer.Enabled := True;
+    end;
+    FSurfaceClickArmed := False;
   end;
 end;
 
@@ -607,6 +733,12 @@ var
   RatioY: Double;
 begin
   Result := False;
+
+  if FBossMode then
+  begin
+    Result := True;
+    Exit;
+  end;
 
   if (FBitmap.Width <= 0) or (FBitmap.Height <= 0) then
     Exit;
@@ -675,6 +807,12 @@ begin
 {$ENDIF}
   if (ClientWidth <= 0) or (ClientHeight <= 0) then
     Exit;
+
+  if FBossMode then
+  begin
+    DrawVideoMinerBossOverlay(Canvas, ClientRect, FBossExitButtonRect);
+    Exit;
+  end;
 
   UsePaintBuffer := FOverlayVisible or FSeekBarVisible or
     ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible) or
@@ -862,6 +1000,16 @@ begin
     FPlayPauseButton.OnClick := Value;
 end;
 
+procedure TVideoMinerVideoSurface.SetOnBossExitClick(Value: TNotifyEvent);
+begin
+  FOnBossExitClick := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnBossGesture(Value: TNotifyEvent);
+begin
+  FOnBossGesture := Value;
+end;
+
 procedure TVideoMinerVideoSurface.SetOnEndActionClick(Value: TNotifyEvent);
 begin
   FOnEndActionClick := Value;
@@ -896,6 +1044,17 @@ begin
   FOnVolumeChange := Value;
   if FSeekBar <> nil then
     FSeekBar.OnVolumeChange := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SurfaceClickTimer(Sender: TObject);
+begin
+  FSurfaceClickTimer.Enabled := False;
+  if not FPendingSurfaceClick then
+    Exit;
+
+  FPendingSurfaceClick := False;
+  if Assigned(FOnPlayPauseClick) then
+    FOnPlayPauseClick(Self);
 end;
 
 procedure TVideoMinerVideoSurface.SetOnFirstFrameClick(Value: TNotifyEvent);

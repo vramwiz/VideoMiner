@@ -939,7 +939,7 @@ begin
   IconHeight := Max(58, Min(130, Round(Bounds.Height * 0.34)));
   IconTop := (Bounds.Height - IconHeight) div 2;
   PenWidth := Max(3, Round(IconWidth * 0.16));
-  BackgroundRect := Rect(5, Max(8, IconTop - 28), Bounds.Width - 5,
+  BackgroundRect := Rect(0, Max(8, IconTop - 28), Bounds.Width,
     Min(Bounds.Height - 8, IconTop + IconHeight + 28));
   BackgroundAlpha := 72;
   if Hovered then
@@ -981,7 +981,7 @@ begin
   if PreviewRect.IsEmpty then
     Exit;
 
-  Height := 72;
+  Height := 82;
   Width := Round(PreviewRect.Width * 0.88);
   Width := Max(160, Min(PreviewRect.Width - 32, Width));
   BottomOffset := Max(12, Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.045));
@@ -1347,11 +1347,13 @@ end;
 
 function TVideoMinerOverlaySeekBar.FullScreenButtonRect: TRect;
 var
+  RowTop: Integer;
   Size: Integer;
 begin
   Size := 34;
-  Result := Rect(Bounds.Width - Size - 14, Bounds.Height - Size - 10,
-    Bounds.Width - 14, Bounds.Height - 10);
+  RowTop := Bounds.Height - 38;
+  Result := Rect(Bounds.Width - Size - 14, RowTop - 3,
+    Bounds.Width - 14, RowTop - 3 + Size);
 end;
 
 function TVideoMinerOverlaySeekBar.MuteButtonRect: TRect;
@@ -1369,7 +1371,7 @@ function TVideoMinerOverlaySeekBar.VolumeLabelRect: TRect;
 var
   RowTop: Integer;
 begin
-  RowTop := Bounds.Height - 36;
+  RowTop := Bounds.Height - 38;
   Result := Rect(22, RowTop, 112, RowTop + 17);
 end;
 
@@ -1604,6 +1606,7 @@ var
   MuteRect: TRect;
   Text: string;
   TextSize: TSize;
+  TextTop: Integer;
   Track: TRect;
   TrackCenterY: Integer;
   VolumeFilledRect: TRect;
@@ -1657,8 +1660,9 @@ begin
   Canvas.Font.Color := clWhite;
   SetBkMode(Canvas.Handle, TRANSPARENT);
   TextSize := Canvas.TextExtent(Text);
+  TextTop := Bounds.Height - 38 + (17 - TextSize.cy) div 2;
   Canvas.TextOut(Bounds.Left + (Track.Left + Track.Right - TextSize.cx) div 2,
-    Bounds.Top + Bounds.Height - 29, Text);
+    Bounds.Top + TextTop, Text);
 
   VolumeTrack := VolumeTrackRect;
   VolumeLabel := VolumeLabelRect;

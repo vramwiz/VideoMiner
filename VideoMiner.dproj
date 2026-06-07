@@ -113,12 +113,15 @@
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2_Win64)'!=''">
         <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
+        <Icon_MainIcon>VideoMiner_Icon.ico</Icon_MainIcon>
     </PropertyGroup>
     <ItemGroup>
         <DelphiCompile Include="$(MainSource)">
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
         <DCCReference Include="Source\App\VideoMinerAudioPlayback.pas"/>
+        <DCCReference Include="Source\App\VideoMinerBossGesture.pas"/>
+        <DCCReference Include="Source\App\VideoMinerBossOverlay.pas"/>
         <DCCReference Include="Source\App\VideoMinerDebugLog.pas"/>
         <DCCReference Include="Source\App\VideoMinerMediaList.pas"/>
         <DCCReference Include="Source\App\VideoMinerOverlay.pas"/>

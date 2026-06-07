@@ -13,6 +13,7 @@ type
     function GetSurfaceControl: TWinControl;
     function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
       out BufferStride: Integer; out ErrorMessage: string): Boolean;
+    procedure SetBossMode(Value: Boolean);
     procedure SetCanNavigateNext(Value: Boolean);
     procedure SetCanNavigatePrevious(Value: Boolean);
     procedure SetEndActionText(const Value: string);
@@ -22,6 +23,8 @@ type
     procedure SetOnFullScreenClick(Value: TNotifyEvent);
     procedure SetOnLastFrameClick(Value: TNotifyEvent);
     procedure SetMuted(Value: Boolean);
+    procedure SetOnBossExitClick(Value: TNotifyEvent);
+    procedure SetOnBossGesture(Value: TNotifyEvent);
     procedure SetOnMuteClick(Value: TNotifyEvent);
     procedure SetOnNavigateNextClick(Value: TNotifyEvent);
     procedure SetOnNavigatePreviousClick(Value: TNotifyEvent);
@@ -47,10 +50,13 @@ type
     procedure Present(Bitmap: TBitmap);
     procedure PresentImmediate(Bitmap: TBitmap);
     procedure SetSeekProgress(PositionMs, MaxMs: Integer);
+    property BossMode: Boolean write SetBossMode;
     property CanNavigateNext: Boolean write SetCanNavigateNext;
     property CanNavigatePrevious: Boolean write SetCanNavigatePrevious;
     property EndActionText: string write SetEndActionText;
     property FullScreen: Boolean write SetFullScreen;
+    property OnBossExitClick: TNotifyEvent write SetOnBossExitClick;
+    property OnBossGesture: TNotifyEvent write SetOnBossGesture;
     property OnEndActionClick: TNotifyEvent write SetOnEndActionClick;
     property OnFirstFrameClick: TNotifyEvent write SetOnFirstFrameClick;
     property OnFullScreenClick: TNotifyEvent write SetOnFullScreenClick;
@@ -148,6 +154,12 @@ begin
     FSurface.OnPlayPauseClick := Value;
 end;
 
+procedure TVideoMinerVideoView.SetBossMode(Value: Boolean);
+begin
+  if FSurface <> nil then
+    FSurface.BossMode := Value;
+end;
+
 procedure TVideoMinerVideoView.SetFullScreen(Value: Boolean);
 begin
   if FSurface <> nil then
@@ -158,6 +170,18 @@ procedure TVideoMinerVideoView.SetOnFullScreenClick(Value: TNotifyEvent);
 begin
   if FSurface <> nil then
     FSurface.OnFullScreenClick := Value;
+end;
+
+procedure TVideoMinerVideoView.SetOnBossExitClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnBossExitClick := Value;
+end;
+
+procedure TVideoMinerVideoView.SetOnBossGesture(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnBossGesture := Value;
 end;
 
 procedure TVideoMinerVideoView.SetOnMuteClick(Value: TNotifyEvent);
