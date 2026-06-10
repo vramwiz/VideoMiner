@@ -537,6 +537,36 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
   - `Ctrl+Left` / `Ctrl+Right` は、前後のチャプター、または先頭/終了フレームへ移動する。
   - 終了時動作が `Loop` の場合は、現在位置を含むチャプター区間をループする。例: `先頭 - A - B - 終了` で A-B 間から再生した場合は、B まで再生したあと A へ戻る。
   - ループ戻り時に一部データで黒表示が残る場合があるが、現状はデータ依存の可能性が高いため保留する。
+- Check 機能の担当ユニット:
+  - `Source\App\VideoMinerOverlay.pas`
+    - `TVideoMinerOverlaySeekBar` が `Check` / `+` / `-` ボタンのヒットテスト、押下状態、描画、クリックイベント発火を担当する。
+    - `TVideoMinerOverlayChapter` / `TVideoMinerOverlayChapters` / severity / source 型を持ち、シークバー上の緑/黄/赤マーカーを描画する。
+  - `Source\App\VideoMinerVideoSurface.pas`
+    - `CurrentFrameCornersMostlyDark` が現在表示中の `FBitmap` の四隅をサンプリングし、暗いフレームかどうかを判定する。
+    - `CheckEnabled` と `Chapters` はシークバーへ渡す表示状態として扱う。
+  - `Source\App\VideoMinerVideoView.pas`
+    - メインフォームと動画サーフェスの間の薄い窓口。`CurrentFrameCornersMostlyDark`、`CheckEnabled`、`Chapters`、Check 関連クリックイベントを中継する。
+  - `Source\App\VideoMinerChapterManager.pas`
+    - チャプター配列、Check ON/OFF 状態、暗いフレーム継続時間、自動チェックマーカー統合、表示用チャプター抽出を担当する。
+    - 手動チャプターの追加/削除、保存/復元、チャプター移動先、ループ区間境界の計算もここへ移した。
+  - `Source\App\VideoMinerMainForm.pas`
+    - Check ボタンイベント、現在再生位置、現在フレームの暗さ判定結果を `VideoMinerChapterManager` へ渡す。
+    - Manager から表示用チャプターを受け取り、`VideoMinerVideoView.Chapters` へ反映する。
+  - `Source\App\VideoMinerSettings.pas`
+    - 手動チャプター位置だけを `%APPDATA%\VideoMiner\VideoMiner.ini` に保存/復元する。現状、自動チェック結果は保存しない。
+- メインフォーム肥大化防止の追加分割:
+  - `Source\App\VideoMinerFrameCheck.pas`
+    - `FrameCornersMostlyDark` で `TBitmap` の四隅サンプリング判定を担当する。
+    - `VideoMinerVideoSurface.CurrentFrameCornersMostlyDark` はこの関数へ委譲するだけにした。
+  - `Source\App\VideoMinerMediaOpen.pas`
+    - ファイル名/フォルダ/存在チェック、メイン/プレビューデコーダ open、フォルダ内メディアリスト構築を担当する。
+    - ファイル選択ダイアログの初期フォルダ決定、前回ファイル保存、前回ファイルの解決/検証もここへ移した。
+    - `VideoMinerMainForm.LoadVideoFile` は UI 状態リセット、タイトル/情報更新、初期フレーム表示、再生開始に寄せた。
+    - 存在しないファイルを指定した場合に現在状態を壊さないよう、`ValidateVideoMinerMediaFile` はリセット前に呼ぶ。
+  - `Source\App\VideoMinerPlaybackTiming.pas`
+    - FPS から timer interval / 最終フレーム位置を計算する処理を担当する。
+    - 音声同期の遅れ判定、ドロップ継続可否、終端付近判定、逆戻りフレーム判定、seek guard 許容判定、seek guard 初期フレーム数もここへ移した。
+    - 次に再生制御を分ける場合は、このユニットの純粋判定を使いながら `TimerPlaybackTimer` / `StartPlaybackAtMs` / `SeekToMs` を少しずつ薄くする。
 
 ### 解消済みの同期問題
 

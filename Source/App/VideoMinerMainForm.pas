@@ -9,8 +9,9 @@ uses
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
   Vcl.ExtCtrls, Vcl.Graphics, Vcl.StdCtrls, ActiveX, DropAgent, FFmpegDecoder,
   FFmpegDecoderTypes, ResizeEdges, ShortcutAction, VideoMinerAudioPlayback,
-  VideoMinerMediaList, VideoMinerDebugLog, VideoMinerSettings, VideoMinerShortcutBindings,
-  VideoMinerOverlay, VideoMinerVideoView,
+  VideoMinerChapterManager, VideoMinerMediaList, VideoMinerDebugLog,
+  VideoMinerMediaOpen, VideoMinerSettings, VideoMinerShortcutBindings,
+  VideoMinerOverlay, VideoMinerPlaybackTiming, VideoMinerVideoView,
   VideoMinerWindowChrome;
 
 const
@@ -67,12 +68,10 @@ type
     FPendingRestartPlayback: Boolean;
     FPendingRestartMs: Integer;
     FRestartPlaybackTimer: TTimer;
-    FAutoCheckDarkStartMs: Integer;
+    FChapterManager: TVideoMinerChapterManager;
     FLoopSegmentEndMs: Integer;
     FLoopSegmentStartMs: Integer;
     FBossMode: Boolean;
-    FChapters: TVideoMinerOverlayChapters;
-    FCheckEnabled: Boolean;
     FFullScreen: Boolean;
     FEndAction: TVideoMinerEndAction;
     FNormalWindowBounds: TVideoMinerWindowBounds;
@@ -85,9 +84,6 @@ type
     procedure InitializeShortcuts;
     procedure SetCaptionButtonColor(Sender: TObject; Color: TColor);
     procedure AddChapterOverlayClick(Sender: TObject);
-    procedure AddAutoCheckChapter(PositionMs: Integer;
-      Severity: TVideoMinerOverlayChapterSeverity);
-    function FindNearbyAutoCheckChapter(PositionMs: Integer): Integer;
     procedure MaybeAutoCheckFrame(PositionMs: Integer);
     procedure CheckOverlayClick(Sender: TObject);
     procedure DeleteChapterOverlayClick(Sender: TObject);
@@ -104,9 +100,7 @@ type
     procedure NavigateBy(Delta: Integer);
     procedure NavigateChapterBy(Delta: Integer);
     procedure OpenFromDialog;
-    procedure PrepareOpenDialogInitialDir;
     procedure LoadManualChapterState(const FileName: string);
-    procedure RememberLastMediaFile(const FileName: string);
     procedure SaveManualChapterState;
     procedure SaveAudioPlaybackSettings;
     procedure FirstFrameOverlayClick(Sender: TObject);
@@ -155,7 +149,6 @@ type
     function LoopStartPositionMs: Integer;
     function LoopSegmentEndPositionMs(PositionMs: Integer): Integer;
     function LoopSegmentStartPositionMs(PositionMs: Integer): Integer;
-    function LoopChapterVisible(const Chapter: TVideoMinerOverlayChapter): Boolean;
     procedure StartPlaybackAtMs(PositionMs: Integer; FrameAlreadyShown: Boolean = False);
     procedure RestartPlaybackTimer(Sender: TObject);
     function SyncVideoToAudio(var PositionMs: Integer; out ErrorMessage: string): Boolean;
@@ -190,21 +183,8 @@ implementation
 
 const
   COPYDATA_OPEN_FILE = $564D0001;
-  VIDEO_AUDIO_SYNC_LAG_MS = 60;
-  VIDEO_AUDIO_SEEK_LAG_MS = 120;
-  VIDEO_END_TOLERANCE_MS = 1500;
-  VIDEO_SEEK_GUARD_TOLERANCE_MS = 1500;
-  VIDEO_SEEK_GUARD_FRAMES = 5;
-  VIDEO_BACKWARD_FRAME_TOLERANCE_MS = 5;
-  VIDEO_DROP_FRAME_MAX = 90;
-  VIDEO_DROP_FRAME_BUDGET_MS = 25;
   UI_INFO_UPDATE_INTERVAL_MS = 250;
   SEEK_RESTART_DELAY_MS = 15;
-  AUTO_CHECK_DARK_YELLOW_DURATION_MS = 120;
-  AUTO_CHECK_DARK_RED_DURATION_MS = 500;
-  AUTO_CHECK_END_RED_ZONE_MS = 1500;
-  AUTO_CHECK_MARKER_MERGE_MS = 3000;
-  CHAPTER_NAVIGATION_IGNORE_NEAR_MS = 300;
   TITLE_BAR_COLOR = $00171617;
   CLOSE_BUTTON_HOVER_COLOR = $00232323;
   CAPTION_BUTTON_HOVER_COLOR = $00232323;
@@ -232,6 +212,7 @@ begin
   FPreviewDecoder := TFFmpegDecoder.Create;
   FAudioPlayback := TVideoMinerAudioPlayback.Create;
   FMediaList := TVideoMinerMediaList.Create;
+  FChapterManager := TVideoMinerChapterManager.Create;
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
   TResizeEdgeHelper.AttachEdges(PanelTitleBar, VIDEO_MINER_RESIZE_BORDER,
     [rdTop]);
@@ -254,8 +235,7 @@ begin
   FVideoView.OnAddChapterClick := AddChapterOverlayClick;
   FVideoView.OnCheckClick := CheckOverlayClick;
   FVideoView.OnDeleteChapterClick := DeleteChapterOverlayClick;
-  FCheckEnabled := False;
-  FVideoView.CheckEnabled := FCheckEnabled;
+  FVideoView.CheckEnabled := FChapterManager.CheckEnabled;
   RefreshChapterOverlay;
   UpdateEndActionButton;
   FPendingOpenFiles := TStringList.Create;
@@ -266,7 +246,6 @@ begin
   FCurrentVideoPositionMs := -1;
   FSeekPositionMs := 0;
   FSeekMaxMs := 0;
-  FAutoCheckDarkStartMs := -1;
   FLoopSegmentStartMs := -1;
   FLoopSegmentEndMs := -1;
   FPendingRestartPlayback := False;
@@ -302,6 +281,7 @@ begin
   FPendingOpenFiles.Free;
   FShortcuts.Free;
   FVideoView.Free;
+  FChapterManager.Free;
   FMediaList.Free;
   FAudioPlayback.Free;
   FPreviewDecoder.Free;
@@ -536,165 +516,66 @@ begin
 end;
 
 procedure TVideoMinerMainForm.AddChapterOverlayClick(Sender: TObject);
-var
-  Chapter: TVideoMinerOverlayChapter;
-  Index: Integer;
 begin
-  if FSeekMaxMs <= 0 then
+  if FChapterManager = nil then
     Exit;
 
-  Chapter.PositionMs := CurrentPlaybackPositionMs;
-  Chapter.Severity := csGreen;
-  Chapter.Source := chsUser;
-  Index := Length(FChapters);
-  SetLength(FChapters, Index + 1);
-  FChapters[Index] := Chapter;
+  FChapterManager.AddManualChapter(CurrentPlaybackPositionMs, FSeekMaxMs);
   RefreshChapterOverlay;
-end;
-
-procedure TVideoMinerMainForm.AddAutoCheckChapter(PositionMs: Integer;
-  Severity: TVideoMinerOverlayChapterSeverity);
-var
-  Chapter: TVideoMinerOverlayChapter;
-  Index: Integer;
-begin
-  if PositionMs < 0 then
-    Exit;
-
-  Index := FindNearbyAutoCheckChapter(PositionMs);
-  if Index >= 0 then
-  begin
-    if Ord(Severity) > Ord(FChapters[Index].Severity) then
-    begin
-      FChapters[Index].Severity := Severity;
-      RefreshChapterOverlay;
-    end;
-    Exit;
-  end;
-
-  Chapter.PositionMs := Max(0, Min(FSeekMaxMs, PositionMs));
-  Chapter.Severity := Severity;
-  Chapter.Source := chsAutoCheck;
-  Index := Length(FChapters);
-  SetLength(FChapters, Index + 1);
-  FChapters[Index] := Chapter;
-  RefreshChapterOverlay;
-  ConfigureLoopSegment(CurrentPlaybackPositionMs);
-  SaveManualChapterState;
-end;
-
-function TVideoMinerMainForm.FindNearbyAutoCheckChapter(PositionMs: Integer): Integer;
-var
-  I: Integer;
-begin
-  Result := -1;
-
-  for I := 0 to High(FChapters) do
-  begin
-    if (FChapters[I].Source = chsAutoCheck) and
-       (Abs(FChapters[I].PositionMs - PositionMs) <= AUTO_CHECK_MARKER_MERGE_MS) then
-    begin
-      Result := I;
-      Exit;
-    end;
-  end;
 end;
 
 procedure TVideoMinerMainForm.MaybeAutoCheckFrame(PositionMs: Integer);
 var
-  DarkDurationMs: Integer;
-  Severity: TVideoMinerOverlayChapterSeverity;
+  Changed: Boolean;
 begin
-  if (not FCheckEnabled) or (PositionMs < 0) or (FVideoView = nil) then
+  if (FChapterManager = nil) or (FVideoView = nil) then
+    Exit;
+
+  if not FChapterManager.CheckEnabled then
   begin
-    FAutoCheckDarkStartMs := -1;
+    FChapterManager.MaybeAutoCheckFrame(PositionMs, False, FSeekMaxMs);
     Exit;
   end;
 
-  if not FVideoView.CurrentFrameCornersMostlyDark then
+  Changed := FChapterManager.MaybeAutoCheckFrame(PositionMs,
+    FVideoView.CurrentFrameCornersMostlyDark, FSeekMaxMs);
+  if Changed then
   begin
-    FAutoCheckDarkStartMs := -1;
-    Exit;
+    RefreshChapterOverlay;
+    ConfigureLoopSegment(CurrentPlaybackPositionMs);
+    SaveManualChapterState;
   end;
-
-  if FAutoCheckDarkStartMs < 0 then
-    FAutoCheckDarkStartMs := PositionMs;
-
-  DarkDurationMs := PositionMs - FAutoCheckDarkStartMs;
-  if DarkDurationMs < AUTO_CHECK_DARK_YELLOW_DURATION_MS then
-    Exit;
-
-  Severity := csYellow;
-  if (DarkDurationMs >= AUTO_CHECK_DARK_RED_DURATION_MS) or
-     (FSeekMaxMs - PositionMs <= AUTO_CHECK_END_RED_ZONE_MS) then
-    Severity := csRed;
-
-  AddAutoCheckChapter(FAutoCheckDarkStartMs, Severity);
 end;
 
 procedure TVideoMinerMainForm.CheckOverlayClick(Sender: TObject);
 begin
-  FCheckEnabled := not FCheckEnabled;
-  if not FCheckEnabled then
-    FAutoCheckDarkStartMs := -1;
+  if FChapterManager = nil then
+    Exit;
+
+  FChapterManager.ToggleCheckEnabled;
   if FVideoView <> nil then
-    FVideoView.CheckEnabled := FCheckEnabled;
+    FVideoView.CheckEnabled := FChapterManager.CheckEnabled;
   RefreshChapterOverlay;
 end;
 
 procedure TVideoMinerMainForm.DeleteChapterOverlayClick(Sender: TObject);
-var
-  BestDelta: Integer;
-  BestIndex: Integer;
-  Delta: Integer;
-  I: Integer;
-  PositionMs: Integer;
 begin
-  BestDelta := MaxInt;
-  BestIndex := -1;
-  PositionMs := CurrentPlaybackPositionMs;
-
-  for I := 0 to High(FChapters) do
-  begin
-    if FChapters[I].Source <> chsUser then
-      Continue;
-
-    Delta := Abs(FChapters[I].PositionMs - PositionMs);
-    if Delta < BestDelta then
-    begin
-      BestDelta := Delta;
-      BestIndex := I;
-    end;
-  end;
-
-  if (BestIndex < 0) or (BestDelta > 3000) then
+  if FChapterManager = nil then
     Exit;
 
-  for I := BestIndex to High(FChapters) - 1 do
-    FChapters[I] := FChapters[I + 1];
-  SetLength(FChapters, Length(FChapters) - 1);
+  if not FChapterManager.DeleteNearestManualChapter(CurrentPlaybackPositionMs,
+    FSeekMaxMs) then
+    Exit;
+
   RefreshChapterOverlay;
   ConfigureLoopSegment(CurrentPlaybackPositionMs);
   SaveManualChapterState;
 end;
 
 procedure TVideoMinerMainForm.RefreshChapterOverlay;
-var
-  DisplayChapters: TVideoMinerOverlayChapters;
-  I: Integer;
 begin
-  SetLength(DisplayChapters, 0);
-  for I := 0 to High(FChapters) do
-  begin
-    if (FChapters[I].Source = chsAutoCheck) and not FCheckEnabled then
-      Continue;
-
-    SetLength(DisplayChapters, Length(DisplayChapters) + 1);
-    DisplayChapters[High(DisplayChapters)] := FChapters[I];
-  end;
-
-  if FVideoView <> nil then
-    FVideoView.Chapters := DisplayChapters;
+  if (FVideoView <> nil) and (FChapterManager <> nil) then
+    FVideoView.Chapters := FChapterManager.DisplayChapters;
 end;
 
 procedure TVideoMinerMainForm.UpdateEndActionButton;
@@ -839,89 +720,26 @@ end;
 
 procedure TVideoMinerMainForm.OpenFromDialog;
 begin
-  PrepareOpenDialogInitialDir;
+  OpenDialogVideo.InitialDir := VideoMinerOpenDialogInitialDir(FVideoFile);
   if OpenDialogVideo.Execute then
     LoadVideoFile(OpenDialogVideo.FileName, False);
 end;
 
-procedure TVideoMinerMainForm.PrepareOpenDialogInitialDir;
-var
-  Folder: string;
-  LastMedia: TVideoMinerLastMedia;
-begin
-  Folder := '';
-  if FVideoFile <> '' then
-    Folder := ExtractFilePath(FVideoFile);
-
-  if (Folder = '') or (not DirectoryExists(Folder)) then
-  begin
-    LastMedia := LoadLastMedia;
-    Folder := LastMedia.Folder;
-  end;
-
-  if (Folder <> '') and DirectoryExists(Folder) then
-    OpenDialogVideo.InitialDir := Folder
-  else
-    OpenDialogVideo.InitialDir := '';
-end;
-
-procedure TVideoMinerMainForm.RememberLastMediaFile(const FileName: string);
-var
-  Folder: string;
-begin
-  if FileName = '' then
-    Exit;
-
-  Folder := ExcludeTrailingPathDelimiter(ExtractFilePath(FileName));
-  SaveLastMedia(Folder, FileName);
-end;
-
 procedure TVideoMinerMainForm.LoadManualChapterState(const FileName: string);
-var
-  Chapter: TVideoMinerOverlayChapter;
-  I: Integer;
-  Index: Integer;
-  Positions: TVideoMinerChapterPositions;
 begin
-  if FileName = '' then
+  if FChapterManager = nil then
     Exit;
 
-  Positions := LoadManualChapterPositions(FileName);
-  for I := 0 to High(Positions) do
-  begin
-    if Positions[I] < 0 then
-      Continue;
-
-    Chapter.PositionMs := Max(0, Min(FSeekMaxMs, Positions[I]));
-    Chapter.Severity := csGreen;
-    Chapter.Source := chsUser;
-    Index := Length(FChapters);
-    SetLength(FChapters, Index + 1);
-    FChapters[Index] := Chapter;
-  end;
+  FChapterManager.LoadManualChapterState(FileName, FSeekMaxMs);
   RefreshChapterOverlay;
 end;
 
 procedure TVideoMinerMainForm.SaveManualChapterState;
-var
-  Chapter: TVideoMinerOverlayChapter;
-  Index: Integer;
-  Positions: TVideoMinerChapterPositions;
 begin
-  if FVideoFile = '' then
+  if FChapterManager = nil then
     Exit;
 
-  SetLength(Positions, 0);
-  for Chapter in FChapters do
-  begin
-    if Chapter.Source <> chsUser then
-      Continue;
-
-    Index := Length(Positions);
-    SetLength(Positions, Index + 1);
-    Positions[Index] := Max(0, Min(FSeekMaxMs, Chapter.PositionMs));
-  end;
-  SaveManualChapterPositions(FVideoFile, Positions);
+  FChapterManager.SaveManualChapterState(FVideoFile, FSeekMaxMs);
 end;
 
 procedure TVideoMinerMainForm.SaveAudioPlaybackSettings;
@@ -985,31 +803,17 @@ end;
 function TVideoMinerMainForm.LoadVideoFile(const FileName: string; AutoPlay: Boolean): Boolean;
 var
   ErrorMessage: string;
-  Folder: string;
-  PreviewInfo: TVideoInfo;
+  OpenResult: TVideoMinerMediaOpenResult;
 begin
   Result := False;
 
-  if FileName = '' then
+  if not ValidateVideoMinerMediaFile(FileName, ErrorMessage) then
   begin
-    SetStatusCaption('File name is empty.');
+    SetStatusCaption(ErrorMessage);
     Exit;
   end;
 
   SaveManualChapterState;
-
-  Folder := ExtractFilePath(FileName);
-  if (Folder <> '') and (not DirectoryExists(Folder)) then
-  begin
-    SetStatusCaption('Folder not found: ' + Folder);
-    Exit;
-  end;
-
-  if not FileExists(FileName) then
-  begin
-    SetStatusCaption('File not found: ' + FileName);
-    Exit;
-  end;
 
   TimerPlayback.Enabled := False;
   FRestartPlaybackTimer.Enabled := False;
@@ -1020,10 +824,9 @@ begin
   FPendingRestartMs := -1;
   FCurrentVideoPositionMs := -1;
   FSeekGuardRemaining := 0;
-  FAutoCheckDarkStartMs := -1;
   FLoopSegmentStartMs := -1;
   FLoopSegmentEndMs := -1;
-  SetLength(FChapters, 0);
+  FChapterManager.Clear;
   FVideoView.Clear;
   RefreshChapterOverlay;
 
@@ -1035,32 +838,20 @@ begin
     FUpdatingSeek := False;
   end;
 
-  if not FDecoder.Open(FileName, FVideoInfo, ErrorMessage) then
+  if not OpenVideoMinerMediaFile(FileName, FDecoder, FPreviewDecoder,
+    FMediaList, OpenResult) then
   begin
     FVideoFile := '';
-    FMediaList.Clear;
     FVideoView.PlaybackActive := False;
     Caption := 'VideoMiner';
     SetTitleBarText(Caption);
     UpdateNavigationButtons;
-    SetStatusCaption('Failed to open video: ' + ErrorMessage);
+    SetStatusCaption(OpenResult.ErrorMessage);
     Exit;
   end;
 
-  if not FPreviewDecoder.Open(FileName, PreviewInfo, ErrorMessage) then
-  begin
-    FDecoder.Close;
-    FVideoFile := '';
-    FMediaList.Clear;
-    Caption := 'VideoMiner';
-    SetTitleBarText(Caption);
-    UpdateNavigationButtons;
-    SetStatusCaption('Failed to open preview decoder: ' + ErrorMessage);
-    Exit;
-  end;
-
-  FMediaList.BuildForFile(FileName);
-  FVideoFile := FileName;
+  FVideoInfo := OpenResult.Info;
+  FVideoFile := OpenResult.FileName;
   Caption := Format('%s (%d/%d)', [ExtractFileName(FVideoFile),
     FMediaList.CurrentIndex + 1, FMediaList.Count]);
   SetTitleBarText(Caption);
@@ -1073,12 +864,7 @@ begin
     FUpdatingSeek := False;
   end;
 
-  if FVideoInfo.Fps > 0 then
-    TimerPlayback.Interval := Round(1000 / FVideoInfo.Fps)
-  else
-    TimerPlayback.Interval := 33;
-  if TimerPlayback.Interval < 1 then
-    TimerPlayback.Interval := 1;
+  TimerPlayback.Interval := VideoMinerTimerIntervalMs(FVideoInfo.Fps);
 
   LoadManualChapterState(FVideoFile);
   UpdateNavigationButtons;
@@ -1089,7 +875,7 @@ begin
   if AutoPlay then
     PlayFromCurrentPosition;
 
-  RememberLastMediaFile(FileName);
+  RememberVideoMinerMediaFile(FileName);
   Result := True;
 end;
 
@@ -1100,36 +886,15 @@ end;
 
 function TVideoMinerMainForm.OpenRememberedFile: Boolean;
 var
+  ErrorMessage: string;
   FileName: string;
-  Folder: string;
-  LastMedia: TVideoMinerLastMedia;
 begin
   Result := False;
-  LastMedia := LoadLastMedia;
-  if not LastMedia.Available then
-    Exit;
 
-  Folder := LastMedia.Folder;
-  FileName := LastMedia.FileName;
-  if (FileName <> '') and (ExtractFilePath(FileName) = '') and
-     (Folder <> '') then
-    FileName := IncludeTrailingPathDelimiter(Folder) + FileName;
-
-  if (Folder <> '') and (not DirectoryExists(Folder)) then
+  if not ResolveRememberedVideoMinerMediaFile(FileName, ErrorMessage) then
   begin
-    SetStatusCaption('Last folder not found: ' + Folder);
-    Exit;
-  end;
-
-  if FileName = '' then
-  begin
-    SetStatusCaption('Last file is not stored.');
-    Exit;
-  end;
-
-  if not FileExists(FileName) then
-  begin
-    SetStatusCaption('Last file not found: ' + FileName);
+    if ErrorMessage <> '' then
+      SetStatusCaption(ErrorMessage);
     Exit;
   end;
 
@@ -1398,11 +1163,10 @@ begin
     if GuardingSeek then
       ConvertFrame := False;
 
-    if (AudioPositionMs >= 0) and (FCurrentVideoPositionMs >= 0) and
-       (FCurrentVideoPositionMs < AudioPositionMs - VIDEO_AUDIO_SYNC_LAG_MS) then
+    if VideoMinerVideoLagsAudio(FCurrentVideoPositionMs, AudioPositionMs) then
     begin
-      if (DropCount < VIDEO_DROP_FRAME_MAX) and
-         (DropWatch.ElapsedMilliseconds < VIDEO_DROP_FRAME_BUDGET_MS) then
+      if VideoMinerShouldDropFrame(FCurrentVideoPositionMs, AudioPositionMs,
+        DropCount, DropWatch.ElapsedMilliseconds) then
       begin
         ConvertFrame := False;
         Inc(DropCount);
@@ -1417,7 +1181,7 @@ begin
           Break;
         end;
 
-        if FSeekMaxMs - AudioPositionMs <= VIDEO_END_TOLERANCE_MS then
+        if VideoMinerNearEnd(FSeekMaxMs, AudioPositionMs) then
         begin
           ErrorMessage := '';
           PositionMs := AudioPositionMs;
@@ -1465,9 +1229,8 @@ begin
     if DebugLogEnabled then
       DecodeMs := DecodeMs + StepWatch.Elapsed.TotalMilliseconds;
 
-    if UseScratchFrame and (PositionMs >= 0) and
-       (FCurrentVideoPositionMs >= 0) and
-       (PositionMs + VIDEO_BACKWARD_FRAME_TOLERANCE_MS < FCurrentVideoPositionMs) then
+    if UseScratchFrame and
+       VideoMinerBackwardScratchFrame(PositionMs, FCurrentVideoPositionMs) then
     begin
       if DebugLogEnabled then
         WriteVideoMinerDebugLog(Format(
@@ -1480,7 +1243,7 @@ begin
     if GuardingSeek and (PositionMs >= 0) then
     begin
       Dec(FSeekGuardRemaining);
-      if Abs(PositionMs - FSeekGuardTargetMs) > VIDEO_SEEK_GUARD_TOLERANCE_MS then
+      if not VideoMinerSeekGuardAccepts(FSeekGuardTargetMs, PositionMs) then
       begin
         if DebugLogEnabled then
           WriteVideoMinerDebugLog(Format(
@@ -1610,51 +1373,15 @@ end;
 
 procedure TVideoMinerMainForm.NavigateChapterBy(Delta: Integer);
 var
-  BestPositionMs: Integer;
-  Chapter: TVideoMinerOverlayChapter;
-  CurrentMs: Integer;
-  LastPositionMs: Integer;
+  TargetMs: Integer;
 begin
-  if (Delta = 0) or (FSeekMaxMs <= 0) then
+  if (FChapterManager = nil) or (Delta = 0) or (FSeekMaxMs <= 0) then
     Exit;
 
-  CurrentMs := CurrentPlaybackPositionMs;
-  BestPositionMs := -1;
-  LastPositionMs := LastFrameSeekPositionMs;
-  if Delta > 0 then
-  begin
-    if LastPositionMs > CurrentMs + CHAPTER_NAVIGATION_IGNORE_NEAR_MS then
-      BestPositionMs := LastPositionMs;
-  end
-  else
-  begin
-    if CurrentMs - CHAPTER_NAVIGATION_IGNORE_NEAR_MS > 0 then
-      BestPositionMs := 0;
-  end;
-
-  for Chapter in FChapters do
-  begin
-    if (Chapter.Source = chsAutoCheck) and not FCheckEnabled then
-      Continue;
-
-    if Delta > 0 then
-    begin
-      if Chapter.PositionMs <= CurrentMs + CHAPTER_NAVIGATION_IGNORE_NEAR_MS then
-        Continue;
-      if (BestPositionMs < 0) or (Chapter.PositionMs < BestPositionMs) then
-        BestPositionMs := Chapter.PositionMs;
-    end
-    else
-    begin
-      if Chapter.PositionMs >= CurrentMs - CHAPTER_NAVIGATION_IGNORE_NEAR_MS then
-        Continue;
-      if (BestPositionMs < 0) or (Chapter.PositionMs > BestPositionMs) then
-        BestPositionMs := Chapter.PositionMs;
-    end;
-  end;
-
-  if BestPositionMs >= 0 then
-    SeekToMs(BestPositionMs);
+  TargetMs := FChapterManager.FindNavigationTarget(Delta,
+    CurrentPlaybackPositionMs, LastFrameSeekPositionMs);
+  if TargetMs >= 0 then
+    SeekToMs(TargetMs);
 end;
 
 procedure TVideoMinerMainForm.SeekToMs(PositionMs: Integer; ResumeIfPlaying: Boolean);
@@ -1763,73 +1490,33 @@ begin
 end;
 
 function TVideoMinerMainForm.LastFrameSeekPositionMs: Integer;
-var
-  FrameDurationMs: Integer;
 begin
-  Result := FSeekMaxMs;
-  if Result <= 0 then
-    Exit;
-
-  if FVideoInfo.Fps > 0 then
-    FrameDurationMs := Max(1, Ceil(1000 / FVideoInfo.Fps))
-  else
-    FrameDurationMs := 33;
-
-  Result := Max(0, FSeekMaxMs - FrameDurationMs);
+  Result := VideoMinerLastFrameSeekPositionMs(FSeekMaxMs, FVideoInfo.Fps);
 end;
 
 function TVideoMinerMainForm.LoopStartPositionMs: Integer;
-var
-  Chapter: TVideoMinerOverlayChapter;
 begin
-  Result := 0;
-  for Chapter in FChapters do
-  begin
-    if (Chapter.Source = chsAutoCheck) and not FCheckEnabled then
-      Continue;
-
-    if Chapter.PositionMs > Result then
-      Result := Chapter.PositionMs;
-  end;
-  Result := Max(0, Min(LastFrameSeekPositionMs, Result));
-end;
-
-function TVideoMinerMainForm.LoopChapterVisible(
-  const Chapter: TVideoMinerOverlayChapter): Boolean;
-begin
-  Result := (Chapter.Source <> chsAutoCheck) or FCheckEnabled;
+  if FChapterManager = nil then
+    Result := 0
+  else
+    Result := FChapterManager.LoopStartPositionMs(LastFrameSeekPositionMs);
 end;
 
 function TVideoMinerMainForm.LoopSegmentStartPositionMs(PositionMs: Integer): Integer;
-var
-  Chapter: TVideoMinerOverlayChapter;
 begin
-  Result := 0;
-  for Chapter in FChapters do
-  begin
-    if not LoopChapterVisible(Chapter) then
-      Continue;
-
-    if (Chapter.PositionMs <= PositionMs) and (Chapter.PositionMs > Result) then
-      Result := Chapter.PositionMs;
-  end;
-  Result := Max(0, Min(LastFrameSeekPositionMs, Result));
+  if FChapterManager = nil then
+    Result := 0
+  else
+    Result := FChapterManager.LoopSegmentStartPositionMs(PositionMs,
+      LastFrameSeekPositionMs);
 end;
 
 function TVideoMinerMainForm.LoopSegmentEndPositionMs(PositionMs: Integer): Integer;
-var
-  Chapter: TVideoMinerOverlayChapter;
 begin
   Result := LastFrameSeekPositionMs;
-  for Chapter in FChapters do
-  begin
-    if not LoopChapterVisible(Chapter) then
-      Continue;
-
-    if (Chapter.PositionMs > PositionMs) and (Chapter.PositionMs < Result) then
-      Result := Chapter.PositionMs;
-  end;
-  Result := Max(0, Min(LastFrameSeekPositionMs, Result));
+  if FChapterManager <> nil then
+    Result := FChapterManager.LoopSegmentEndPositionMs(PositionMs,
+      LastFrameSeekPositionMs);
 end;
 
 procedure TVideoMinerMainForm.ConfigureLoopSegment(PositionMs: Integer);
@@ -1941,7 +1628,7 @@ begin
   AudioStartMs := StepWatch.Elapsed.TotalMilliseconds;
 
   FSeekGuardTargetMs := TargetMs;
-  FSeekGuardRemaining := VIDEO_SEEK_GUARD_FRAMES;
+  FSeekGuardRemaining := VideoMinerDefaultSeekGuardFrames;
   TimerPlayback.Enabled := True;
   FVideoView.PlaybackActive := True;
   WriteVideoMinerDebugLog(Format(
@@ -1969,7 +1656,7 @@ begin
   if AudioPositionMs > FSeekMaxMs then
     AudioPositionMs := FSeekMaxMs;
 
-  if AudioPositionMs - PositionMs <= VIDEO_AUDIO_SEEK_LAG_MS then
+  if not VideoMinerShouldSeekVideoToAudio(PositionMs, AudioPositionMs) then
     Exit;
 
   Result := FVideoView.ShowFrameAt(FDecoder, AudioPositionMs, ErrorMessage);
@@ -1979,7 +1666,7 @@ begin
     FCurrentVideoPositionMs := AudioPositionMs;
   end;
   if (not Result) and
-     (FSeekMaxMs - AudioPositionMs <= VIDEO_END_TOLERANCE_MS) then
+     VideoMinerNearEnd(FSeekMaxMs, AudioPositionMs) then
   begin
     ErrorMessage := '';
     PositionMs := AudioPositionMs;

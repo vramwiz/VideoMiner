@@ -156,24 +156,12 @@ implementation
 
 uses
   System.Diagnostics, System.Math, System.SysUtils, VideoMinerBossOverlay,
-  VideoMinerDebugLog;
-
-type
-  TBgraQuad = packed record
-    B: Byte;
-    G: Byte;
-    R: Byte;
-    A: Byte;
-  end;
-  TBgraQuadArray = array[0..MaxInt div SizeOf(TBgraQuad) - 1] of TBgraQuad;
-  PBgraQuadArray = ^TBgraQuadArray;
+  VideoMinerDebugLog, VideoMinerFrameCheck;
 
 const
   VIDEO_SURFACE_MAX_ZOOM = 8.0;
   VIDEO_SURFACE_MIN_ZOOM = 1.0;
   VIDEO_SURFACE_WHEEL_ZOOM_STEP = 1.20;
-  VIDEO_SURFACE_DARK_CORNER_SIZE = 8;
-  VIDEO_SURFACE_DARK_CORNER_THRESHOLD = 18;
 
 constructor TVideoMinerVideoSurface.Create(AOwner: TComponent);
 begin
@@ -301,43 +289,8 @@ begin
 end;
 
 function TVideoMinerVideoSurface.CurrentFrameCornersMostlyDark: Boolean;
-var
-  CornerHeight: Integer;
-  CornerWidth: Integer;
-  function CornerIsDark(Left, Top: Integer): Boolean;
-  var
-    Line: PBgraQuadArray;
-    Pixel: TBgraQuad;
-    Total: Int64;
-    X: Integer;
-    Y: Integer;
-  begin
-    Total := 0;
-    for Y := Top to Top + CornerHeight - 1 do
-    begin
-      Line := FBitmap.ScanLine[Y];
-      for X := Left to Left + CornerWidth - 1 do
-      begin
-        Pixel := Line[X];
-        Total := Total + Pixel.R + Pixel.G + Pixel.B;
-      end;
-    end;
-
-    Result := Total <= Int64(CornerWidth) * CornerHeight * 3 *
-      VIDEO_SURFACE_DARK_CORNER_THRESHOLD;
-  end;
 begin
-  Result := False;
-  if (FBitmap = nil) or (FBitmap.PixelFormat <> pf32bit) or
-     (FBitmap.Width <= 0) or (FBitmap.Height <= 0) then
-    Exit;
-
-  CornerWidth := Min(VIDEO_SURFACE_DARK_CORNER_SIZE, FBitmap.Width);
-  CornerHeight := Min(VIDEO_SURFACE_DARK_CORNER_SIZE, FBitmap.Height);
-  Result := CornerIsDark(0, 0) and
-    CornerIsDark(FBitmap.Width - CornerWidth, 0) and
-    CornerIsDark(0, FBitmap.Height - CornerHeight) and
-    CornerIsDark(FBitmap.Width - CornerWidth, FBitmap.Height - CornerHeight);
+  Result := FrameCornersMostlyDark(FBitmap);
 end;
 
 procedure TVideoMinerVideoSurface.ResetZoom;
