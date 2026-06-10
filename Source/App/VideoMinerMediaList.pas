@@ -3,7 +3,7 @@ unit VideoMinerMediaList;
 interface
 
 uses
-  System.Classes, System.SysUtils;
+  System.Classes, System.IOUtils, System.SysUtils;
 
 type
   TVideoMinerMediaList = class
@@ -26,6 +26,37 @@ type
   end;
 
 implementation
+
+type
+  TMediaFileSortInfo = class
+  public
+    SortTime: TDateTime;
+  end;
+
+function CompareMediaFilesByTime(List: TStringList; Index1, Index2: Integer): Integer;
+var
+  Info1: TMediaFileSortInfo;
+  Info2: TMediaFileSortInfo;
+begin
+  Info1 := TMediaFileSortInfo(List.Objects[Index1]);
+  Info2 := TMediaFileSortInfo(List.Objects[Index2]);
+
+  if Info1.SortTime > Info2.SortTime then
+    Result := -1
+  else if Info1.SortTime < Info2.SortTime then
+    Result := 1
+  else
+    Result := CompareText(ExtractFileName(List[Index1]), ExtractFileName(List[Index2]));
+end;
+
+function GetFileCreationTime(const FileName: string): TDateTime;
+begin
+  try
+    Result := TFile.GetCreationTime(FileName);
+  except
+    Result := 0;
+  end;
+end;
 
 constructor TVideoMinerMediaList.Create;
 begin
@@ -58,12 +89,12 @@ var
   Files: TStringList;
   I: Integer;
   Candidate: string;
+  SortInfo: TMediaFileSortInfo;
 begin
   Folder := IncludeTrailingPathDelimiter(ExtractFilePath(FileName));
   Files := TStringList.Create;
   try
     Files.CaseSensitive := False;
-    Files.Sorted := True;
     Files.Duplicates := dupIgnore;
 
     if FindFirst(Folder + '*.*', faAnyFile, SearchRec) = 0 then
@@ -73,7 +104,13 @@ begin
         begin
           Candidate := Folder + SearchRec.Name;
           if IsMediaFile(Candidate) then
-            Files.Add(Candidate);
+          begin
+            SortInfo := TMediaFileSortInfo.Create;
+            SortInfo.SortTime := GetFileCreationTime(Candidate);
+            if SortInfo.SortTime <= 0 then
+              SortInfo.SortTime := SearchRec.TimeStamp;
+            Files.AddObject(Candidate, SortInfo);
+          end;
         end;
       until FindNext(SearchRec) <> 0;
     finally
@@ -81,7 +118,13 @@ begin
     end;
 
     if Files.IndexOf(FileName) < 0 then
-      Files.Add(FileName);
+    begin
+      SortInfo := TMediaFileSortInfo.Create;
+      SortInfo.SortTime := GetFileCreationTime(FileName);
+      Files.AddObject(FileName, SortInfo);
+    end;
+
+    Files.CustomSort(CompareMediaFilesByTime);
 
     SetLength(FFiles, Files.Count);
     for I := 0 to Files.Count - 1 do
@@ -89,6 +132,8 @@ begin
 
     FCurrentIndex := Files.IndexOf(FileName);
   finally
+    for I := 0 to Files.Count - 1 do
+      Files.Objects[I].Free;
     Files.Free;
   end;
 end;

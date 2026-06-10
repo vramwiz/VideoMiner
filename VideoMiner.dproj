@@ -68,7 +68,7 @@
         <VerInfo_Locale>1033</VerInfo_Locale>
         <DCC_Namespace>Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;Bde;$(DCC_Namespace)</DCC_Namespace>
         <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
-        <VerInfo_Keys>CompanyName=VideoMiner;FileDescription=$(MSBuildProjectName);FileVersion=0.0.2.0;InternalName=VideoMiner;LegalCopyright=;LegalTrademarks=;OriginalFilename=VideoMiner.exe;ProductName=$(MSBuildProjectName);ProductVersion=0.0.2;Comments=;ProgramID=com.embarcadero.$(MSBuildProjectName)</VerInfo_Keys>
+        <VerInfo_Keys>CompanyName=VideoMiner;FileDescription=$(MSBuildProjectName);FileVersion=0.0.3.0;InternalName=VideoMiner;LegalCopyright=;LegalTrademarks=;OriginalFilename=VideoMiner.exe;ProductName=$(MSBuildProjectName);ProductVersion=0.0.3;Comments=;ProgramID=com.embarcadero.$(MSBuildProjectName)</VerInfo_Keys>
         <VerInfo_IncludeVerInfo>false</VerInfo_IncludeVerInfo>
         <DCC_UsePackage>FireDACASADriver;FireDACSqliteDriver;bindcompfmx;vcldbx;FireDACPgDriver;FireDACODBCDriver;fmx;rtl;dbrtl;IndySystem;FireDACCommon;bindcomp;inetdbbde;DBXInterBaseDriver;DataSnapCommon;vclFireDAC;xmlrtl;svnui;DbxCommonDriver;vclimg;IndyProtocols;dbxcds;FireDACCommonDriver;MetropolisUILiveTile;soaprtl;bindengine;vclactnband;vcldb;bindcompdbx;vcldsnap;bindcompvcl;vclie;fmxFireDAC;FireDACADSDriver;vcltouch;CustomIPTransport;vclribbon;VclSmp;FireDAC;dsnap;IndyIPServer;VCLRESTComponents;fmxase;vcl;IndyCore;IndyIPCommon;FireDACIBDriver;inet;fmxobj;FireDACMySQLDriver;vclx;inetdbxpress;svn;fmxdae;RESTComponents;bdertl;dbexpress;FireDACMSAccDriver;adortl;IndyIPClient;$(DCC_UsePackage)</DCC_UsePackage>
         <UWP_DelphiLogo44>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_44.png</UWP_DelphiLogo44>
@@ -81,7 +81,7 @@
         <DCC_Namespace>Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;$(DCC_Namespace)</DCC_Namespace>
         <BT_BuildType>Debug</BT_BuildType>
         <VerInfo_IncludeVerInfo>false</VerInfo_IncludeVerInfo>
-        <VerInfo_Keys>CompanyName=VideoMiner;FileDescription=$(MSBuildProjectName);FileVersion=0.0.2.0;InternalName=VideoMiner;LegalCopyright=;LegalTrademarks=;OriginalFilename=VideoMiner.exe;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=0.0.2;Comments=</VerInfo_Keys>
+        <VerInfo_Keys>CompanyName=VideoMiner;FileDescription=$(MSBuildProjectName);FileVersion=0.0.3.0;InternalName=VideoMiner;LegalCopyright=;LegalTrademarks=;OriginalFilename=VideoMiner.exe;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=0.0.3;Comments=</VerInfo_Keys>
         <VerInfo_Locale>1033</VerInfo_Locale>
         <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
     </PropertyGroup>
@@ -181,7 +181,7 @@
                     <VersionInfo Name="AutoIncBuild">False</VersionInfo>
                     <VersionInfo Name="MajorVer">0</VersionInfo>
                     <VersionInfo Name="MinorVer">0</VersionInfo>
-                    <VersionInfo Name="Release">2</VersionInfo>
+                    <VersionInfo Name="Release">3</VersionInfo>
                     <VersionInfo Name="Build">0</VersionInfo>
                     <VersionInfo Name="Debug">False</VersionInfo>
                     <VersionInfo Name="PreRelease">False</VersionInfo>
@@ -194,13 +194,13 @@
                 <VersionInfoKeys>
                     <VersionInfoKeys Name="CompanyName">VideoMiner</VersionInfoKeys>
                     <VersionInfoKeys Name="FileDescription">VideoMiner</VersionInfoKeys>
-                    <VersionInfoKeys Name="FileVersion">0.0.2.0</VersionInfoKeys>
+                    <VersionInfoKeys Name="FileVersion">0.0.3.0</VersionInfoKeys>
                     <VersionInfoKeys Name="InternalName">VideoMiner</VersionInfoKeys>
                     <VersionInfoKeys Name="LegalCopyright"/>
                     <VersionInfoKeys Name="LegalTrademarks"/>
                     <VersionInfoKeys Name="OriginalFilename">VideoMiner.exe</VersionInfoKeys>
                     <VersionInfoKeys Name="ProductName">VideoMiner</VersionInfoKeys>
-                    <VersionInfoKeys Name="ProductVersion">0.0.2</VersionInfoKeys>
+                    <VersionInfoKeys Name="ProductVersion">0.0.3</VersionInfoKeys>
                     <VersionInfoKeys Name="Comments"/>
                     <VersionInfoKeys Name="CFBundleName"/>
                     <VersionInfoKeys Name="CFBundleDisplayName"/>

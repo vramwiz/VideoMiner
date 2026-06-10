@@ -50,6 +50,7 @@ type
     FOnClick: TNotifyEvent;
     FPressed: Boolean;
   protected
+    procedure DrawCenterButtonBackground(Canvas: TCanvas);
     procedure DoClick; virtual;
     property Hovered: Boolean read FHovered;
     property Pressed: Boolean read FPressed;
@@ -253,6 +254,53 @@ begin
   Result := Max(58, Min(112, Result));
 end;
 
+function OverlayCenterButtonSize(const PreviewRect: TRect): Integer;
+begin
+  Result := Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.14);
+  Result := Max(48, Min(128, Result));
+end;
+
+procedure DrawAlphaBlackRect(Canvas: TCanvas; const DrawRect: TRect;
+  Alpha: Byte);
+var
+  Bitmap: TBitmap;
+  Blend: TBlendFunction;
+  Line: PBgraQuadArray;
+  X: Integer;
+  Y: Integer;
+begin
+  if DrawRect.IsEmpty then
+    Exit;
+
+  Bitmap := TBitmap.Create;
+  try
+    Bitmap.PixelFormat := pf32bit;
+    Bitmap.SetSize(DrawRect.Width, DrawRect.Height);
+    Bitmap.AlphaFormat := afPremultiplied;
+    for Y := 0 to Bitmap.Height - 1 do
+    begin
+      Line := Bitmap.ScanLine[Y];
+      for X := 0 to Bitmap.Width - 1 do
+      begin
+        Line[X].B := 0;
+        Line[X].G := 0;
+        Line[X].R := 0;
+        Line[X].A := Alpha;
+      end;
+    end;
+
+    Blend.BlendOp := AC_SRC_OVER;
+    Blend.BlendFlags := 0;
+    Blend.SourceConstantAlpha := 255;
+    Blend.AlphaFormat := AC_SRC_ALPHA;
+    AlphaBlend(Canvas.Handle, DrawRect.Left, DrawRect.Top, DrawRect.Width,
+      DrawRect.Height, Bitmap.Canvas.Handle, 0, 0, DrawRect.Width,
+      DrawRect.Height, Blend);
+  finally
+    Bitmap.Free;
+  end;
+end;
+
 procedure AlphaBlendMask(Canvas: TCanvas; const DestBounds: TRect;
   MaskBitmap: TBitmap; Alpha: Byte);
 var
@@ -356,6 +404,18 @@ end;
 
 { TVideoMinerOverlayButton }
 
+procedure TVideoMinerOverlayButton.DrawCenterButtonBackground(Canvas: TCanvas);
+var
+  Alpha: Byte;
+begin
+  Alpha := 92;
+  if Hovered then
+    Alpha := 118;
+  if Pressed then
+    Alpha := 145;
+  DrawAlphaBlackRect(Canvas, Bounds, Alpha);
+end;
+
 procedure TVideoMinerOverlayButton.DoClick;
 begin
   if Assigned(FOnClick) then
@@ -398,8 +458,7 @@ var
   CenterY: Integer;
   Size: Integer;
 begin
-  Size := Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.14);
-  Size := Max(48, Min(128, Size));
+  Size := OverlayCenterButtonSize(PreviewRect);
 
   CenterX := PreviewRect.Left + PreviewRect.Width div 2;
   CenterY := PreviewRect.Top + PreviewRect.Height div 2;
@@ -544,6 +603,7 @@ begin
     Exit;
 
   Alpha := IconAlpha;
+  DrawCenterButtonBackground(Canvas);
   IconSize := Min(Bounds.Width, Bounds.Height);
   CenterX := Bounds.Left + Bounds.Width div 2;
   CenterY := Bounds.Top + Bounds.Height div 2;
@@ -588,8 +648,7 @@ var
   Size: Integer;
   Step: Integer;
 begin
-  Size := Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.095);
-  Size := Max(36, Min(92, Size));
+  Size := OverlayCenterButtonSize(PreviewRect);
   Step := OverlayCenterStep(PreviewRect);
 
   CenterX := PreviewRect.Left + PreviewRect.Width div 2;
@@ -683,6 +742,7 @@ begin
     Exit;
 
   Alpha := IconAlpha;
+  DrawCenterButtonBackground(Canvas);
   Size := Min(Bounds.Width, Bounds.Height);
   CenterX := Size * 0.50;
   CenterY := Size * 0.55;
@@ -734,8 +794,7 @@ var
   Size: Integer;
   Step: Integer;
 begin
-  Size := Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.075);
-  Size := Max(30, Min(72, Size));
+  Size := OverlayCenterButtonSize(PreviewRect);
   Step := OverlayCenterStep(PreviewRect);
 
   CenterX := PreviewRect.Left + PreviewRect.Width div 2;
@@ -818,6 +877,7 @@ begin
     Exit;
 
   Alpha := IconAlpha;
+  DrawCenterButtonBackground(Canvas);
   IconSize := Min(Bounds.Width, Bounds.Height);
 
   if FDirection = edFirst then

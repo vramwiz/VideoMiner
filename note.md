@@ -281,6 +281,9 @@ function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
 - VideoMiner はファイル単体ではなく、フォルダを作業単位として扱う。
 - ファイルを指定された場合も、「フォルダ + 現在ファイル」として扱う。
 - ファイルを開いたとき、同じフォルダ内の動画ファイル一覧を内部リストとして作る。
+- フォルダ内の動画ファイル一覧は、作成日時の新しい順を標準とする。
+  - 同じ作成日時の場合はファイル名順で安定させる。
+  - 作成日時を取得できない場合は、走査時に得られる更新日時へフォールバックする。
 - 現在再生中のファイルが一覧の何番目かを保持する。
 - Caption に現在ファイル名と `n/total` を表示する。
 - 情報ラベルにも現在ファイル名、一覧位置、動画情報、音声情報を表示する。
@@ -338,6 +341,9 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
 
 - Delphi ソースは文字コードが混在しやすいので、編集後は文字化けが起きていないか差分を確認する。
 - `.pas` / `.dfm` を触った後は、必ず Debug Win64 ビルドで確認する。
+- バージョンリソースは `Version.inc` と `Version.rc` を git 管理し、`Version.res` は生成物として除外する。
+  - `VideoMiner.dpr` は `{$R Version.res}` を参照する。
+  - `VideoMiner.dproj` の `BuildVideoMinerVersionResource` ターゲットが `Version.rc`/`Version.inc` から `Version.res` を生成する。
 - Debug ビルド時のみ、再生同期調査ログを `%TEMP%\VideoMiner_playback_debug.log` に出力する。
   - 実装は `Source\App\VideoMinerDebugLog.pas`。
   - `VideoMiner.dproj` の Debug 構成は `DEBUG` define を持つため、ログ出力は `{$IFDEF DEBUG}` で Release ビルドには入れない。
