@@ -11,6 +11,7 @@ ffmpeg-*/
 *.bat 
 *.dll 
 *.rsm
+Version.res
 *.map
 *.tds
 *.lib

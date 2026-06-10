@@ -41,6 +41,7 @@ uses
   FFmpegDecoderTypes in 'Source\Decode\FFmpegDecoderTypes.pas';
 
 {$R *.res}
+{$R Version.res}
 
 const
   SINGLE_INSTANCE_MUTEX = 'Local\VideoMiner.SingleInstance';

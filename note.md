@@ -322,7 +322,7 @@ Debug Win64 ビルド例:
 ```powershell
 $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
 & 'C:\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe' `
-  'D:\DelphiProg\test\VideoMiner\VideoMiner.dproj' `
+  'D:\DelphiProg\VideoMiner\VideoMiner.dproj' `
   /t:Build /p:Config=Debug /p:Platform=Win64
 ```
 
@@ -330,7 +330,7 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
 
 - Debug Win64 ビルド成功。
 - 生成物:
-  - `D:\DelphiProg\test\VideoMiner\Win64\Debug\VideoMiner.exe`
+  - `D:\DelphiProg\VideoMiner\Win64\Debug\VideoMiner.exe`
 - エラー 0。
 - 警告 0。
 

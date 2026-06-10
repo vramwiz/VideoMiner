@@ -17,6 +17,8 @@ procedure ApplySavedWindowBounds(Form: TCustomForm;
   var NormalWindowBounds: TVideoMinerWindowBounds);
 procedure RememberNormalWindowBounds(Form: TCustomForm; FullScreen: Boolean;
   var NormalWindowBounds: TVideoMinerWindowBounds);
+procedure RestoreAndRememberNormalWindowBoundsForSave(Form: TCustomForm;
+  FullScreen: Boolean; var NormalWindowBounds: TVideoMinerWindowBounds);
 
 implementation
 
@@ -114,6 +116,8 @@ procedure RememberNormalWindowBounds(Form: TCustomForm; FullScreen: Boolean;
 begin
   if (Form = nil) or FullScreen then
     Exit;
+  if Form.HandleAllocated and (IsIconic(Form.Handle) or IsZoomed(Form.Handle)) then
+    Exit;
   if Form.WindowState <> wsNormal then
     Exit;
 
@@ -122,6 +126,23 @@ begin
   NormalWindowBounds.Top := Form.Top;
   NormalWindowBounds.Width := Form.Width;
   NormalWindowBounds.Height := Form.Height;
+end;
+
+procedure RestoreAndRememberNormalWindowBoundsForSave(Form: TCustomForm;
+  FullScreen: Boolean; var NormalWindowBounds: TVideoMinerWindowBounds);
+begin
+  if (Form = nil) or FullScreen then
+    Exit;
+
+  if Form.HandleAllocated and IsZoomed(Form.Handle) then
+  begin
+    ShowWindow(Form.Handle, SW_RESTORE);
+    Form.WindowState := wsNormal;
+  end
+  else if Form.WindowState = wsMaximized then
+    Form.WindowState := wsNormal;
+
+  RememberNormalWindowBounds(Form, FullScreen, NormalWindowBounds);
 end;
 
 end.

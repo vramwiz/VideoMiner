@@ -108,6 +108,7 @@ type
     procedure LoadManualChapterState(const FileName: string);
     procedure RememberLastMediaFile(const FileName: string);
     procedure SaveManualChapterState;
+    procedure SaveAudioPlaybackSettings;
     procedure FirstFrameOverlayClick(Sender: TObject);
     procedure FullScreenOverlayClick(Sender: TObject);
     procedure LastFrameOverlayClick(Sender: TObject);
@@ -212,6 +213,8 @@ const
 
 // フォーム生成時にデコーダを用意する
 procedure TVideoMinerMainForm.FormCreate(Sender: TObject);
+var
+  AudioSettings: TVideoMinerAudioSettings;
 begin
   ClearVideoMinerDebugLog('form_create');
   PanelTitleBar.Color := TITLE_BAR_COLOR;
@@ -268,10 +271,14 @@ begin
   FLoopSegmentEndMs := -1;
   FPendingRestartPlayback := False;
   FPendingRestartMs := -1;
-  FAudioPlayback.VolumePercent := 100;
-  FAudioPlayback.Muted := False;
+  AudioSettings := LoadAudioSettings;
+  FAudioPlayback.VolumePercent := AudioSettings.VolumePercent;
+  FAudioPlayback.Muted := AudioSettings.Muted;
   FVideoView.Muted := FAudioPlayback.Muted;
-  FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
+  if FAudioPlayback.Muted then
+    FVideoView.VolumePercent := 0
+  else
+    FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
   FDropAgent := TDropAgent.Create;
   if FOleInitialized then
   begin
@@ -286,6 +293,7 @@ end;
 procedure TVideoMinerMainForm.FormDestroy(Sender: TObject);
 begin
   SaveManualChapterState;
+  SaveAudioPlaybackSettings;
   TimerPlayback.Enabled := False;
   FVideoView.PlaybackActive := False;
   FRestartPlaybackTimer.Enabled := False;
@@ -299,8 +307,8 @@ begin
   FPreviewDecoder.Free;
   FDecoder.Free;
   FTitleIcon.Free;
-  VideoMinerWindowChrome.RememberNormalWindowBounds(Self, FFullScreen,
-    FNormalWindowBounds);
+  VideoMinerWindowChrome.RestoreAndRememberNormalWindowBoundsForSave(Self,
+    FFullScreen, FNormalWindowBounds);
   SaveMainFormBounds(FNormalWindowBounds);
   SaveEndAction(FEndAction);
   if FOleInitialized then
@@ -916,6 +924,18 @@ begin
   SaveManualChapterPositions(FVideoFile, Positions);
 end;
 
+procedure TVideoMinerMainForm.SaveAudioPlaybackSettings;
+var
+  Settings: TVideoMinerAudioSettings;
+begin
+  if FAudioPlayback = nil then
+    Exit;
+
+  Settings.Muted := FAudioPlayback.Muted;
+  Settings.VolumePercent := FAudioPlayback.VolumePercent;
+  SaveAudioSettings(Settings);
+end;
+
 function TVideoMinerMainForm.PlaybackActiveOrPending: Boolean;
 begin
   Result := TimerPlayback.Enabled or FPendingRestartPlayback or
@@ -1237,6 +1257,7 @@ begin
     FVideoView.VolumePercent := 0
   else
     FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
+  SaveAudioPlaybackSettings;
 end;
 
 procedure TVideoMinerMainForm.MuteOverlayClick(Sender: TObject);
@@ -1256,6 +1277,7 @@ begin
   FAudioPlayback.VolumePercent := Max(0,
     Min(100, FAudioPlayback.VolumePercent + DeltaPercent));
   FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
+  SaveAudioPlaybackSettings;
 end;
 
 procedure TVideoMinerMainForm.VolumeOverlayChange(Sender: TObject;
@@ -1265,6 +1287,7 @@ begin
   FVideoView.Muted := FAudioPlayback.Muted;
   FAudioPlayback.VolumePercent := VolumePercent;
   FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
+  SaveAudioPlaybackSettings;
 end;
 
 procedure TVideoMinerMainForm.BossGesture(Sender: TObject);

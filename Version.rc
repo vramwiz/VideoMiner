@@ -1,0 +1,27 @@
+#include "Version.inc"
+
+1 VERSIONINFO
+FILEVERSION VM_FILE_VERSION
+PRODUCTVERSION VM_FILE_VERSION
+FILEOS 0x00040004L
+FILETYPE 0x00000001L
+FILESUBTYPE 0x00000000L
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904E4"
+    BEGIN
+      VALUE "CompanyName", "VideoMiner\0"
+      VALUE "FileDescription", "VideoMiner\0"
+      VALUE "FileVersion", VM_APP_VERSION "\0"
+      VALUE "InternalName", "VideoMiner\0"
+      VALUE "OriginalFilename", "VideoMiner.exe\0"
+      VALUE "ProductName", "VideoMiner\0"
+      VALUE "ProductVersion", VM_APP_VERSION "\0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0409, 1252
+  END
+END

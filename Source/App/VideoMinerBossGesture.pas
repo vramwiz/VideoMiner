@@ -10,14 +10,15 @@ uses
   System.Types;
 
 const
-  BOSS_GESTURE_WINDOW_MS = 700;       // reverse   : 方向反転型ジェスチャーの有効時間 ms
-  BOSS_GESTURE_MIN_DISTANCE = 120;    // reverse   : 反転前後で必要な最小移動量 px
+  BOSS_GESTURE_WINDOW_MS = 900;       // reverse   : 方向反転型ジェスチャーの有効時間 ms
+  BOSS_GESTURE_MIN_DISTANCE = 220;    // reverse   : 反転前後で必要な最小移動量 px
   BOSS_GESTURE_COOLDOWN_MS = 3000;    // common    : 発動直後の再発動禁止時間 ms
-  BOSS_GESTURE_AXIS_RATIO = 1.6;      // common    : 横/縦どちらの動きかを決める優勢比率
-  BOSS_GESTURE_NOISE_PIXELS = 8;      // common    : 微小なマウス揺れを無視する距離 px
-  BOSS_GESTURE_POINT_WINDOW_MS = 100; // point     : A-B-A 往復ジェスチャーの有効時間 ms
-  BOSS_GESTURE_POINT_DISTANCE = 100;   // point     : A から B 到達とみなす距離 px
-  BOSS_GESTURE_RETURN_RADIUS = 55;    // point     : A 付近へ戻ったとみなす半径 px
+  BOSS_GESTURE_AXIS_RATIO = 2.0;      // common    : 横/縦どちらの動きかを決める優勢比率
+  BOSS_GESTURE_NOISE_PIXELS = 40;     // common    : 微小なマウス揺れを無視する距離 px
+  BOSS_GESTURE_POINT_WINDOW_MS = 300; // point     : A-B-A 往復ジェスチャーの有効時間 ms
+  BOSS_GESTURE_POINT_DISTANCE = 320;  // point     : A から B 到達とみなす距離 px
+  BOSS_GESTURE_RETURN_RADIUS = 26;    // point     : A 付近へ戻ったとみなす半径 px
+  BOSS_GESTURE_STRONG_SEGMENTS = 2;   // reverse   : 発動に必要な強い反転回数
 
 type
   TVideoMinerBossGestureAxis = (bgaNone, bgaHorizontal, bgaVertical);
@@ -237,7 +238,7 @@ begin
     FSegmentDistance := Distance;
   end;
 
-  if (FStrongSegmentCount >= 1) and
+  if (FStrongSegmentCount >= BOSS_GESTURE_STRONG_SEGMENTS) and
      (FSegmentDistance >= BOSS_GESTURE_MIN_DISTANCE) and
      (Tick - FStartTick <= BOSS_GESTURE_WINDOW_MS) then
   begin

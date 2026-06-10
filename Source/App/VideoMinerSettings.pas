@@ -7,6 +7,11 @@ type
   TVideoDecoderMode = (vdmAuto, vdmQsv, vdmSoftware);
   TVideoMinerEndAction = (eaStop, eaLoop, eaNext);
 
+  TVideoMinerAudioSettings = record
+    Muted: Boolean;
+    VolumePercent: Integer;
+  end;
+
   TVideoMinerLastMedia = record
     Available: Boolean;
     Folder: string;
@@ -23,10 +28,12 @@ type
 
 function GetVideoDecoderMode: TVideoDecoderMode;
 function LoadEndAction: TVideoMinerEndAction;
+function LoadAudioSettings: TVideoMinerAudioSettings;
 function LoadLastMedia: TVideoMinerLastMedia;
 function LoadManualChapterPositions(const FileName: string): TVideoMinerChapterPositions;
 function LoadMainFormBounds: TVideoMinerWindowBounds;
 procedure SaveEndAction(Value: TVideoMinerEndAction);
+procedure SaveAudioSettings(const Settings: TVideoMinerAudioSettings);
 procedure SaveLastMedia(const Folder, FileName: string);
 procedure SaveManualChapterPositions(const FileName: string;
   const Positions: TVideoMinerChapterPositions);
@@ -36,7 +43,7 @@ function VideoDecoderModeToText(Mode: TVideoDecoderMode): string;
 implementation
 
 uses
-  System.IniFiles, System.SysUtils, Winapi.ShlObj, Winapi.Windows;
+  System.IniFiles, System.Math, System.SysUtils, Winapi.ShlObj, Winapi.Windows;
 
 const
   SETTINGS_SECTION = 'VideoMiner';
@@ -51,6 +58,9 @@ const
   LAST_MEDIA_FILE = 'FileName';
   PLAYBACK_SECTION = 'Playback';
   PLAYBACK_END_ACTION = 'EndAction';
+  AUDIO_SECTION = 'Audio';
+  AUDIO_MUTED = 'Muted';
+  AUDIO_VOLUME_PERCENT = 'VolumePercent';
   MANUAL_CHAPTER_SECTION_PREFIX = 'ManualChapters:';
   MANUAL_CHAPTER_FILE = 'FileName';
   MANUAL_CHAPTER_COUNT = 'Count';
@@ -160,6 +170,22 @@ begin
   end;
 end;
 
+function LoadAudioSettings: TVideoMinerAudioSettings;
+var
+  Ini: TIniFile;
+begin
+  Result.Muted := False;
+  Result.VolumePercent := 100;
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    Result.VolumePercent := Max(0, Min(100,
+      Ini.ReadInteger(AUDIO_SECTION, AUDIO_VOLUME_PERCENT, 100)));
+    Result.Muted := Ini.ReadBool(AUDIO_SECTION, AUDIO_MUTED, False);
+  finally
+    Ini.Free;
+  end;
+end;
+
 function LoadMainFormBounds: TVideoMinerWindowBounds;
 var
   Ini: TIniFile;
@@ -249,6 +275,20 @@ begin
   try
     Ini.WriteString(PLAYBACK_SECTION, PLAYBACK_END_ACTION,
       EndActionToText(Value));
+  finally
+    Ini.Free;
+  end;
+end;
+
+procedure SaveAudioSettings(const Settings: TVideoMinerAudioSettings);
+var
+  Ini: TIniFile;
+begin
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    Ini.WriteInteger(AUDIO_SECTION, AUDIO_VOLUME_PERCENT,
+      Max(0, Min(100, Settings.VolumePercent)));
+    Ini.WriteBool(AUDIO_SECTION, AUDIO_MUTED, Settings.Muted);
   finally
     Ini.Free;
   end;

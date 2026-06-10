@@ -9789,7 +9789,6 @@ object VideoMinerMainForm: TVideoMinerMainForm
       ParentFont = False
       Layout = tlCenter
       OnMouseDown = TitleBarMouseDown
-      ExplicitLeft = 14
       ExplicitWidth = 61
       ExplicitHeight = 15
     end
