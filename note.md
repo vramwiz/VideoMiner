@@ -577,24 +577,28 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
     - 音声同期の遅れ判定、ドロップ継続可否、終端付近判定、逆戻りフレーム判定、seek guard 許容判定、seek guard 初期フレーム数もここへ移した。
     - 次に再生制御を分ける場合は、このユニットの純粋判定を使いながら `TimerPlaybackTimer` / `StartPlaybackAtMs` / `SeekToMs` を少しずつ薄くする。
   - `Source\App\VideoMinerPlaybackController.pas`
-    - 再生制御分離の第一段として追加した。
+    - 再生制御分離の担当ユニット。
     - `ActiveOrPending` / `StopPlayback` に加えて、seek 中断用の `StopForSeek`、再開予約の `ScheduleRestart`、再開 timer からの `ConsumeRestart` を担当する。
     - 再開待ち state は main form ではなく controller が所有する。main form 側の `FRestartState` / `FPendingRestartPlayback` / `FPendingRestartMs` は不要になった。
-    - `StartPlaybackAtMs` の本体は `StartAtMs` として controller へ移動した。main form は成功時の `FCurrentVideoPositionMs` / `FSeekPositionMs` / ループ区間 / seek guard 更新だけを残す。
+    - `StartPlaybackAtMs` / `StartAtMs` は再生開始、音声開始、現在位置更新、ループ区間更新、seek guard 設定を担当する。
+    - `SeekToMs` は seek 前の停止、プレビューフレーム表示、現在位置更新、seek guard 設定、必要時の再開予約、seek ログ出力を担当する。
+    - `ShowFrameNearMs` は指定位置のフレーム表示を試し、失敗時に前後の近い位置へ fallback する。
+    - `FinishAtEnd` は再生終端時の `Stop` / `Loop` / `Next` 分岐を担当する。
     - `TimerPlaybackTimer` の入口にある seeking 判定、動画有無判定、audio pump、音声位置 clamp は `PrepareTick` へ移動した。
     - `TimerPlaybackTimer` 内の次フレーム decode と失敗時停止は `DecodeNextFrame` へ移動した。戻り値は frame / end-of-stream / error の3択。
-    - 音声位置への同期処理は `SyncVideoToAudio` へ移動した。main form は同期後の `FCurrentVideoPositionMs` 更新だけを残す。
-    - seek guard の表示/破棄判定は `HandleSeekGuard` へ移動した。main form は continue / break / status 表示の制御だけを残す。
+    - 音声位置への同期処理は `SyncVideoToAudio` へ移動した。
+    - seek guard の表示/破棄判定は `HandleSeekGuard` へ移動した。
     - 音声より映像が遅れたときの drop / `ShowFrameAt` 分岐は `HandleLaggingVideo` へ移動した。
     - scratch frame の逆戻り破棄ログは `ShouldDropBackwardScratchFrame`、scratch frame 表示は `PresentScratchFrame` へ移動した。
-    - `TimerPlaybackTimer` 後半の loop 区間到達判定は `ShouldRestartLoop`、seek bar 反映位置の計算は `SeekPositionForTick`、lag 計算は `PlaybackLagMs`、tick ログは `LogPlaybackTick` へ移動した。
+    - `Tick` は再生中の 1 tick 全体を担当し、main form の `TimerPlaybackTimer` は `Tick` を呼ぶだけにした。
+    - `Tick` 後半の loop 区間到達判定は `ShouldRestartLoop`、seek bar 反映位置の計算は `SeekPositionForTick`、lag 計算は `PlaybackLagMs`、tick ログは `LogPlaybackTick` へ移動した。
     - `CurrentPlaybackPositionMs` の位置決定は `CurrentPositionMs`、end action の表示文字列は `EndActionText`、end action の順送りは `NextEndAction`、終端時の分岐判定は `FinishResult`、終端停止時の view 状態変更は `StopAtEnd` へ移動した。
-    - `ConfigureLoopSegment` は chapter manager の `LoopSegmentForPosition` を呼ぶだけになり、main form 側の `LoopSegmentStartPositionMs` / `LoopSegmentEndPositionMs` 中継は削除した。
-    - 次に進める場合は、`LoopStartPositionMs` / `FinishPlaybackAtEnd` の loop 開始位置取得を同じ流れに寄せるか、`TimerPlaybackTimer` 全体をさらに小さい controller 操作単位へ分ける。
+    - `ConfigureLoopSegment` は chapter manager の `LoopSegmentForPosition` を使って loop 区間を更新する。
+    - main form 側の `TimerPlaybackTimer` / `SeekToMs` / `StartPlaybackAtMs` / `FinishPlaybackAtEnd` は controller への委譲入口になった。
 
 ### メインフォーム分散化の現在地
 
-- 2026-06-11 時点で、`VideoMinerMainForm.pas` は 1346 行。
+- 2026-06-11 時点で、`VideoMinerMainForm.pas` は 1017 行。
 - この段階の方針は、main form を「GUI イベント入口」「フォーム固有の状態反映」「controller への委譲」に寄せること。
 - 追加済みの主な分散先:
   - `VideoMinerCommandController.pas`
@@ -603,7 +607,7 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
   - `VideoMinerWindowModeController.pas`
     - fullscreen、boss mode、window bounds、maximize 表示、borderless resize hit-test、move/size 時の bounds 記憶を担当する。
   - `VideoMinerPlaybackController.pas`
-    - 再生開始、停止、seek 中断、再開予約、再生 tick の細部、同期、seek guard、tick ログ、end action 判定を担当する。
+    - 再生開始、停止、seek、再開予約、再生 tick 全体、同期、seek guard、tick ログ、end action 分岐を担当する。
   - `VideoMinerChapterManager.pas`
     - chapter/check 状態、手動 chapter 保存/復元、自動 check marker、chapter navigation、loop segment 計算を担当する。
 - main form から削除済み:
@@ -612,7 +616,10 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
   - shortcut 用の `Shortcut*` 群
   - volume/mute の直接処理
   - 再生再開待ち state
-  - loop segment start/end の中継関数
+  - 再生 tick の実処理
+  - seek の実処理
+  - 再生開始後の現在位置/loop segment/seek guard 更新
+  - 再生終端時の stop/loop/next 分岐
 - 今後機能追加する場合:
   - まず新機能の担当 controller/manager を決めてから実装する。
   - main form へ直接ロジックを書かず、イベント入口から controller/manager へ渡す。
