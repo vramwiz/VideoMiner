@@ -3,8 +3,9 @@ unit VideoMinerWindowModeController;
 interface
 
 uses
-  Winapi.Messages, Winapi.Windows, System.Types, Vcl.Controls, Vcl.ExtCtrls,
-  Vcl.Forms, Vcl.StdCtrls, VideoMinerSettings, VideoMinerVideoView;
+  Winapi.Messages, Winapi.Windows, System.Classes, System.Types,
+  Vcl.Controls, Vcl.ExtCtrls, Vcl.Forms, Vcl.StdCtrls, VideoMinerSettings,
+  VideoMinerVideoView;
 
 type
   TVideoMinerWindowModeAction = procedure of object;
@@ -44,6 +45,11 @@ implementation
 uses
   ResizeEdges, VideoMinerWindowChrome;
 
+function FormUsable(Form: TCustomForm): Boolean;
+begin
+  Result := (Form <> nil) and (not (csDestroying in Form.ComponentState));
+end;
+
 constructor TVideoMinerWindowModeController.Create(Form: TCustomForm;
   TitleBar: TPanel; MaximizeLabel: TLabel; VideoView: TVideoMinerVideoView;
   StopPlayback: TVideoMinerWindowModeAction);
@@ -58,6 +64,9 @@ end;
 
 procedure TVideoMinerWindowModeController.ApplySavedWindowBounds;
 begin
+  if not FormUsable(FForm) then
+    Exit;
+
   VideoMinerWindowChrome.ApplySavedWindowBounds(FForm, FNormalWindowBounds);
 end;
 
@@ -82,7 +91,7 @@ var
   FullScreenRect: TRect;
   Monitor: TMonitor;
 begin
-  if FFullScreen or (FForm = nil) then
+  if FFullScreen or (not FormUsable(FForm)) then
     Exit;
 
   VideoMinerWindowChrome.RememberNormalWindowBounds(FForm, FFullScreen,
@@ -122,7 +131,7 @@ procedure TVideoMinerWindowModeController.ExitFullScreen;
 var
   Bounds: TVideoMinerWindowBounds;
 begin
-  if (not FFullScreen) or (FForm = nil) then
+  if (not FFullScreen) or (not FormUsable(FForm)) then
     Exit;
 
   FFullScreen := False;
@@ -141,12 +150,18 @@ end;
 
 procedure TVideoMinerWindowModeController.HandleMove;
 begin
+  if not FormUsable(FForm) then
+    Exit;
+
   VideoMinerWindowChrome.RememberNormalWindowBounds(FForm, FFullScreen,
     FNormalWindowBounds);
 end;
 
 procedure TVideoMinerWindowModeController.HandleSize;
 begin
+  if not FormUsable(FForm) then
+    Exit;
+
   UpdateMaximizeButton;
   if FTitleBar <> nil then
     TResizeEdgeHelper.AdjustEdges(FTitleBar);
@@ -159,12 +174,18 @@ end;
 procedure TVideoMinerWindowModeController.HitTestBorderlessResize(
   const ScreenPoint: TPoint; var HitTestResult: LRESULT);
 begin
+  if not FormUsable(FForm) then
+    Exit;
+
   VideoMinerWindowChrome.HitTestBorderlessResize(FForm, FFullScreen,
     VIDEO_MINER_RESIZE_BORDER, ScreenPoint, HitTestResult);
 end;
 
 procedure TVideoMinerWindowModeController.SaveWindowBounds;
 begin
+  if not FormUsable(FForm) then
+    Exit;
+
   VideoMinerWindowChrome.RestoreAndRememberNormalWindowBoundsForSave(FForm,
     FFullScreen, FNormalWindowBounds);
   SaveMainFormBounds(FNormalWindowBounds);
@@ -180,7 +201,8 @@ end;
 
 procedure TVideoMinerWindowModeController.UpdateMaximizeButton;
 begin
-  if (FForm = nil) or (FMaximizeLabel = nil) then
+  if (not FormUsable(FForm)) or (FMaximizeLabel = nil) or
+     (csDestroying in FMaximizeLabel.ComponentState) then
     Exit;
 
   if FForm.WindowState = wsMaximized then

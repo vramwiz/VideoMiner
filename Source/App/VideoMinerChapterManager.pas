@@ -29,6 +29,7 @@ type
     function MaybeAutoCheckFrame(PositionMs: Integer; IsDarkFrame: Boolean;
       MaxMs: Integer): Boolean;
     function DisplayChapters: TVideoMinerOverlayChapters;
+    function HasManualChapters: Boolean;
     function FindNavigationTarget(Delta, CurrentMs, LastPositionMs: Integer): Integer;
     function LoopStartPositionMs(LastPositionMs: Integer): Integer;
     function LoopSegmentForPosition(PositionMs, LastPositionMs: Integer):
@@ -211,6 +212,21 @@ begin
 
     SetLength(Result, Length(Result) + 1);
     Result[High(Result)] := FChapters[I];
+  end;
+end;
+
+function TVideoMinerChapterManager.HasManualChapters: Boolean;
+var
+  Chapter: TVideoMinerOverlayChapter;
+begin
+  Result := False;
+  for Chapter in FChapters do
+  begin
+    if Chapter.Source = chsUser then
+    begin
+      Result := True;
+      Exit;
+    end;
   end;
 end;
 

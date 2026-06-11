@@ -178,7 +178,7 @@ function TVideoMinerPlaybackController.CurrentPositionMs(
   UsePlaybackPosition: Boolean; SeekPositionMs, CurrentVideoPositionMs,
   SeekMaxMs: Integer): Integer;
 begin
-  if UsePlaybackPosition then
+  if UsePlaybackPosition and (FAudioPlayback <> nil) then
     Result := FAudioPlayback.PlaybackPositionMs
   else
     Result := SeekPositionMs;
@@ -205,6 +205,12 @@ var
 begin
   Result := pdrFrame;
   ErrorMessage := '';
+  if FVideoView = nil then
+  begin
+    ErrorMessage := 'Video view is not initialized.';
+    Result := pdrError;
+    Exit;
+  end;
 
   if UseScratchFrame then
     Decoded := FVideoView.DecodeNextFrameToScratch(Decoder, PositionMs,
@@ -240,6 +246,13 @@ begin
 
   if (SeekGuardRemaining <= 0) or (PositionMs < 0) then
     Exit;
+
+  if FVideoView = nil then
+  begin
+    ErrorMessage := 'Video view is not initialized.';
+    Result := sgrGuardError;
+    Exit;
+  end;
 
   Dec(SeekGuardRemaining);
   if not VideoMinerSeekGuardAccepts(SeekGuardTargetMs, PositionMs) then
@@ -290,6 +303,13 @@ begin
 
   if not VideoMinerVideoLagsAudio(CurrentVideoPositionMs, AudioPositionMs) then
     Exit;
+
+  if FVideoView = nil then
+  begin
+    ErrorMessage := 'Video view is not initialized.';
+    Result := lvrError;
+    Exit;
+  end;
 
   if VideoMinerShouldDropFrame(CurrentVideoPositionMs, AudioPositionMs,
     DropCount, DropElapsedMs) then
@@ -455,6 +475,12 @@ begin
     Exit;
   end;
 
+  if FAudioPlayback = nil then
+  begin
+    ErrorMessage := 'Audio playback is not initialized.';
+    Exit;
+  end;
+
   if not FAudioPlayback.Pump(ErrorMessage) then
   begin
     ErrorMessage := 'Failed to play audio: ' + ErrorMessage;
@@ -471,6 +497,13 @@ end;
 function TVideoMinerPlaybackController.PresentScratchFrame(
   var ConvertFrame: Boolean; out ErrorMessage: string): Boolean;
 begin
+  if FVideoView = nil then
+  begin
+    ErrorMessage := 'Video view is not initialized.';
+    Result := False;
+    Exit;
+  end;
+
   Result := FVideoView.PresentScratchFrame(ErrorMessage);
   if Result then
     ConvertFrame := True;
@@ -487,7 +520,10 @@ end;
 
 function TVideoMinerPlaybackController.PlaybackPositionMs: Integer;
 begin
-  Result := FAudioPlayback.PlaybackPositionMs;
+  if FAudioPlayback <> nil then
+    Result := FAudioPlayback.PlaybackPositionMs
+  else
+    Result := -1;
 end;
 
 procedure TVideoMinerPlaybackController.LogPlaybackTick(const VideoFile: string;
@@ -546,6 +582,11 @@ begin
   ErrorMessage := '';
   LastErrorMessage := '';
   TriedCount := 0;
+  if (FVideoView = nil) or (FPreviewDecoder = nil) then
+  begin
+    ErrorMessage := 'Preview video view is not initialized.';
+    Exit;
+  end;
 
   for I := Low(FALLBACK_OFFSETS) to High(FALLBACK_OFFSETS) do
   begin
@@ -597,10 +638,12 @@ var
   StepWatch: TStopwatch;
   StopMs: Double;
   PreviewMs: Double;
+  DebugLogEnabled: Boolean;
 begin
   if (VideoFile = '') or (SeekMaxMs <= 0) then
     Exit;
 
+  DebugLogEnabled := VideoMinerDebugLogEnabled;
   TotalWatch := TStopwatch.StartNew;
 
   WasPlaying := ActiveOrPending;
@@ -614,8 +657,9 @@ begin
   else if TargetMs > SeekMaxMs then
     TargetMs := SeekMaxMs;
 
-  WriteVideoMinerDebugLog(Format('seek target_ms=%d was_playing=%s',
-    [TargetMs, BoolToStr(WasPlaying, True)]));
+  if DebugLogEnabled then
+    WriteVideoMinerDebugLog(Format('seek target_ms=%d was_playing=%s',
+      [TargetMs, BoolToStr(WasPlaying, True)]));
 
   Seeking := True;
   try
@@ -624,10 +668,11 @@ begin
       ErrorMessage) then
     begin
       PreviewMs := StepWatch.Elapsed.TotalMilliseconds;
-      WriteVideoMinerDebugLog(Format(
-        'seek_failed step="preview" target_ms=%d was_playing=%s stop_ms=%.3f preview_ms=%.3f total_ms=%.3f err="%s"',
-        [TargetMs, BoolToStr(WasPlaying, True), StopMs, PreviewMs,
-         TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+      if DebugLogEnabled then
+        WriteVideoMinerDebugLog(Format(
+          'seek_failed step="preview" target_ms=%d was_playing=%s stop_ms=%.3f preview_ms=%.3f total_ms=%.3f err="%s"',
+          [TargetMs, BoolToStr(WasPlaying, True), StopMs, PreviewMs,
+           TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
       if Assigned(SetStatus) then
         SetStatus('Failed to decode frame: ' + ErrorMessage);
       Exit;
@@ -653,11 +698,12 @@ begin
   if ResumeIfPlaying and WasPlaying and (ShownPositionMs < SeekMaxMs) then
     ScheduleRestart(ShownPositionMs);
 
-  WriteVideoMinerDebugLog(Format(
-    'seek_done target_ms=%d shown_ms=%d was_playing=%s resume=%s stop_ms=%.3f preview_ms=%.3f total_ms=%.3f',
-    [TargetMs, ShownPositionMs, BoolToStr(WasPlaying, True),
-     BoolToStr(ResumeIfPlaying and WasPlaying and (ShownPositionMs < SeekMaxMs), True),
-     StopMs, PreviewMs, TotalWatch.Elapsed.TotalMilliseconds]));
+  if DebugLogEnabled then
+    WriteVideoMinerDebugLog(Format(
+      'seek_done target_ms=%d shown_ms=%d was_playing=%s resume=%s stop_ms=%.3f preview_ms=%.3f total_ms=%.3f',
+      [TargetMs, ShownPositionMs, BoolToStr(WasPlaying, True),
+       BoolToStr(ResumeIfPlaying and WasPlaying and (ShownPositionMs < SeekMaxMs), True),
+       StopMs, PreviewMs, TotalWatch.Elapsed.TotalMilliseconds]));
 end;
 
 function TVideoMinerPlaybackController.ShouldRestartLoop(
@@ -683,12 +729,21 @@ var
   VideoSeekMs: Double;
   AudioStartMs: Double;
   VideoReopened: Boolean;
+  DebugLogEnabled: Boolean;
 begin
   Result := False;
   ErrorMessage := '';
+  DebugLogEnabled := VideoMinerDebugLogEnabled;
 
   if VideoFile = '' then
     Exit;
+
+  if (FVideoView = nil) or (FAudioPlayback = nil) or
+     (FPlaybackTimer = nil) then
+  begin
+    ErrorMessage := 'Playback controller is not initialized.';
+    Exit;
+  end;
 
   TotalWatch := TStopwatch.StartNew;
 
@@ -698,10 +753,11 @@ begin
   else if TargetMs > SeekMaxMs then
     TargetMs := SeekMaxMs;
 
-  WriteVideoMinerDebugLog(Format(
-    'start_playback file="%s" requested_ms=%d target_ms=%d frame_already_shown=%s',
-    [ExtractFileName(VideoFile), PositionMs, TargetMs,
-     BoolToStr(FrameAlreadyShown, True)]));
+  if DebugLogEnabled then
+    WriteVideoMinerDebugLog(Format(
+      'start_playback file="%s" requested_ms=%d target_ms=%d frame_already_shown=%s',
+      [ExtractFileName(VideoFile), PositionMs, TargetMs,
+       BoolToStr(FrameAlreadyShown, True)]));
 
   VideoPrepareMs := 0;
   VideoReopened := False;
@@ -711,21 +767,24 @@ begin
     not FrameAlreadyShown) then
   begin
     VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
-    WriteVideoMinerDebugLog(Format(
-      'start_playback_reuse_failed file="%s" target_ms=%d video_seek_ms=%.3f total_ms=%.3f err="%s"',
-      [ExtractFileName(VideoFile), TargetMs, VideoSeekMs,
-       TotalWatch.Elapsed.TotalMilliseconds, ReuseErrorMessage]));
+    if DebugLogEnabled then
+      WriteVideoMinerDebugLog(Format(
+        'start_playback_reuse_failed file="%s" target_ms=%d video_seek_ms=%.3f total_ms=%.3f err="%s"',
+        [ExtractFileName(VideoFile), TargetMs, VideoSeekMs,
+         TotalWatch.Elapsed.TotalMilliseconds, ReuseErrorMessage]));
 
     StepWatch := TStopwatch.StartNew;
     Decoder.Close;
     if not Decoder.Open(VideoFile, OpenInfo, ErrorMessage) then
     begin
       VideoPrepareMs := StepWatch.Elapsed.TotalMilliseconds;
-      WriteVideoMinerDebugLog(Format(
-        'start_playback_failed step="video_open_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f total_ms=%.3f err="%s"',
-        [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs,
-         TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
-      FVideoView.PlaybackActive := False;
+      if DebugLogEnabled then
+        WriteVideoMinerDebugLog(Format(
+          'start_playback_failed step="video_open_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f total_ms=%.3f err="%s"',
+          [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs,
+           TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+      if FVideoView <> nil then
+        FVideoView.PlaybackActive := False;
       ErrorMessage := 'Failed to reopen video decoder: ' + ErrorMessage;
       Exit;
     end;
@@ -737,11 +796,13 @@ begin
       not FrameAlreadyShown) then
     begin
       VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
-      WriteVideoMinerDebugLog(Format(
-        'start_playback_failed step="video_seek_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f total_ms=%.3f err="%s"',
-        [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs, VideoSeekMs,
-         TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
-      FVideoView.PlaybackActive := False;
+      if DebugLogEnabled then
+        WriteVideoMinerDebugLog(Format(
+          'start_playback_failed step="video_seek_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f total_ms=%.3f err="%s"',
+          [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs, VideoSeekMs,
+           TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+      if FVideoView <> nil then
+        FVideoView.PlaybackActive := False;
       ErrorMessage := 'Failed to seek video decoder: ' + ErrorMessage;
       Exit;
     end;
@@ -753,11 +814,13 @@ begin
     ErrorMessage) then
   begin
     AudioStartMs := StepWatch.Elapsed.TotalMilliseconds;
-    WriteVideoMinerDebugLog(Format(
-      'start_playback_failed step="audio_start" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f audio_start_ms=%.3f total_ms=%.3f err="%s"',
-      [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs, VideoSeekMs,
-       AudioStartMs, TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
-    FVideoView.PlaybackActive := False;
+    if DebugLogEnabled then
+      WriteVideoMinerDebugLog(Format(
+        'start_playback_failed step="audio_start" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f audio_start_ms=%.3f total_ms=%.3f err="%s"',
+        [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs, VideoSeekMs,
+         AudioStartMs, TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+    if FVideoView <> nil then
+      FVideoView.PlaybackActive := False;
     ErrorMessage := 'Failed to start audio playback: ' + ErrorMessage;
     Exit;
   end;
@@ -765,11 +828,12 @@ begin
 
   FPlaybackTimer.Enabled := True;
   FVideoView.PlaybackActive := True;
-  WriteVideoMinerDebugLog(Format(
-    'start_playback_done file="%s" target_ms=%d frame_already_shown=%s video_reopen=%s video_prepare_ms=%.3f video_seek_ms=%.3f audio_start_ms=%.3f total_ms=%.3f',
-    [ExtractFileName(VideoFile), TargetMs, BoolToStr(FrameAlreadyShown, True),
-     BoolToStr(VideoReopened, True), VideoPrepareMs, VideoSeekMs,
-     AudioStartMs, TotalWatch.Elapsed.TotalMilliseconds]));
+  if DebugLogEnabled then
+    WriteVideoMinerDebugLog(Format(
+      'start_playback_done file="%s" target_ms=%d frame_already_shown=%s video_reopen=%s video_prepare_ms=%.3f video_seek_ms=%.3f audio_start_ms=%.3f total_ms=%.3f',
+      [ExtractFileName(VideoFile), TargetMs, BoolToStr(FrameAlreadyShown, True),
+       BoolToStr(VideoReopened, True), VideoPrepareMs, VideoSeekMs,
+       AudioStartMs, TotalWatch.Elapsed.TotalMilliseconds]));
 
   Result := True;
 end;
@@ -827,6 +891,13 @@ begin
 
   if PositionMs < 0 then
     Exit;
+
+  if (FAudioPlayback = nil) or (FVideoView = nil) then
+  begin
+    ErrorMessage := 'Playback controller is not initialized.';
+    Result := False;
+    Exit;
+  end;
 
   AudioPositionMs := FAudioPlayback.PlaybackPositionMs;
   if AudioPositionMs < 0 then
@@ -1034,9 +1105,16 @@ begin
   if Assigned(MaybeAutoCheckFrame) then
     MaybeAutoCheckFrame(CurrentVideoPositionMs);
   if DebugLogEnabled then
-    LogPlaybackTick(VideoFile, AudioPositionMs, PositionMs, LagMs, DropCount,
-      DidSeekToAudio, PumpMs, DecodeMs, SyncMs,
-      TotalWatch.Elapsed.TotalMilliseconds, FPlaybackTimer.Interval);
+  begin
+    if FPlaybackTimer <> nil then
+      LogPlaybackTick(VideoFile, AudioPositionMs, PositionMs, LagMs, DropCount,
+        DidSeekToAudio, PumpMs, DecodeMs, SyncMs,
+        TotalWatch.Elapsed.TotalMilliseconds, FPlaybackTimer.Interval)
+    else
+      LogPlaybackTick(VideoFile, AudioPositionMs, PositionMs, LagMs, DropCount,
+        DidSeekToAudio, PumpMs, DecodeMs, SyncMs,
+        TotalWatch.Elapsed.TotalMilliseconds, 0);
+  end;
 end;
 
 procedure TVideoMinerPlaybackController.StopForSeek;

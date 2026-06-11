@@ -654,6 +654,16 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
   - 確認では表示 tick が `42 -> 125 -> 167 -> 167 -> 208 -> 250...` となり、シークバーの後退は出なくなった。
 - `VideoMinerDebugLog.pas` のログ出力は調査時だけ `True` にし、通常状態では `False` に戻す。
 
+### ループ時の再生位置復元
+
+- 2026-06-12 に、手動チャプターがあり、かつ終了動作がループモードの動画だけ、再生位置を保存して次回読み込み時に復元するようにした。
+- 保存先は手動チャプターと同じ INI の `ManualChapters:<絶対パス>` セクションで、キーは `PlaybackPositionMs`。
+- `VideoMinerSettings.pas` に `LoadManualChapterPlaybackPosition` / `SaveManualChapterPlaybackPosition` / `ClearManualChapterPlaybackPosition` を追加した。
+- `VideoMinerChapterManager.pas` に `HasManualChapters` を追加し、復元条件の判定はメインフォームからこのメソッドを使う。
+- `SaveManualChapterPositions` はセクションを一度 `EraseSection` するため、再生位置を保持したい場合は必ず `SaveManualChapterState` の後に `SaveLoopPlaybackPosition` を呼ぶ。
+- ループモードではない、または手動チャプターがなくなった場合は、古い `PlaybackPositionMs` を削除して誤復元を防ぐ。
+- ファイル切り替え時とフォーム終了時の両方で保存するため、アプリ終了だけでなく次の動画へ移る場合も現在位置を失いにくい。
+
 ### 試したが注意が必要なこと
 
 - 音声位置に追いつかせるため、表示なしで大量に `DecodeNextFrame(..., ConvertFrame=False)` を回す処理を入れたが、音声だけ先に進み、後から映像が早送りで表示される挙動になったため外した。

@@ -4,7 +4,7 @@ interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
-  System.Types,
+  System.Math, System.Types,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
   Vcl.ExtCtrls, Vcl.Graphics, Vcl.StdCtrls, ActiveX, DropAgent, FFmpegDecoder,
   FFmpegDecoderTypes, ResizeEdges, ShortcutAction, VideoMinerAudioPlayback,
@@ -96,6 +96,8 @@ type
     procedure OpenFromDialog;
     procedure LoadManualChapterState(const FileName: string);
     procedure SaveManualChapterState;
+    procedure SaveLoopPlaybackPosition;
+    function TryRestoreLoopPlaybackPosition: Boolean;
     procedure SaveAudioPlaybackSettings;
     procedure PlayFromCurrentPosition;
     procedure StopPlayback;
@@ -207,7 +209,6 @@ begin
   FVideoView.OnDeleteChapterClick := DeleteChapterOverlayClick;
   FVideoView.CheckEnabled := FChapterManager.CheckEnabled;
   RefreshChapterOverlay;
-  UpdateEndActionButton;
   FPendingOpenFiles := TStringList.Create;
   FRestartPlaybackTimer := TTimer.Create(Self);
   FRestartPlaybackTimer.Enabled := False;
@@ -215,6 +216,7 @@ begin
   FRestartPlaybackTimer.OnTimer := RestartPlaybackTimer;
   FPlaybackController := TVideoMinerPlaybackController.Create(TimerPlayback,
     FRestartPlaybackTimer, FAudioPlayback, FVideoView, FPreviewDecoder);
+  UpdateEndActionButton;
   FCurrentVideoPositionMs := -1;
   FSeekPositionMs := 0;
   FSeekMaxMs := 0;
@@ -242,17 +244,23 @@ end;
 procedure TVideoMinerMainForm.FormDestroy(Sender: TObject);
 begin
   SaveManualChapterState;
+  SaveLoopPlaybackPosition;
   SaveAudioPlaybackSettings;
-  TimerPlayback.Enabled := False;
-  FVideoView.PlaybackActive := False;
-  FRestartPlaybackTimer.Enabled := False;
-  FAudioPlayback.Stop;
+  if TimerPlayback <> nil then
+    TimerPlayback.Enabled := False;
+  if FVideoView <> nil then
+    FVideoView.PlaybackActive := False;
+  if FRestartPlaybackTimer <> nil then
+    FRestartPlaybackTimer.Enabled := False;
+  if FAudioPlayback <> nil then
+    FAudioPlayback.Stop;
   FDropAgent.Free;
   FPendingOpenFiles.Free;
   FCommandController.Free;
   FShortcuts.Free;
   FPlaybackController.Free;
-  FWindowModeController.SaveWindowBounds;
+  if FWindowModeController <> nil then
+    FWindowModeController.SaveWindowBounds;
   FWindowModeController.Free;
   FVideoView.Free;
   FChapterManager.Free;
@@ -397,6 +405,7 @@ begin
   UpdateEndActionButton;
   ConfigureLoopSegment(CurrentPlaybackPositionMs);
   SaveEndAction(FEndAction);
+  SaveLoopPlaybackPosition;
 end;
 
 procedure TVideoMinerMainForm.EndActionOverlayClick(Sender: TObject);
@@ -411,6 +420,9 @@ begin
 
   FChapterManager.AddManualChapter(CurrentPlaybackPositionMs, FSeekMaxMs);
   RefreshChapterOverlay;
+  ConfigureLoopSegment(CurrentPlaybackPositionMs);
+  SaveManualChapterState;
+  SaveLoopPlaybackPosition;
 end;
 
 procedure TVideoMinerMainForm.MaybeAutoCheckFrame(PositionMs: Integer);
@@ -433,6 +445,7 @@ begin
     RefreshChapterOverlay;
     ConfigureLoopSegment(CurrentPlaybackPositionMs);
     SaveManualChapterState;
+    SaveLoopPlaybackPosition;
   end;
 end;
 
@@ -459,6 +472,7 @@ begin
   RefreshChapterOverlay;
   ConfigureLoopSegment(CurrentPlaybackPositionMs);
   SaveManualChapterState;
+  SaveLoopPlaybackPosition;
 end;
 
 procedure TVideoMinerMainForm.RefreshChapterOverlay;
@@ -469,7 +483,7 @@ end;
 
 procedure TVideoMinerMainForm.UpdateEndActionButton;
 begin
-  if FVideoView = nil then
+  if (FVideoView = nil) or (FPlaybackController = nil) then
     Exit;
 
   FVideoView.EndActionText := FPlaybackController.EndActionText(FEndAction);
@@ -565,6 +579,51 @@ begin
   FChapterManager.SaveManualChapterState(FVideoFile, FSeekMaxMs);
 end;
 
+procedure TVideoMinerMainForm.SaveLoopPlaybackPosition;
+begin
+  if (FChapterManager = nil) or (FPlaybackController = nil) or
+     (FVideoFile = '') then
+    Exit;
+
+  if (FEndAction = eaLoop) and FChapterManager.HasManualChapters then
+    SaveManualChapterPlaybackPosition(FVideoFile, CurrentPlaybackPositionMs,
+      FSeekMaxMs)
+  else
+    ClearManualChapterPlaybackPosition(FVideoFile);
+end;
+
+function TVideoMinerMainForm.TryRestoreLoopPlaybackPosition: Boolean;
+var
+  ErrorMessage: string;
+  PositionMs: Integer;
+  ShownPositionMs: Integer;
+begin
+  Result := False;
+  if (FChapterManager = nil) or (FVideoFile = '') or
+     (FPlaybackController = nil) or (FEndAction <> eaLoop) or
+     (not FChapterManager.HasManualChapters) then
+    Exit;
+
+  if not LoadManualChapterPlaybackPosition(FVideoFile, FSeekMaxMs,
+    PositionMs) then
+    Exit;
+
+  if not FPlaybackController.ShowFrameNearMs(PositionMs, FSeekMaxMs,
+    ShownPositionMs, ErrorMessage) then
+    Exit;
+
+  FCurrentVideoPositionMs := ShownPositionMs;
+  FUpdatingSeek := True;
+  try
+    FSeekPositionMs := ShownPositionMs;
+  finally
+    FUpdatingSeek := False;
+  end;
+  UpdatePlaybackProgress(FSeekPositionMs);
+  ConfigureLoopSegment(FSeekPositionMs);
+  Result := True;
+end;
+
 procedure TVideoMinerMainForm.SaveAudioPlaybackSettings;
 var
   Settings: TVideoMinerAudioSettings;
@@ -584,6 +643,12 @@ end;
 
 function TVideoMinerMainForm.CurrentPlaybackPositionMs: Integer;
 begin
+  if FPlaybackController = nil then
+  begin
+    Result := Max(0, Min(FSeekMaxMs, FSeekPositionMs));
+    Exit;
+  end;
+
   Result := FPlaybackController.CurrentPositionMs(PlaybackActiveOrPending,
     FSeekPositionMs, FCurrentVideoPositionMs, FSeekMaxMs);
 end;
@@ -621,6 +686,7 @@ begin
   end;
 
   SaveManualChapterState;
+  SaveLoopPlaybackPosition;
 
   TimerPlayback.Enabled := False;
   FPlaybackController.ClearRestart;
@@ -675,7 +741,8 @@ begin
   UpdateNavigationButtons;
   UpdateInfoLabel;
   RefreshChapterOverlay;
-  ShowFrameAtMs(0);
+  if not TryRestoreLoopPlaybackPosition then
+    ShowFrameAtMs(0);
 
   if AutoPlay then
     PlayFromCurrentPosition;
@@ -889,6 +956,9 @@ end;
 
 procedure TVideoMinerMainForm.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
+  if FWindowModeController = nil then
+    Exit;
+
   if (Key = VK_ESCAPE) and FWindowModeController.BossMode then
   begin
     FWindowModeController.ExitBossMode;
@@ -958,15 +1028,18 @@ begin
   if (FVideoFile = '') or (TargetMs < 0) or (TargetMs >= FSeekMaxMs) then
     Exit;
 
-  WriteVideoMinerDebugLog(Format('restart_playback target_ms=%d', [TargetMs]));
+  if VideoMinerDebugLogEnabled then
+    WriteVideoMinerDebugLog(Format('restart_playback target_ms=%d',
+      [TargetMs]));
   StartPlaybackAtMs(TargetMs, True);
 end;
 
 procedure TVideoMinerMainForm.WMNCHitTest(var Message: TWMNCHitTest);
 begin
   inherited;
-  FWindowModeController.HitTestBorderlessResize(
-    Point(Message.XPos, Message.YPos), Message.Result);
+  if FWindowModeController <> nil then
+    FWindowModeController.HitTestBorderlessResize(
+      Point(Message.XPos, Message.YPos), Message.Result);
 end;
 
 procedure TVideoMinerMainForm.WMNCCalcSize(var Message: TMessage);
@@ -978,13 +1051,15 @@ end;
 procedure TVideoMinerMainForm.WMMove(var Message: TWMMove);
 begin
   inherited;
-  FWindowModeController.HandleMove;
+  if FWindowModeController <> nil then
+    FWindowModeController.HandleMove;
 end;
 
 procedure TVideoMinerMainForm.WMSize(var Message: TWMSize);
 begin
   inherited;
-  FWindowModeController.HandleSize;
+  if FWindowModeController <> nil then
+    FWindowModeController.HandleSize;
 end;
 
 procedure TVideoMinerMainForm.WMCopyData(var Message: TWMCopyData);

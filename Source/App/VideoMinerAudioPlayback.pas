@@ -84,9 +84,11 @@ var
   DecodeMs: Double;
   OutputStartMs: Double;
   QueueMs: Double;
+  DebugLogEnabled: Boolean;
 begin
   ErrorMessage := '';
   Result := True;
+  DebugLogEnabled := VideoMinerDebugLogEnabled;
   TotalWatch := TStopwatch.StartNew;
 
   StepWatch := TStopwatch.StartNew;
@@ -97,10 +99,11 @@ begin
   if (FileName = '') or (not VideoInfo.Audio.Present) or
      (VideoInfo.Audio.OpenError <> '') then
   begin
-    WriteVideoMinerDebugLog(Format(
-      'audio_start_skip pos_ms=%d present=%s open_error="%s" stop_ms=%.3f total_ms=%.3f',
-      [PositionMs, BoolToStr(VideoInfo.Audio.Present, True),
-       VideoInfo.Audio.OpenError, StopMs, TotalWatch.Elapsed.TotalMilliseconds]));
+    if DebugLogEnabled then
+      WriteVideoMinerDebugLog(Format(
+        'audio_start_skip pos_ms=%d present=%s open_error="%s" stop_ms=%.3f total_ms=%.3f',
+        [PositionMs, BoolToStr(VideoInfo.Audio.Present, True),
+         VideoInfo.Audio.OpenError, StopMs, TotalWatch.Elapsed.TotalMilliseconds]));
     Exit;
   end;
 
@@ -113,10 +116,11 @@ begin
     if not FDecoder.Open(FileName, AudioInfo, ErrorMessage) then
     begin
       OpenMs := StepWatch.Elapsed.TotalMilliseconds;
-      WriteVideoMinerDebugLog(Format(
-        'audio_start_failed step="open" pos_ms=%d stop_ms=%.3f open_ms=%.3f total_ms=%.3f err="%s"',
-        [PositionMs, StopMs, OpenMs, TotalWatch.Elapsed.TotalMilliseconds,
-         ErrorMessage]));
+      if DebugLogEnabled then
+        WriteVideoMinerDebugLog(Format(
+          'audio_start_failed step="open" pos_ms=%d stop_ms=%.3f open_ms=%.3f total_ms=%.3f err="%s"',
+          [PositionMs, StopMs, OpenMs, TotalWatch.Elapsed.TotalMilliseconds,
+           ErrorMessage]));
       Result := False;
       Exit;
     end;
@@ -127,10 +131,11 @@ begin
   if not FDecoder.SeekAudioToMs(PositionMs, ErrorMessage) then
   begin
     SeekMs := StepWatch.Elapsed.TotalMilliseconds;
-    WriteVideoMinerDebugLog(Format(
-      'audio_start_failed step="seek" pos_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f total_ms=%.3f err="%s"',
-      [PositionMs, StopMs, OpenMs, SeekMs,
-       TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+    if DebugLogEnabled then
+      WriteVideoMinerDebugLog(Format(
+        'audio_start_failed step="seek" pos_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f total_ms=%.3f err="%s"',
+        [PositionMs, StopMs, OpenMs, SeekMs,
+         TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
     FDecoder.Close;
     FOpenFileName := '';
     Result := False;
@@ -154,10 +159,11 @@ begin
     SampleCount, Finished, ErrorMessage) then
   begin
     DecodeMs := StepWatch.Elapsed.TotalMilliseconds;
-    WriteVideoMinerDebugLog(Format(
-      'audio_start_failed step="decode" pos_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f decode_ms=%.3f total_ms=%.3f err="%s"',
-      [PositionMs, StopMs, OpenMs, SeekMs, DecodeMs,
-       TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+    if DebugLogEnabled then
+      WriteVideoMinerDebugLog(Format(
+        'audio_start_failed step="decode" pos_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f decode_ms=%.3f total_ms=%.3f err="%s"',
+        [PositionMs, StopMs, OpenMs, SeekMs, DecodeMs,
+         TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
     FDecoder.Close;
     FOpenFileName := '';
     FFinished := True;
@@ -174,10 +180,11 @@ begin
   if not FDecoder.StartAudioPlayback(ErrorMessage) then
   begin
     OutputStartMs := StepWatch.Elapsed.TotalMilliseconds;
-    WriteVideoMinerDebugLog(Format(
-      'audio_start_failed step="output_start" pos_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f decode_ms=%.3f output_start_ms=%.3f total_ms=%.3f err="%s"',
-      [PositionMs, StopMs, OpenMs, SeekMs, DecodeMs, OutputStartMs,
-       TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+    if DebugLogEnabled then
+      WriteVideoMinerDebugLog(Format(
+        'audio_start_failed step="output_start" pos_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f decode_ms=%.3f output_start_ms=%.3f total_ms=%.3f err="%s"',
+        [PositionMs, StopMs, OpenMs, SeekMs, DecodeMs, OutputStartMs,
+         TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
     FDecoder.Close;
     FOpenFileName := '';
     FFinished := True;
@@ -192,10 +199,11 @@ begin
      (not FDecoder.QueueAudioPcm16Stereo48k(Pcm, ErrorMessage)) then
   begin
     QueueMs := StepWatch.Elapsed.TotalMilliseconds;
-    WriteVideoMinerDebugLog(Format(
-      'audio_start_failed step="queue" pos_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f decode_ms=%.3f output_start_ms=%.3f queue_ms=%.3f total_ms=%.3f err="%s"',
-      [PositionMs, StopMs, OpenMs, SeekMs, DecodeMs, OutputStartMs, QueueMs,
-       TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+    if DebugLogEnabled then
+      WriteVideoMinerDebugLog(Format(
+        'audio_start_failed step="queue" pos_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f decode_ms=%.3f output_start_ms=%.3f queue_ms=%.3f total_ms=%.3f err="%s"',
+        [PositionMs, StopMs, OpenMs, SeekMs, DecodeMs, OutputStartMs, QueueMs,
+         TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
     Stop;
     Result := False;
   end;
@@ -205,11 +213,12 @@ begin
   begin
     FPlaybackClock := TStopwatch.StartNew;
     FPlaybackClockActive := True;
-    WriteVideoMinerDebugLog(Format(
-      'audio_start pos_ms=%d start_samples=%d queued_samples=%d initial_pcm_bytes=%d start_queue_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f decode_ms=%.3f output_start_ms=%.3f queue_ms=%.3f total_ms=%.3f finished=%s',
-      [PositionMs, FStartSamples, FQueuedSamples, Length(Pcm),
-       AUDIO_START_QUEUE_MS, StopMs, OpenMs, SeekMs, DecodeMs, OutputStartMs,
-       QueueMs, TotalWatch.Elapsed.TotalMilliseconds, BoolToStr(FFinished, True)]));
+    if DebugLogEnabled then
+      WriteVideoMinerDebugLog(Format(
+        'audio_start pos_ms=%d start_samples=%d queued_samples=%d initial_pcm_bytes=%d start_queue_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f decode_ms=%.3f output_start_ms=%.3f queue_ms=%.3f total_ms=%.3f finished=%s',
+        [PositionMs, FStartSamples, FQueuedSamples, Length(Pcm),
+         AUDIO_START_QUEUE_MS, StopMs, OpenMs, SeekMs, DecodeMs, OutputStartMs,
+         QueueMs, TotalWatch.Elapsed.TotalMilliseconds, BoolToStr(FFinished, True)]));
   end;
 end;
 
