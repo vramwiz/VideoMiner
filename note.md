@@ -549,6 +549,7 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
   - `Source\App\VideoMinerChapterManager.pas`
     - チャプター配列、Check ON/OFF 状態、暗いフレーム継続時間、自動チェックマーカー統合、表示用チャプター抽出を担当する。
     - 手動チャプターの追加/削除、保存/復元、チャプター移動先、ループ区間境界の計算もここへ移した。
+    - loop segment は `TVideoMinerLoopSegment` と `LoopSegmentForPosition` で start/end をまとめて返す。個別の `LoopSegmentStartPositionMs` / `LoopSegmentEndPositionMs` は manager 内部の private helper にした。
   - `Source\App\VideoMinerMainForm.pas`
     - Check ボタンイベント、現在再生位置、現在フレームの暗さ判定結果を `VideoMinerChapterManager` へ渡す。
     - Manager から表示用チャプターを受け取り、`VideoMinerVideoView.Chapters` へ反映する。
@@ -563,10 +564,60 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
     - ファイル選択ダイアログの初期フォルダ決定、前回ファイル保存、前回ファイルの解決/検証もここへ移した。
     - `VideoMinerMainForm.LoadVideoFile` は UI 状態リセット、タイトル/情報更新、初期フレーム表示、再生開始に寄せた。
     - 存在しないファイルを指定した場合に現在状態を壊さないよう、`ValidateVideoMinerMediaFile` はリセット前に呼ぶ。
+  - `Source\App\VideoMinerWindowModeController.pas`
+    - fullscreen / boss mode / window bounds / maximize button 表示 / borderless resize hit-test / move-size 時の通常ウィンドウ bounds 記憶を担当する。
+    - `VideoMinerMainForm` 側の `FFullScreen` / `FBossMode` / `FNormalWindowBounds` は削除し、状態はこの controller が所有する。
+    - main form の `BossGesture` / `BossExitClick` / `WMNCHitTest` / `WMMove` / `WMSize` / ESC キー処理は controller 呼び出しへ寄せた。
+  - `Source\App\VideoMinerCommandController.pas`
+    - overlay click / seek / volume change / shortcut action の受け口を担当する。
+    - main form は open / seek / navigate / playback などの実処理 callback を渡し、controller が `VideoMinerVideoView` のイベントと `ShortcutAction` 登録を束ねる。
+    - main form 側の `FirstFrameOverlayClick` / `LastFrameOverlayClick` / `Navigate*OverlayClick` / `Skip*OverlayClick` / `SeekBarSeek` / `FullScreenOverlayClick` / `MuteOverlayClick` / `VolumeOverlayChange` / `Shortcut*` / `ChangeVolumeBy` / `TogglePlayPause` は削除した。
   - `Source\App\VideoMinerPlaybackTiming.pas`
     - FPS から timer interval / 最終フレーム位置を計算する処理を担当する。
     - 音声同期の遅れ判定、ドロップ継続可否、終端付近判定、逆戻りフレーム判定、seek guard 許容判定、seek guard 初期フレーム数もここへ移した。
     - 次に再生制御を分ける場合は、このユニットの純粋判定を使いながら `TimerPlaybackTimer` / `StartPlaybackAtMs` / `SeekToMs` を少しずつ薄くする。
+  - `Source\App\VideoMinerPlaybackController.pas`
+    - 再生制御分離の第一段として追加した。
+    - `ActiveOrPending` / `StopPlayback` に加えて、seek 中断用の `StopForSeek`、再開予約の `ScheduleRestart`、再開 timer からの `ConsumeRestart` を担当する。
+    - 再開待ち state は main form ではなく controller が所有する。main form 側の `FRestartState` / `FPendingRestartPlayback` / `FPendingRestartMs` は不要になった。
+    - `StartPlaybackAtMs` の本体は `StartAtMs` として controller へ移動した。main form は成功時の `FCurrentVideoPositionMs` / `FSeekPositionMs` / ループ区間 / seek guard 更新だけを残す。
+    - `TimerPlaybackTimer` の入口にある seeking 判定、動画有無判定、audio pump、音声位置 clamp は `PrepareTick` へ移動した。
+    - `TimerPlaybackTimer` 内の次フレーム decode と失敗時停止は `DecodeNextFrame` へ移動した。戻り値は frame / end-of-stream / error の3択。
+    - 音声位置への同期処理は `SyncVideoToAudio` へ移動した。main form は同期後の `FCurrentVideoPositionMs` 更新だけを残す。
+    - seek guard の表示/破棄判定は `HandleSeekGuard` へ移動した。main form は continue / break / status 表示の制御だけを残す。
+    - 音声より映像が遅れたときの drop / `ShowFrameAt` 分岐は `HandleLaggingVideo` へ移動した。
+    - scratch frame の逆戻り破棄ログは `ShouldDropBackwardScratchFrame`、scratch frame 表示は `PresentScratchFrame` へ移動した。
+    - `TimerPlaybackTimer` 後半の loop 区間到達判定は `ShouldRestartLoop`、seek bar 反映位置の計算は `SeekPositionForTick`、lag 計算は `PlaybackLagMs`、tick ログは `LogPlaybackTick` へ移動した。
+    - `CurrentPlaybackPositionMs` の位置決定は `CurrentPositionMs`、end action の表示文字列は `EndActionText`、end action の順送りは `NextEndAction`、終端時の分岐判定は `FinishResult`、終端停止時の view 状態変更は `StopAtEnd` へ移動した。
+    - `ConfigureLoopSegment` は chapter manager の `LoopSegmentForPosition` を呼ぶだけになり、main form 側の `LoopSegmentStartPositionMs` / `LoopSegmentEndPositionMs` 中継は削除した。
+    - 次に進める場合は、`LoopStartPositionMs` / `FinishPlaybackAtEnd` の loop 開始位置取得を同じ流れに寄せるか、`TimerPlaybackTimer` 全体をさらに小さい controller 操作単位へ分ける。
+
+### メインフォーム分散化の現在地
+
+- 2026-06-11 時点で、`VideoMinerMainForm.pas` は 1346 行。
+- この段階の方針は、main form を「GUI イベント入口」「フォーム固有の状態反映」「controller への委譲」に寄せること。
+- 追加済みの主な分散先:
+  - `VideoMinerCommandController.pas`
+    - overlay click、seek bar 操作、volume/mute、shortcut 登録と実行を担当する。
+    - main form は open / seek / navigate / playback などの実処理 callback を渡す。
+  - `VideoMinerWindowModeController.pas`
+    - fullscreen、boss mode、window bounds、maximize 表示、borderless resize hit-test、move/size 時の bounds 記憶を担当する。
+  - `VideoMinerPlaybackController.pas`
+    - 再生開始、停止、seek 中断、再開予約、再生 tick の細部、同期、seek guard、tick ログ、end action 判定を担当する。
+  - `VideoMinerChapterManager.pas`
+    - chapter/check 状態、手動 chapter 保存/復元、自動 check marker、chapter navigation、loop segment 計算を担当する。
+- main form から削除済み:
+  - `FFullScreen` / `FBossMode` / `FNormalWindowBounds`
+  - overlay の単純 click handler 群
+  - shortcut 用の `Shortcut*` 群
+  - volume/mute の直接処理
+  - 再生再開待ち state
+  - loop segment start/end の中継関数
+- 今後機能追加する場合:
+  - まず新機能の担当 controller/manager を決めてから実装する。
+  - main form へ直接ロジックを書かず、イベント入口から controller/manager へ渡す。
+  - 動画チェック機能を増やす場合は、まず `VideoMinerChapterManager` か新しい check 専用 manager に責務を寄せる。
+  - UI 操作だけ増える場合は `VideoMinerCommandController`、表示状態だけ増える場合は `VideoMinerVideoView`/overlay 側に寄せる。
 
 ### 解消済みの同期問題
 

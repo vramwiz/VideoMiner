@@ -6,6 +6,11 @@ uses
   System.Math, System.SysUtils, VideoMinerOverlay, VideoMinerSettings;
 
 type
+  TVideoMinerLoopSegment = record
+    StartMs: Integer;
+    EndMs: Integer;
+  end;
+
   TVideoMinerChapterManager = class
   private
     FAutoCheckDarkStartMs: Integer;
@@ -13,6 +18,8 @@ type
     FCheckEnabled: Boolean;
     function FindNearbyAutoCheckChapter(PositionMs: Integer): Integer;
     function ChapterVisible(const Chapter: TVideoMinerOverlayChapter): Boolean;
+    function LoopSegmentStartPositionMs(PositionMs, LastPositionMs: Integer): Integer;
+    function LoopSegmentEndPositionMs(PositionMs, LastPositionMs: Integer): Integer;
   public
     constructor Create;
     procedure Clear;
@@ -24,8 +31,8 @@ type
     function DisplayChapters: TVideoMinerOverlayChapters;
     function FindNavigationTarget(Delta, CurrentMs, LastPositionMs: Integer): Integer;
     function LoopStartPositionMs(LastPositionMs: Integer): Integer;
-    function LoopSegmentStartPositionMs(PositionMs, LastPositionMs: Integer): Integer;
-    function LoopSegmentEndPositionMs(PositionMs, LastPositionMs: Integer): Integer;
+    function LoopSegmentForPosition(PositionMs, LastPositionMs: Integer):
+      TVideoMinerLoopSegment;
     procedure LoadManualChapterState(const FileName: string; MaxMs: Integer);
     procedure SaveManualChapterState(const FileName: string; MaxMs: Integer);
     property CheckEnabled: Boolean read FCheckEnabled;
@@ -264,6 +271,15 @@ begin
       Result := Chapter.PositionMs;
   end;
   Result := Max(0, Min(LastPositionMs, Result));
+end;
+
+function TVideoMinerChapterManager.LoopSegmentForPosition(PositionMs,
+  LastPositionMs: Integer): TVideoMinerLoopSegment;
+begin
+  Result.StartMs := LoopSegmentStartPositionMs(PositionMs, LastPositionMs);
+  Result.EndMs := LoopSegmentEndPositionMs(PositionMs, LastPositionMs);
+  if Result.EndMs <= Result.StartMs then
+    Result.EndMs := LastPositionMs;
 end;
 
 function TVideoMinerChapterManager.LoopSegmentStartPositionMs(

@@ -9,10 +9,10 @@ uses
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
   Vcl.ExtCtrls, Vcl.Graphics, Vcl.StdCtrls, ActiveX, DropAgent, FFmpegDecoder,
   FFmpegDecoderTypes, ResizeEdges, ShortcutAction, VideoMinerAudioPlayback,
-  VideoMinerChapterManager, VideoMinerMediaList, VideoMinerDebugLog,
-  VideoMinerMediaOpen, VideoMinerSettings, VideoMinerShortcutBindings,
-  VideoMinerOverlay, VideoMinerPlaybackTiming, VideoMinerVideoView,
-  VideoMinerWindowChrome;
+  VideoMinerChapterManager, VideoMinerCommandController, VideoMinerMediaList, VideoMinerDebugLog,
+  VideoMinerMediaOpen, VideoMinerSettings,
+  VideoMinerOverlay, VideoMinerPlaybackController, VideoMinerPlaybackTiming,
+  VideoMinerVideoView, VideoMinerWindowChrome, VideoMinerWindowModeController;
 
 const
   WM_VM_OPEN_PENDING = WM_APP + 1;
@@ -65,23 +65,18 @@ type
     FOleInitialized: Boolean;
     FPendingOpenFiles: TStringList;
     FProcessingOpenQueue: Boolean;
-    FPendingRestartPlayback: Boolean;
-    FPendingRestartMs: Integer;
     FRestartPlaybackTimer: TTimer;
+    FPlaybackController: TVideoMinerPlaybackController;
+    FCommandController: TVideoMinerCommandController;
+    FWindowModeController: TVideoMinerWindowModeController;
     FChapterManager: TVideoMinerChapterManager;
     FLoopSegmentEndMs: Integer;
     FLoopSegmentStartMs: Integer;
-    FBossMode: Boolean;
-    FFullScreen: Boolean;
     FEndAction: TVideoMinerEndAction;
-    FNormalWindowBounds: TVideoMinerWindowBounds;
     FShortcuts: TShortcutAction;
     FTitleIcon: TImage;
     FLastInfoUpdateTick: UInt64;
-    procedure EnterFullScreen;
-    procedure ExitFullScreen;
     procedure InitializeTitleIcon;
-    procedure InitializeShortcuts;
     procedure SetCaptionButtonColor(Sender: TObject; Color: TColor);
     procedure AddChapterOverlayClick(Sender: TObject);
     procedure MaybeAutoCheckFrame(PositionMs: Integer);
@@ -90,7 +85,6 @@ type
     procedure CycleEndAction;
     procedure EndActionOverlayClick(Sender: TObject);
     procedure ToggleFullScreen;
-    procedure TogglePlayPause;
     procedure RefreshChapterOverlay;
     procedure UpdateEndActionButton;
     procedure UpdateMaximizeButton;
@@ -103,39 +97,13 @@ type
     procedure LoadManualChapterState(const FileName: string);
     procedure SaveManualChapterState;
     procedure SaveAudioPlaybackSettings;
-    procedure FirstFrameOverlayClick(Sender: TObject);
-    procedure FullScreenOverlayClick(Sender: TObject);
-    procedure LastFrameOverlayClick(Sender: TObject);
-    procedure MuteOverlayClick(Sender: TObject);
-    procedure NavigateNextOverlayClick(Sender: TObject);
-    procedure NavigatePreviousOverlayClick(Sender: TObject);
-    procedure PlayPauseOverlayClick(Sender: TObject);
     procedure PlayFromCurrentPosition;
-    procedure SeekBarSeek(Sender: TObject; PositionMs: Integer);
-    procedure ShortcutChapterNext;
-    procedure ShortcutChapterPrevious;
-    procedure ShortcutNavigateNext;
-    procedure ShortcutNavigatePrevious;
-    procedure ShortcutOpenDialog;
-    procedure ShortcutSeekToFirstFrame;
-    procedure ShortcutSeekToLastFrame;
-    procedure ShortcutToggleMute;
-    procedure ShortcutVolumeDown;
-    procedure ShortcutVolumeUp;
-    procedure SkipBackwardOverlayClick(Sender: TObject);
-    procedure SkipForwardOverlayClick(Sender: TObject);
     procedure StopPlayback;
-    procedure VolumeOverlayChange(Sender: TObject; VolumePercent: Integer);
-    procedure ChangeVolumeBy(DeltaPercent: Integer);
     procedure ConfigureLoopSegment(PositionMs: Integer);
     // 偽装画面の Return ボタンからボスが来たモードを解除する
     procedure BossExitClick(Sender: TObject);
     // マウス往復ジェスチャー成立時にボスが来たモードへ入る
     procedure BossGesture(Sender: TObject);
-    // 再生と音声を止め、動画面を偽装画面へ切り替える
-    procedure EnterBossMode;
-    // 偽装画面を閉じ、通常の動画表示へ戻す
-    procedure ExitBossMode;
     function PlaybackActiveOrPending: Boolean;
     function CurrentPlaybackPositionMs: Integer;
     procedure SetTitleBarText(const Text: string);
@@ -147,11 +115,8 @@ type
     procedure SeekToLastFrame;
     function LastFrameSeekPositionMs: Integer;
     function LoopStartPositionMs: Integer;
-    function LoopSegmentEndPositionMs(PositionMs: Integer): Integer;
-    function LoopSegmentStartPositionMs(PositionMs: Integer): Integer;
     procedure StartPlaybackAtMs(PositionMs: Integer; FrameAlreadyShown: Boolean = False);
     procedure RestartPlaybackTimer(Sender: TObject);
-    function SyncVideoToAudio(var PositionMs: Integer; out ErrorMessage: string): Boolean;
     procedure FinishPlaybackAtEnd;
     procedure QueueOpenAndPlayFile(const FileName: string);
     procedure ProcessOpenQueue;
@@ -202,11 +167,8 @@ begin
   PanelMaximizeButton.Color := TITLE_BAR_COLOR;
   PanelMinimizeButton.Color := TITLE_BAR_COLOR;
   InitializeTitleIcon;
-  UpdateMaximizeButton;
   FEndAction := LoadEndAction;
-  VideoMinerWindowChrome.ApplySavedWindowBounds(Self, FNormalWindowBounds);
   FShortcuts := TShortcutAction.Create;
-  InitializeShortcuts;
   FOleInitialized := OleInitialize(nil) >= 0;
   FDecoder := TFFmpegDecoder.Create;
   FPreviewDecoder := TFFmpegDecoder.Create;
@@ -214,23 +176,32 @@ begin
   FMediaList := TVideoMinerMediaList.Create;
   FChapterManager := TVideoMinerChapterManager.Create;
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
+  FWindowModeController := TVideoMinerWindowModeController.Create(Self,
+    PanelTitleBar, LabelMaximizeButton, FVideoView, StopPlayback);
+  FCommandController := TVideoMinerCommandController.Create(FAudioPlayback,
+    FVideoView);
+  FCommandController.OnChapterNavigate := NavigateChapterBy;
+  FCommandController.OnNavigate := NavigateBy;
+  FCommandController.OnOpenDialog := OpenFromDialog;
+  FCommandController.OnPlaybackActiveOrPending := PlaybackActiveOrPending;
+  FCommandController.OnPlayFromCurrentPosition := PlayFromCurrentPosition;
+  FCommandController.OnSaveAudioSettings := SaveAudioPlaybackSettings;
+  FCommandController.OnSeekByMs := SeekByMs;
+  FCommandController.OnSeekToFirstFrame := SeekToFirstFrame;
+  FCommandController.OnSeekToLastFrame := SeekToLastFrame;
+  FCommandController.OnSeekToMs := SeekToMs;
+  FCommandController.OnStopPlayback := StopPlayback;
+  FCommandController.OnToggleFullScreen := ToggleFullScreen;
+  FCommandController.RegisterShortcuts(FShortcuts);
+  FCommandController.BindVideoView;
+  UpdateMaximizeButton;
+  FWindowModeController.ApplySavedWindowBounds;
   TResizeEdgeHelper.AttachEdges(PanelTitleBar, VIDEO_MINER_RESIZE_BORDER,
     [rdTop]);
   TResizeEdgeHelper.AttachEdges(FVideoView.SurfaceControl,
     VIDEO_MINER_RESIZE_BORDER, [rdBottom, rdLeft, rdRight]);
-  FVideoView.OnFirstFrameClick := FirstFrameOverlayClick;
   FVideoView.OnBossExitClick := BossExitClick;
   FVideoView.OnBossGesture := BossGesture;
-  FVideoView.OnFullScreenClick := FullScreenOverlayClick;
-  FVideoView.OnNavigateNextClick := NavigateNextOverlayClick;
-  FVideoView.OnNavigatePreviousClick := NavigatePreviousOverlayClick;
-  FVideoView.OnPlayPauseClick := PlayPauseOverlayClick;
-  FVideoView.OnSeek := SeekBarSeek;
-  FVideoView.OnSkipBackwardClick := SkipBackwardOverlayClick;
-  FVideoView.OnSkipForwardClick := SkipForwardOverlayClick;
-  FVideoView.OnLastFrameClick := LastFrameOverlayClick;
-  FVideoView.OnVolumeChange := VolumeOverlayChange;
-  FVideoView.OnMuteClick := MuteOverlayClick;
   FVideoView.OnEndActionClick := EndActionOverlayClick;
   FVideoView.OnAddChapterClick := AddChapterOverlayClick;
   FVideoView.OnCheckClick := CheckOverlayClick;
@@ -243,13 +214,13 @@ begin
   FRestartPlaybackTimer.Enabled := False;
   FRestartPlaybackTimer.Interval := SEEK_RESTART_DELAY_MS;
   FRestartPlaybackTimer.OnTimer := RestartPlaybackTimer;
+  FPlaybackController := TVideoMinerPlaybackController.Create(TimerPlayback,
+    FRestartPlaybackTimer, FAudioPlayback, FVideoView);
   FCurrentVideoPositionMs := -1;
   FSeekPositionMs := 0;
   FSeekMaxMs := 0;
   FLoopSegmentStartMs := -1;
   FLoopSegmentEndMs := -1;
-  FPendingRestartPlayback := False;
-  FPendingRestartMs := -1;
   AudioSettings := LoadAudioSettings;
   FAudioPlayback.VolumePercent := AudioSettings.VolumePercent;
   FAudioPlayback.Muted := AudioSettings.Muted;
@@ -279,7 +250,11 @@ begin
   FAudioPlayback.Stop;
   FDropAgent.Free;
   FPendingOpenFiles.Free;
+  FCommandController.Free;
   FShortcuts.Free;
+  FPlaybackController.Free;
+  FWindowModeController.SaveWindowBounds;
+  FWindowModeController.Free;
   FVideoView.Free;
   FChapterManager.Free;
   FMediaList.Free;
@@ -287,74 +262,14 @@ begin
   FPreviewDecoder.Free;
   FDecoder.Free;
   FTitleIcon.Free;
-  VideoMinerWindowChrome.RestoreAndRememberNormalWindowBoundsForSave(Self,
-    FFullScreen, FNormalWindowBounds);
-  SaveMainFormBounds(FNormalWindowBounds);
   SaveEndAction(FEndAction);
   if FOleInitialized then
     OleUninitialize;
 end;
 
-procedure TVideoMinerMainForm.EnterFullScreen;
-var
-  FullScreenRect: TRect;
-  Monitor: TMonitor;
-begin
-  if FFullScreen then
-    Exit;
-
-  VideoMinerWindowChrome.RememberNormalWindowBounds(Self, FFullScreen,
-    FNormalWindowBounds);
-  FFullScreen := True;
-  if FVideoView <> nil then
-    FVideoView.FullScreen := FFullScreen;
-  WindowState := wsNormal;
-  PanelTitleBar.Visible := False;
-
-  Monitor := Screen.MonitorFromWindow(Handle, mdNearest);
-  if Monitor <> nil then
-    FullScreenRect := Monitor.BoundsRect
-  else
-    FullScreenRect := Screen.DesktopRect;
-
-  SetBounds(FullScreenRect.Left, FullScreenRect.Top, FullScreenRect.Width,
-    FullScreenRect.Height);
-end;
-
-procedure TVideoMinerMainForm.ExitFullScreen;
-var
-  Bounds: TVideoMinerWindowBounds;
-begin
-  if not FFullScreen then
-    Exit;
-
-  FFullScreen := False;
-  if FVideoView <> nil then
-    FVideoView.FullScreen := FFullScreen;
-  PanelTitleBar.Visible := True;
-  WindowState := wsNormal;
-
-  Bounds := FNormalWindowBounds;
-  if Bounds.Available then
-    SetBounds(Bounds.Left, Bounds.Top, Bounds.Width, Bounds.Height);
-  VideoMinerWindowChrome.RememberNormalWindowBounds(Self, FFullScreen,
-    FNormalWindowBounds);
-end;
-
 procedure TVideoMinerMainForm.ToggleFullScreen;
 begin
-  if FFullScreen then
-    ExitFullScreen
-  else
-    EnterFullScreen;
-end;
-
-procedure TVideoMinerMainForm.TogglePlayPause;
-begin
-  if PlaybackActiveOrPending then
-    StopPlayback
-  else
-    PlayFromCurrentPosition;
+  FWindowModeController.ToggleFullScreen;
 end;
 
 procedure TVideoMinerMainForm.InitializeTitleIcon;
@@ -390,25 +305,6 @@ begin
     FVideoView.HandleMouseWheel(Shift, WheelDelta, MousePos);
   if not Result then
     Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
-end;
-
-procedure TVideoMinerMainForm.InitializeShortcuts;
-var
-  Handlers: TVideoMinerShortcutHandlers;
-begin
-  Handlers.ChapterPrevious := ShortcutChapterPrevious;
-  Handlers.ChapterNext := ShortcutChapterNext;
-  Handlers.OpenDialog := ShortcutOpenDialog;
-  Handlers.NavigatePrevious := ShortcutNavigatePrevious;
-  Handlers.NavigateNext := ShortcutNavigateNext;
-  Handlers.SeekToFirstFrame := ShortcutSeekToFirstFrame;
-  Handlers.SeekToLastFrame := ShortcutSeekToLastFrame;
-  Handlers.ToggleFullScreen := ToggleFullScreen;
-  Handlers.ToggleMute := ShortcutToggleMute;
-  Handlers.TogglePlayPause := TogglePlayPause;
-  Handlers.VolumeDown := ShortcutVolumeDown;
-  Handlers.VolumeUp := ShortcutVolumeUp;
-  RegisterVideoMinerShortcuts(FShortcuts, Handlers);
 end;
 
 // 指定ミリ秒位置のフレームを表示する
@@ -497,14 +393,7 @@ end;
 
 procedure TVideoMinerMainForm.CycleEndAction;
 begin
-  case FEndAction of
-    eaStop:
-      FEndAction := eaLoop;
-    eaLoop:
-      FEndAction := eaNext;
-  else
-    FEndAction := eaStop;
-  end;
+  FEndAction := FPlaybackController.NextEndAction(FEndAction);
   UpdateEndActionButton;
   ConfigureLoopSegment(CurrentPlaybackPositionMs);
   SaveEndAction(FEndAction);
@@ -583,25 +472,13 @@ begin
   if FVideoView = nil then
     Exit;
 
-  case FEndAction of
-    eaLoop:
-      FVideoView.EndActionText := 'Loop';
-    eaNext:
-      FVideoView.EndActionText := 'Next';
-  else
-    FVideoView.EndActionText := 'Stop';
-  end;
+  FVideoView.EndActionText := FPlaybackController.EndActionText(FEndAction);
 end;
 
 procedure TVideoMinerMainForm.UpdateMaximizeButton;
 begin
-  if LabelMaximizeButton = nil then
-    Exit;
-
-  if WindowState = wsMaximized then
-    LabelMaximizeButton.Caption := WideChar($2750)
-  else
-    LabelMaximizeButton.Caption := WideChar($25A1);
+  if FWindowModeController <> nil then
+    FWindowModeController.UpdateMaximizeButton;
 end;
 
 function TVideoMinerMainForm.TryShowFrameNearMs(const PositionMs: Integer;
@@ -756,29 +633,13 @@ end;
 
 function TVideoMinerMainForm.PlaybackActiveOrPending: Boolean;
 begin
-  Result := TimerPlayback.Enabled or FPendingRestartPlayback or
-    ((FRestartPlaybackTimer <> nil) and FRestartPlaybackTimer.Enabled);
+  Result := (FPlaybackController <> nil) and FPlaybackController.ActiveOrPending;
 end;
 
 function TVideoMinerMainForm.CurrentPlaybackPositionMs: Integer;
 begin
-  if PlaybackActiveOrPending then
-    Result := FAudioPlayback.PlaybackPositionMs
-  else
-    Result := FSeekPositionMs;
-
-  if Result < 0 then
-  begin
-    if FCurrentVideoPositionMs >= 0 then
-      Result := FCurrentVideoPositionMs
-    else
-      Result := FSeekPositionMs;
-  end;
-
-  if Result < 0 then
-    Result := 0
-  else if Result > FSeekMaxMs then
-    Result := FSeekMaxMs;
+  Result := FPlaybackController.CurrentPositionMs(PlaybackActiveOrPending,
+    FSeekPositionMs, FCurrentVideoPositionMs, FSeekMaxMs);
 end;
 
 procedure TVideoMinerMainForm.SetStatusCaption(const Text: string);
@@ -816,12 +677,10 @@ begin
   SaveManualChapterState;
 
   TimerPlayback.Enabled := False;
-  FRestartPlaybackTimer.Enabled := False;
+  FPlaybackController.ClearRestart;
   FAudioPlayback.Stop;
   FPreviewDecoder.Close;
   FSeeking := False;
-  FPendingRestartPlayback := False;
-  FPendingRestartMs := -1;
   FCurrentVideoPositionMs := -1;
   FSeekGuardRemaining := 0;
   FLoopSegmentStartMs := -1;
@@ -926,179 +785,21 @@ begin
   StartPlaybackAtMs(FSeekPositionMs);
 end;
 
-procedure TVideoMinerMainForm.PlayPauseOverlayClick(Sender: TObject);
-begin
-  if PlaybackActiveOrPending then
-    StopPlayback
-  else
-    PlayFromCurrentPosition;
-end;
-
-procedure TVideoMinerMainForm.FirstFrameOverlayClick(Sender: TObject);
-begin
-  SeekToFirstFrame;
-end;
-
-procedure TVideoMinerMainForm.LastFrameOverlayClick(Sender: TObject);
-begin
-  SeekToLastFrame;
-end;
-
-procedure TVideoMinerMainForm.NavigatePreviousOverlayClick(Sender: TObject);
-begin
-  NavigateBy(-1);
-end;
-
-procedure TVideoMinerMainForm.NavigateNextOverlayClick(Sender: TObject);
-begin
-  NavigateBy(1);
-end;
-
-procedure TVideoMinerMainForm.SkipBackwardOverlayClick(Sender: TObject);
-begin
-  SeekByMs(-10000);
-end;
-
-procedure TVideoMinerMainForm.SeekBarSeek(Sender: TObject; PositionMs: Integer);
-begin
-  SeekToMs(PositionMs);
-end;
-
-procedure TVideoMinerMainForm.FullScreenOverlayClick(Sender: TObject);
-begin
-  ToggleFullScreen;
-end;
-
-procedure TVideoMinerMainForm.ShortcutOpenDialog;
-begin
-  OpenFromDialog;
-end;
-
-procedure TVideoMinerMainForm.ShortcutChapterPrevious;
-begin
-  NavigateChapterBy(-1);
-end;
-
-procedure TVideoMinerMainForm.ShortcutChapterNext;
-begin
-  NavigateChapterBy(1);
-end;
-
-procedure TVideoMinerMainForm.ShortcutNavigatePrevious;
-begin
-  NavigateBy(-1);
-end;
-
-procedure TVideoMinerMainForm.ShortcutNavigateNext;
-begin
-  NavigateBy(1);
-end;
-
-procedure TVideoMinerMainForm.ShortcutSeekToFirstFrame;
-begin
-  SeekToFirstFrame;
-end;
-
-procedure TVideoMinerMainForm.ShortcutSeekToLastFrame;
-begin
-  SeekToLastFrame;
-end;
-
-procedure TVideoMinerMainForm.ShortcutVolumeUp;
-begin
-  ChangeVolumeBy(5);
-end;
-
-procedure TVideoMinerMainForm.ShortcutVolumeDown;
-begin
-  ChangeVolumeBy(-5);
-end;
-
-procedure TVideoMinerMainForm.ShortcutToggleMute;
-begin
-  FAudioPlayback.Muted := not FAudioPlayback.Muted;
-  FVideoView.Muted := FAudioPlayback.Muted;
-  if FAudioPlayback.Muted then
-    FVideoView.VolumePercent := 0
-  else
-    FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
-  SaveAudioPlaybackSettings;
-end;
-
-procedure TVideoMinerMainForm.MuteOverlayClick(Sender: TObject);
-begin
-  ShortcutToggleMute;
-end;
-
-procedure TVideoMinerMainForm.SkipForwardOverlayClick(Sender: TObject);
-begin
-  SeekByMs(10000);
-end;
-
-procedure TVideoMinerMainForm.ChangeVolumeBy(DeltaPercent: Integer);
-begin
-  FAudioPlayback.Muted := False;
-  FVideoView.Muted := FAudioPlayback.Muted;
-  FAudioPlayback.VolumePercent := Max(0,
-    Min(100, FAudioPlayback.VolumePercent + DeltaPercent));
-  FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
-  SaveAudioPlaybackSettings;
-end;
-
-procedure TVideoMinerMainForm.VolumeOverlayChange(Sender: TObject;
-  VolumePercent: Integer);
-begin
-  FAudioPlayback.Muted := False;
-  FVideoView.Muted := FAudioPlayback.Muted;
-  FAudioPlayback.VolumePercent := VolumePercent;
-  FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
-  SaveAudioPlaybackSettings;
-end;
-
 procedure TVideoMinerMainForm.BossGesture(Sender: TObject);
 begin
-  EnterBossMode;
+  FWindowModeController.EnterBossMode;
 end;
 
 procedure TVideoMinerMainForm.BossExitClick(Sender: TObject);
 begin
-  ExitBossMode;
-end;
-
-procedure TVideoMinerMainForm.EnterBossMode;
-begin
-  if FBossMode then
-    Exit;
-
-  StopPlayback;
-  FBossMode := True;
-  if FVideoView <> nil then
-    FVideoView.BossMode := True;
-  PanelTitleBar.Visible := False;
-  SetFocus;
-end;
-
-procedure TVideoMinerMainForm.ExitBossMode;
-begin
-  if not FBossMode then
-    Exit;
-
-  FBossMode := False;
-  if FVideoView <> nil then
-    FVideoView.BossMode := False;
-  PanelTitleBar.Visible := not FFullScreen;
-  SetFocus;
+  FWindowModeController.ExitBossMode;
 end;
 
 // 再生を停止する
 procedure TVideoMinerMainForm.StopPlayback;
 begin
-  TimerPlayback.Enabled := False;
-  FVideoView.PlaybackActive := False;
-  FPendingRestartPlayback := False;
-  FPendingRestartMs := -1;
-  FRestartPlaybackTimer.Enabled := False;
-  FAudioPlayback.StopOutput;
+  if FPlaybackController <> nil then
+    FPlaybackController.StopPlayback;
   UpdateInfoLabel;
 end;
 
@@ -1111,6 +812,7 @@ var
   LagMs: Integer;
   DropCount: Integer;
   DropWatch: TStopwatch;
+  LoopTargetMs: Integer;
   TotalWatch: TStopwatch;
   StepWatch: TStopwatch;
   PumpMs: Double;
@@ -1119,7 +821,10 @@ var
   ConvertFrame: Boolean;
   DidSeekToAudio: Boolean;
   DebugLogEnabled: Boolean;
+  DecodeResult: TVideoMinerPlaybackDecodeResult;
   GuardingSeek: Boolean;
+  LaggingVideoResult: TVideoMinerLaggingVideoResult;
+  SeekGuardResult: TVideoMinerSeekGuardResult;
   UseScratchFrame: Boolean;
 begin
   DebugLogEnabled := VideoMinerDebugLogEnabled;
@@ -1129,29 +834,18 @@ begin
   DecodeMs := 0;
   SyncMs := 0;
 
-  if FSeeking then
-    Exit;
-
-  if (FVideoFile = '') or (FDecoder = nil) then
-  begin
-    TimerPlayback.Enabled := False;
-    FVideoView.PlaybackActive := False;
-    Exit;
-  end;
-
   if DebugLogEnabled then
     StepWatch := TStopwatch.StartNew;
-  if not FAudioPlayback.Pump(ErrorMessage) then
+  if not FPlaybackController.PrepareTick(FSeeking,
+    (FVideoFile <> '') and (FDecoder <> nil), FSeekMaxMs, AudioPositionMs,
+    ErrorMessage) then
   begin
-    SetStatusCaption('Failed to play audio: ' + ErrorMessage);
+    if ErrorMessage <> '' then
+      SetStatusCaption(ErrorMessage);
     Exit;
   end;
   if DebugLogEnabled then
     PumpMs := StepWatch.Elapsed.TotalMilliseconds;
-
-  AudioPositionMs := FAudioPlayback.PlaybackPositionMs;
-  if AudioPositionMs > FSeekMaxMs then
-    AudioPositionMs := FSeekMaxMs;
 
   PositionMs := -1;
   DropCount := 0;
@@ -1163,64 +857,31 @@ begin
     if GuardingSeek then
       ConvertFrame := False;
 
-    if VideoMinerVideoLagsAudio(FCurrentVideoPositionMs, AudioPositionMs) then
-    begin
-      if VideoMinerShouldDropFrame(FCurrentVideoPositionMs, AudioPositionMs,
-        DropCount, DropWatch.ElapsedMilliseconds) then
-      begin
-        ConvertFrame := False;
-        Inc(DropCount);
-      end
-      else
-      begin
-        if FVideoView.ShowFrameAt(FDecoder, AudioPositionMs, ErrorMessage) then
+    LaggingVideoResult := FPlaybackController.HandleLaggingVideo(FDecoder,
+      FSeekMaxMs, AudioPositionMs, DropWatch.ElapsedMilliseconds, DropCount,
+      FCurrentVideoPositionMs, PositionMs, ConvertFrame, ErrorMessage);
+    case LaggingVideoResult of
+      lvrSyncedToAudio:
         begin
-          PositionMs := AudioPositionMs;
-          FCurrentVideoPositionMs := AudioPositionMs;
           DidSeekToAudio := True;
           Break;
         end;
-
-        if VideoMinerNearEnd(FSeekMaxMs, AudioPositionMs) then
+      lvrError:
         begin
-          ErrorMessage := '';
-          PositionMs := AudioPositionMs;
-          FCurrentVideoPositionMs := AudioPositionMs;
-          DidSeekToAudio := True;
-          Break;
+          SetStatusCaption('Failed to sync video: ' + ErrorMessage);
+          Exit;
         end;
-
-        SetStatusCaption('Failed to sync video: ' + ErrorMessage);
-        Exit;
-      end;
     end;
 
     UseScratchFrame := ConvertFrame and (AudioPositionMs < 0);
 
     if DebugLogEnabled then
       StepWatch := TStopwatch.StartNew;
-    if UseScratchFrame then
+    DecodeResult := FPlaybackController.DecodeNextFrame(FDecoder,
+      UseScratchFrame, ConvertFrame, PositionMs, ErrorMessage);
+    if DecodeResult <> pdrFrame then
     begin
-      if not FVideoView.DecodeNextFrameToScratch(FDecoder, PositionMs,
-        ErrorMessage) then
-      begin
-        TimerPlayback.Enabled := False;
-        FVideoView.PlaybackActive := False;
-        FAudioPlayback.StopOutput;
-        if ErrorMessage = 'End of stream.' then
-          FinishPlaybackAtEnd
-        else
-          SetStatusCaption('Failed to decode next frame: ' + ErrorMessage);
-        Exit;
-      end;
-    end
-    else if not FVideoView.DecodeNextFrame(FDecoder, ConvertFrame, PositionMs,
-      ErrorMessage) then
-    begin
-      TimerPlayback.Enabled := False;
-      FVideoView.PlaybackActive := False;
-      FAudioPlayback.StopOutput;
-      if ErrorMessage = 'End of stream.' then
+      if DecodeResult = pdrEndOfStream then
         FinishPlaybackAtEnd
       else
         SetStatusCaption('Failed to decode next frame: ' + ErrorMessage);
@@ -1230,62 +891,44 @@ begin
       DecodeMs := DecodeMs + StepWatch.Elapsed.TotalMilliseconds;
 
     if UseScratchFrame and
-       VideoMinerBackwardScratchFrame(PositionMs, FCurrentVideoPositionMs) then
+       FPlaybackController.ShouldDropBackwardScratchFrame(FVideoFile,
+         DebugLogEnabled, FCurrentVideoPositionMs, PositionMs) then
     begin
-      if DebugLogEnabled then
-        WriteVideoMinerDebugLog(Format(
-          'playback_backward_drop file="%s" current_ms=%d decoded_ms=%d',
-          [ExtractFileName(FVideoFile), FCurrentVideoPositionMs, PositionMs]));
       ConvertFrame := False;
       Continue;
     end;
 
-    if GuardingSeek and (PositionMs >= 0) then
-    begin
-      Dec(FSeekGuardRemaining);
-      if not VideoMinerSeekGuardAccepts(FSeekGuardTargetMs, PositionMs) then
-      begin
-        if DebugLogEnabled then
-          WriteVideoMinerDebugLog(Format(
-            'seek_guard_drop file="%s" target_ms=%d decoded_ms=%d remaining=%d',
-            [ExtractFileName(FVideoFile), FSeekGuardTargetMs, PositionMs,
-             FSeekGuardRemaining]));
-
-        if FSeekGuardRemaining <= 0 then
+    SeekGuardResult := FPlaybackController.HandleSeekGuard(FDecoder,
+      FVideoFile, DebugLogEnabled, FSeekGuardTargetMs, FSeekGuardRemaining,
+      PositionMs, FCurrentVideoPositionMs, ConvertFrame, ErrorMessage);
+    case SeekGuardResult of
+      sgrContinue:
+        Continue;
+      sgrSyncedToTarget:
         begin
-          if FVideoView.ShowFrameAt(FDecoder, FSeekGuardTargetMs,
-            ErrorMessage) then
-          begin
-            PositionMs := FSeekGuardTargetMs;
-            FCurrentVideoPositionMs := FSeekGuardTargetMs;
-            DidSeekToAudio := True;
-            Break;
-          end;
-
+          DidSeekToAudio := True;
+          Break;
+        end;
+      sgrGuardError:
+        begin
           SetStatusCaption('Failed to guard seek frame: ' + ErrorMessage);
           Exit;
         end;
-
-        Continue;
-      end;
-
-      FSeekGuardRemaining := 0;
-      if not FVideoView.ShowFrameAt(FDecoder, PositionMs, ErrorMessage) then
-      begin
-        SetStatusCaption('Failed to present guarded frame: ' + ErrorMessage);
-        Exit;
-      end;
-      ConvertFrame := True;
+      sgrPresentError:
+        begin
+          SetStatusCaption('Failed to present guarded frame: ' + ErrorMessage);
+          Exit;
+        end;
     end;
 
     if UseScratchFrame then
     begin
-      if not FVideoView.PresentScratchFrame(ErrorMessage) then
+      if not FPlaybackController.PresentScratchFrame(ConvertFrame,
+        ErrorMessage) then
       begin
         SetStatusCaption('Failed to present next frame: ' + ErrorMessage);
         Exit;
       end;
-      ConvertFrame := True;
     end;
 
     if PositionMs >= 0 then
@@ -1294,19 +937,22 @@ begin
 
   if DebugLogEnabled then
     StepWatch := TStopwatch.StartNew;
-  if (not DidSeekToAudio) and (not SyncVideoToAudio(PositionMs, ErrorMessage)) then
+  if (not DidSeekToAudio) and
+     (not FPlaybackController.SyncVideoToAudio(FDecoder, FSeekMaxMs,
+       PositionMs, ErrorMessage)) then
   begin
     SetStatusCaption('Failed to sync video: ' + ErrorMessage);
     Exit;
   end;
+  if PositionMs >= 0 then
+    FCurrentVideoPositionMs := PositionMs;
   if DebugLogEnabled then
     SyncMs := StepWatch.Elapsed.TotalMilliseconds;
 
-  if (FEndAction = eaLoop) and (FLoopSegmentStartMs >= 0) and
-     (FLoopSegmentEndMs > FLoopSegmentStartMs) and
-     (FCurrentVideoPositionMs >= FLoopSegmentEndMs) then
+  if FPlaybackController.ShouldRestartLoop(FEndAction, FLoopSegmentStartMs,
+    FLoopSegmentEndMs, FCurrentVideoPositionMs, LoopTargetMs) then
   begin
-    SeekToMs(FLoopSegmentStartMs);
+    SeekToMs(LoopTargetMs);
     Exit;
   end;
 
@@ -1314,30 +960,21 @@ begin
   begin
     FUpdatingSeek := True;
     try
-      if AudioPositionMs >= 0 then
-        FSeekPositionMs := AudioPositionMs
-      else if PositionMs > FSeekMaxMs then
-        FSeekPositionMs := FSeekMaxMs
-      else
-        FSeekPositionMs := PositionMs;
+      FSeekPositionMs := FPlaybackController.SeekPositionForTick(PositionMs,
+        AudioPositionMs, FSeekMaxMs);
     finally
       FUpdatingSeek := False;
     end;
   end;
 
-  AudioPositionMs := FAudioPlayback.PlaybackPositionMs;
-  if (AudioPositionMs >= 0) and (PositionMs >= 0) then
-    LagMs := AudioPositionMs - PositionMs
-  else
-    LagMs := 0;
+  AudioPositionMs := FPlaybackController.PlaybackPositionMs;
+  LagMs := FPlaybackController.PlaybackLagMs(AudioPositionMs, PositionMs);
   UpdatePlaybackProgress(FSeekPositionMs);
   MaybeAutoCheckFrame(FCurrentVideoPositionMs);
   if DebugLogEnabled then
-    WriteVideoMinerDebugLog(Format(
-      'playback_tick file="%s" audio_ms=%d video_ms=%d lag_ms=%d drop_count=%d seek_to_audio=%s pump_ms=%.3f decode_ms=%.3f sync_ms=%.3f total_ms=%.3f timer_interval=%d',
-      [ExtractFileName(FVideoFile), AudioPositionMs, PositionMs, LagMs, DropCount,
-       BoolToStr(DidSeekToAudio, True), PumpMs, DecodeMs, SyncMs,
-       TotalWatch.Elapsed.TotalMilliseconds, TimerPlayback.Interval]));
+    FPlaybackController.LogPlaybackTick(FVideoFile, AudioPositionMs,
+      PositionMs, LagMs, DropCount, DidSeekToAudio, PumpMs, DecodeMs, SyncMs,
+      TotalWatch.Elapsed.TotalMilliseconds, TimerPlayback.Interval);
 end;
 
 
@@ -1402,12 +1039,7 @@ begin
 
   WasPlaying := PlaybackActiveOrPending;
   StepWatch := TStopwatch.StartNew;
-  FAudioPlayback.SilenceOutput;
-  TimerPlayback.Enabled := False;
-  FRestartPlaybackTimer.Enabled := False;
-  FPendingRestartPlayback := False;
-  FPendingRestartMs := -1;
-  FAudioPlayback.StopOutput;
+  FPlaybackController.StopForSeek;
   StopMs := StepWatch.Elapsed.TotalMilliseconds;
 
   TargetMs := PositionMs;
@@ -1450,12 +1082,7 @@ begin
   end;
 
   if ResumeIfPlaying and WasPlaying and (ShownPositionMs < FSeekMaxMs) then
-  begin
-    FPendingRestartPlayback := True;
-    FPendingRestartMs := ShownPositionMs;
-    FRestartPlaybackTimer.Enabled := False;
-    FRestartPlaybackTimer.Enabled := True;
-  end;
+    FPlaybackController.ScheduleRestart(ShownPositionMs);
 
   WriteVideoMinerDebugLog(Format(
     'seek_done target_ms=%d shown_ms=%d was_playing=%s resume=%s stop_ms=%.3f preview_ms=%.3f total_ms=%.3f',
@@ -1502,24 +1129,9 @@ begin
     Result := FChapterManager.LoopStartPositionMs(LastFrameSeekPositionMs);
 end;
 
-function TVideoMinerMainForm.LoopSegmentStartPositionMs(PositionMs: Integer): Integer;
-begin
-  if FChapterManager = nil then
-    Result := 0
-  else
-    Result := FChapterManager.LoopSegmentStartPositionMs(PositionMs,
-      LastFrameSeekPositionMs);
-end;
-
-function TVideoMinerMainForm.LoopSegmentEndPositionMs(PositionMs: Integer): Integer;
-begin
-  Result := LastFrameSeekPositionMs;
-  if FChapterManager <> nil then
-    Result := FChapterManager.LoopSegmentEndPositionMs(PositionMs,
-      LastFrameSeekPositionMs);
-end;
-
 procedure TVideoMinerMainForm.ConfigureLoopSegment(PositionMs: Integer);
+var
+  Segment: TVideoMinerLoopSegment;
 begin
   if (FEndAction <> eaLoop) or (FSeekMaxMs <= 0) then
   begin
@@ -1528,160 +1140,53 @@ begin
     Exit;
   end;
 
-  FLoopSegmentStartMs := LoopSegmentStartPositionMs(PositionMs);
-  FLoopSegmentEndMs := LoopSegmentEndPositionMs(PositionMs);
-  if FLoopSegmentEndMs <= FLoopSegmentStartMs then
+  if FChapterManager = nil then
+  begin
+    FLoopSegmentStartMs := 0;
     FLoopSegmentEndMs := LastFrameSeekPositionMs;
+    Exit;
+  end;
+
+  Segment := FChapterManager.LoopSegmentForPosition(PositionMs,
+    LastFrameSeekPositionMs);
+  FLoopSegmentStartMs := Segment.StartMs;
+  FLoopSegmentEndMs := Segment.EndMs;
 end;
 
 procedure TVideoMinerMainForm.StartPlaybackAtMs(PositionMs: Integer;
   FrameAlreadyShown: Boolean);
 var
   ErrorMessage: string;
-  OpenInfo: TVideoInfo;
-  ReuseErrorMessage: string;
   TargetMs: Integer;
-  TotalWatch: TStopwatch;
-  StepWatch: TStopwatch;
-  VideoPrepareMs: Double;
-  VideoSeekMs: Double;
-  AudioStartMs: Double;
-  VideoReopened: Boolean;
 begin
   if FVideoFile = '' then
     Exit;
 
-  TotalWatch := TStopwatch.StartNew;
-
-  TargetMs := PositionMs;
-  if TargetMs < 0 then
-    TargetMs := 0
-  else if TargetMs > FSeekMaxMs then
-    TargetMs := FSeekMaxMs;
-
-  WriteVideoMinerDebugLog(Format(
-    'start_playback file="%s" requested_ms=%d target_ms=%d frame_already_shown=%s',
-    [ExtractFileName(FVideoFile), PositionMs, TargetMs,
-     BoolToStr(FrameAlreadyShown, True)]));
-
-  VideoPrepareMs := 0;
-  VideoReopened := False;
-
-  StepWatch := TStopwatch.StartNew;
-  if not FVideoView.ShowFrameAt(FDecoder, TargetMs, ReuseErrorMessage,
-    not FrameAlreadyShown) then
+  if not FPlaybackController.StartAtMs(FDecoder, FVideoFile, FVideoInfo,
+    FSeekMaxMs, PositionMs, FrameAlreadyShown, TargetMs, ErrorMessage) then
   begin
-    VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
-    WriteVideoMinerDebugLog(Format(
-      'start_playback_reuse_failed file="%s" target_ms=%d video_seek_ms=%.3f total_ms=%.3f err="%s"',
-      [ExtractFileName(FVideoFile), TargetMs, VideoSeekMs,
-       TotalWatch.Elapsed.TotalMilliseconds, ReuseErrorMessage]));
-
-    StepWatch := TStopwatch.StartNew;
-    FDecoder.Close;
-    if not FDecoder.Open(FVideoFile, OpenInfo, ErrorMessage) then
-    begin
-      VideoPrepareMs := StepWatch.Elapsed.TotalMilliseconds;
-      WriteVideoMinerDebugLog(Format(
-        'start_playback_failed step="video_open_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f total_ms=%.3f err="%s"',
-        [ExtractFileName(FVideoFile), TargetMs, VideoPrepareMs,
-         TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
-      FVideoView.PlaybackActive := False;
-      SetStatusCaption('Failed to reopen video decoder: ' + ErrorMessage);
-      Exit;
-    end;
-    VideoPrepareMs := StepWatch.Elapsed.TotalMilliseconds;
-    VideoReopened := True;
-
-    StepWatch := TStopwatch.StartNew;
-    if not FVideoView.ShowFrameAt(FDecoder, TargetMs, ErrorMessage,
-      not FrameAlreadyShown) then
-    begin
-      VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
-      WriteVideoMinerDebugLog(Format(
-        'start_playback_failed step="video_seek_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f total_ms=%.3f err="%s"',
-        [ExtractFileName(FVideoFile), TargetMs, VideoPrepareMs, VideoSeekMs,
-         TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
-      FVideoView.PlaybackActive := False;
-      SetStatusCaption('Failed to seek video decoder: ' + ErrorMessage);
-      Exit;
-    end;
+    if ErrorMessage <> '' then
+      SetStatusCaption(ErrorMessage);
+    Exit;
   end;
-  VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
+
   FCurrentVideoPositionMs := TargetMs;
   FSeekPositionMs := TargetMs;
   ConfigureLoopSegment(TargetMs);
 
-  StepWatch := TStopwatch.StartNew;
-  if not FAudioPlayback.StartAt(FVideoFile, FVideoInfo, TargetMs,
-    ErrorMessage) then
-  begin
-    AudioStartMs := StepWatch.Elapsed.TotalMilliseconds;
-    WriteVideoMinerDebugLog(Format(
-      'start_playback_failed step="audio_start" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f audio_start_ms=%.3f total_ms=%.3f err="%s"',
-      [ExtractFileName(FVideoFile), TargetMs, VideoPrepareMs, VideoSeekMs,
-       AudioStartMs, TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
-    FVideoView.PlaybackActive := False;
-    SetStatusCaption('Failed to start audio playback: ' + ErrorMessage);
-    Exit;
-  end;
-  AudioStartMs := StepWatch.Elapsed.TotalMilliseconds;
-
   FSeekGuardTargetMs := TargetMs;
   FSeekGuardRemaining := VideoMinerDefaultSeekGuardFrames;
-  TimerPlayback.Enabled := True;
-  FVideoView.PlaybackActive := True;
-  WriteVideoMinerDebugLog(Format(
-    'start_playback_done file="%s" target_ms=%d frame_already_shown=%s video_reopen=%s video_prepare_ms=%.3f video_seek_ms=%.3f audio_start_ms=%.3f total_ms=%.3f',
-    [ExtractFileName(FVideoFile), TargetMs, BoolToStr(FrameAlreadyShown, True),
-     BoolToStr(VideoReopened, True), VideoPrepareMs, VideoSeekMs,
-     AudioStartMs, TotalWatch.Elapsed.TotalMilliseconds]));
-end;
-
-function TVideoMinerMainForm.SyncVideoToAudio(var PositionMs: Integer;
-  out ErrorMessage: string): Boolean;
-var
-  AudioPositionMs: Integer;
-begin
-  ErrorMessage := '';
-  Result := True;
-
-  if PositionMs < 0 then
-    Exit;
-
-  AudioPositionMs := FAudioPlayback.PlaybackPositionMs;
-  if AudioPositionMs < 0 then
-    Exit;
-
-  if AudioPositionMs > FSeekMaxMs then
-    AudioPositionMs := FSeekMaxMs;
-
-  if not VideoMinerShouldSeekVideoToAudio(PositionMs, AudioPositionMs) then
-    Exit;
-
-  Result := FVideoView.ShowFrameAt(FDecoder, AudioPositionMs, ErrorMessage);
-  if Result then
-  begin
-    PositionMs := AudioPositionMs;
-    FCurrentVideoPositionMs := AudioPositionMs;
-  end;
-  if (not Result) and
-     VideoMinerNearEnd(FSeekMaxMs, AudioPositionMs) then
-  begin
-    ErrorMessage := '';
-    PositionMs := AudioPositionMs;
-    FCurrentVideoPositionMs := AudioPositionMs;
-    Result := True;
-  end;
 end;
 
 procedure TVideoMinerMainForm.FinishPlaybackAtEnd;
 var
+  CanNavigateNext: Boolean;
   FrameShown: Boolean;
   LoopStartMs: Integer;
 begin
-  case FEndAction of
-    eaLoop:
+  CanNavigateNext := (FMediaList <> nil) and FMediaList.CanNavigate(1);
+  case FPlaybackController.FinishResult(FEndAction, CanNavigateNext) of
+    perLoop:
       begin
         LoopStartMs := LoopStartPositionMs;
         FUpdatingSeek := True;
@@ -1694,13 +1199,10 @@ begin
         StartPlaybackAtMs(LoopStartMs, FrameShown);
         Exit;
       end;
-    eaNext:
+    perNext:
       begin
-        if (FMediaList <> nil) and FMediaList.CanNavigate(1) then
-        begin
-          NavigateBy(1);
-          Exit;
-        end;
+        NavigateBy(1);
+        Exit;
       end;
   end;
 
@@ -1710,28 +1212,28 @@ begin
   finally
     FUpdatingSeek := False;
   end;
-  FVideoView.PlaybackActive := False;
+  FPlaybackController.StopAtEnd;
   UpdateInfoLabel;
 end;
 
 procedure TVideoMinerMainForm.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
-  if (Key = VK_ESCAPE) and FBossMode then
+  if (Key = VK_ESCAPE) and FWindowModeController.BossMode then
   begin
-    ExitBossMode;
+    FWindowModeController.ExitBossMode;
     Key := 0;
     Exit;
   end;
 
-  if FBossMode then
+  if FWindowModeController.BossMode then
   begin
     Key := 0;
     Exit;
   end;
 
-  if (Key = VK_ESCAPE) and FFullScreen then
+  if (Key = VK_ESCAPE) and FWindowModeController.FullScreen then
   begin
-    ExitFullScreen;
+    FWindowModeController.ExitFullScreen;
     Key := 0;
     Exit;
   end;
@@ -1779,14 +1281,8 @@ procedure TVideoMinerMainForm.RestartPlaybackTimer(Sender: TObject);
 var
   TargetMs: Integer;
 begin
-  FRestartPlaybackTimer.Enabled := False;
-
-  if not FPendingRestartPlayback then
+  if not FPlaybackController.ConsumeRestart(TargetMs) then
     Exit;
-
-  FPendingRestartPlayback := False;
-  TargetMs := FPendingRestartMs;
-  FPendingRestartMs := -1;
 
   if (FVideoFile = '') or (TargetMs < 0) or (TargetMs >= FSeekMaxMs) then
     Exit;
@@ -1798,7 +1294,7 @@ end;
 procedure TVideoMinerMainForm.WMNCHitTest(var Message: TWMNCHitTest);
 begin
   inherited;
-  HitTestBorderlessResize(Self, FFullScreen, VIDEO_MINER_RESIZE_BORDER,
+  FWindowModeController.HitTestBorderlessResize(
     Point(Message.XPos, Message.YPos), Message.Result);
 end;
 
@@ -1811,19 +1307,13 @@ end;
 procedure TVideoMinerMainForm.WMMove(var Message: TWMMove);
 begin
   inherited;
-  VideoMinerWindowChrome.RememberNormalWindowBounds(Self, FFullScreen,
-    FNormalWindowBounds);
+  FWindowModeController.HandleMove;
 end;
 
 procedure TVideoMinerMainForm.WMSize(var Message: TWMSize);
 begin
   inherited;
-  UpdateMaximizeButton;
-  TResizeEdgeHelper.AdjustEdges(PanelTitleBar);
-  if FVideoView <> nil then
-    TResizeEdgeHelper.AdjustEdges(FVideoView.SurfaceControl);
-  VideoMinerWindowChrome.RememberNormalWindowBounds(Self, FFullScreen,
-    FNormalWindowBounds);
+  FWindowModeController.HandleSize;
 end;
 
 procedure TVideoMinerMainForm.WMCopyData(var Message: TWMCopyData);

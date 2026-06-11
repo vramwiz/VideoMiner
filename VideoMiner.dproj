@@ -123,9 +123,11 @@
         <DCCReference Include="Source\App\VideoMinerBossGesture.pas"/>
         <DCCReference Include="Source\App\VideoMinerBossOverlay.pas"/>
         <DCCReference Include="Source\App\VideoMinerChapterManager.pas"/>
+        <DCCReference Include="Source\App\VideoMinerCommandController.pas"/>
         <DCCReference Include="Source\App\VideoMinerDebugLog.pas"/>
         <DCCReference Include="Source\App\VideoMinerFrameCheck.pas"/>
         <DCCReference Include="Source\App\VideoMinerMediaOpen.pas"/>
+        <DCCReference Include="Source\App\VideoMinerPlaybackController.pas"/>
         <DCCReference Include="Source\App\VideoMinerPlaybackTiming.pas"/>
         <DCCReference Include="Source\App\VideoMinerMediaList.pas"/>
         <DCCReference Include="Source\App\VideoMinerOverlay.pas"/>
@@ -133,6 +135,7 @@
         <DCCReference Include="Source\App\VideoMinerVideoSurface.pas"/>
         <DCCReference Include="Source\App\VideoMinerVideoView.pas"/>
         <DCCReference Include="Source\App\VideoMinerWindowChrome.pas"/>
+        <DCCReference Include="Source\App\VideoMinerWindowModeController.pas"/>
         <DCCReference Include="Source\App\VideoMinerMainForm.pas">
             <Form>VideoMinerForm</Form>
             <FormType>dfm</FormType>
