@@ -37,12 +37,14 @@ type
     procedure SetOnMuteClick(Value: TNotifyEvent);
     procedure SetOnNavigateNextClick(Value: TNotifyEvent);
     procedure SetOnNavigatePreviousClick(Value: TNotifyEvent);
+    procedure SetOnPlaybackRateClick(Value: TNotifyEvent);
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
     procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
     procedure SetOnSkipBackwardClick(Value: TNotifyEvent);
     procedure SetOnSkipForwardClick(Value: TNotifyEvent);
     procedure SetOnVolumeChange(Value: TVideoMinerOverlayVolumeEvent);
     procedure SetPlaybackActive(Value: Boolean);
+    procedure SetPlaybackRateText(const Value: string);
     procedure SetVolumePercent(Value: Integer);
   public
     constructor Create(Image: TImage);
@@ -84,12 +86,14 @@ type
     property OnMuteClick: TNotifyEvent write SetOnMuteClick;
     property OnNavigateNextClick: TNotifyEvent write SetOnNavigateNextClick;
     property OnNavigatePreviousClick: TNotifyEvent write SetOnNavigatePreviousClick;
+    property OnPlaybackRateClick: TNotifyEvent write SetOnPlaybackRateClick;
     property OnPlayPauseClick: TNotifyEvent write SetOnPlayPauseClick;
     property OnSeek: TVideoMinerOverlaySeekEvent write SetOnSeek;
     property OnSkipBackwardClick: TNotifyEvent write SetOnSkipBackwardClick;
     property OnSkipForwardClick: TNotifyEvent write SetOnSkipForwardClick;
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent write SetOnVolumeChange;
     property PlaybackActive: Boolean write SetPlaybackActive;
+    property PlaybackRateText: string write SetPlaybackRateText;
     property SurfaceControl: TWinControl read GetSurfaceControl;
     property Muted: Boolean write SetMuted;
     property VolumePercent: Integer write SetVolumePercent;
@@ -249,6 +253,12 @@ begin
     FSurface.OnMuteClick := Value;
 end;
 
+procedure TVideoMinerVideoView.SetOnPlaybackRateClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnPlaybackRateClick := Value;
+end;
+
 procedure TVideoMinerVideoView.SetOnEndActionClick(Value: TNotifyEvent);
 begin
   if FSurface <> nil then
@@ -326,6 +336,12 @@ procedure TVideoMinerVideoView.SetPlaybackActive(Value: Boolean);
 begin
   if FSurface <> nil then
     FSurface.PlaybackActive := Value;
+end;
+
+procedure TVideoMinerVideoView.SetPlaybackRateText(const Value: string);
+begin
+  if FSurface <> nil then
+    FSurface.PlaybackRateText := Value;
 end;
 
 procedure TVideoMinerVideoView.SetCanNavigatePrevious(Value: Boolean);

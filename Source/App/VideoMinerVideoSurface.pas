@@ -38,6 +38,7 @@ type
     FOnMuteClick: TNotifyEvent;
     FOnNavigateNextClick: TNotifyEvent;
     FOnNavigatePreviousClick: TNotifyEvent;
+    FOnPlaybackRateClick: TNotifyEvent;
     FOnPlayPauseClick: TNotifyEvent;
     FOnSeek: TVideoMinerOverlaySeekEvent;
     FOnSkipBackwardClick: TNotifyEvent;
@@ -92,12 +93,14 @@ type
     procedure SetOnMuteClick(Value: TNotifyEvent);
     procedure SetOnNavigateNextClick(Value: TNotifyEvent);
     procedure SetOnNavigatePreviousClick(Value: TNotifyEvent);
+    procedure SetOnPlaybackRateClick(Value: TNotifyEvent);
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
     procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
     procedure SetOnSkipBackwardClick(Value: TNotifyEvent);
     procedure SetOnSkipForwardClick(Value: TNotifyEvent);
     procedure SetOnVolumeChange(Value: TVideoMinerOverlayVolumeEvent);
     procedure SetPlaybackActive(Value: Boolean);
+    procedure SetPlaybackRateText(const Value: string);
     procedure SetVolumePercent(Value: Integer);
     procedure SurfaceClickTimer(Sender: TObject);
     procedure WMEraseBkgnd(var Message: TWMEraseBkgnd); message WM_ERASEBKGND;
@@ -145,12 +148,14 @@ type
     property OnMuteClick: TNotifyEvent read FOnMuteClick write SetOnMuteClick;
     property OnNavigateNextClick: TNotifyEvent read FOnNavigateNextClick write SetOnNavigateNextClick;
     property OnNavigatePreviousClick: TNotifyEvent read FOnNavigatePreviousClick write SetOnNavigatePreviousClick;
+    property OnPlaybackRateClick: TNotifyEvent read FOnPlaybackRateClick write SetOnPlaybackRateClick;
     property OnPlayPauseClick: TNotifyEvent read FOnPlayPauseClick write SetOnPlayPauseClick;
     property OnSeek: TVideoMinerOverlaySeekEvent read FOnSeek write SetOnSeek;
     property OnSkipBackwardClick: TNotifyEvent read FOnSkipBackwardClick write SetOnSkipBackwardClick;
     property OnSkipForwardClick: TNotifyEvent read FOnSkipForwardClick write SetOnSkipForwardClick;
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent read FOnVolumeChange write SetOnVolumeChange;
     property PlaybackActive: Boolean write SetPlaybackActive;
+    property PlaybackRateText: string write SetPlaybackRateText;
     property Muted: Boolean write SetMuted;
     property VolumePercent: Integer write SetVolumePercent;
   end;
@@ -187,6 +192,7 @@ begin
   FLastFrameButton := TVideoMinerOverlayEdgeButton.Create(edLast);
   FNextFileButton := TVideoMinerOverlayFileNavButton.Create(fndNext);
   FSeekBar := TVideoMinerOverlaySeekBar.Create;
+  FSeekBar.PlaybackRateText := '1.0x';
   FSurfaceClickTimer := TTimer.Create(Self);
   FSurfaceClickTimer.Enabled := False;
   FSurfaceClickTimer.Interval := GetDoubleClickTime + 20;
@@ -1060,6 +1066,16 @@ begin
   end;
 end;
 
+procedure TVideoMinerVideoSurface.SetPlaybackRateText(const Value: string);
+begin
+  if FSeekBar <> nil then
+  begin
+    FSeekBar.PlaybackRateText := Value;
+    if FSeekBarVisible then
+      InvalidateOverlayControl(FSeekBar);
+  end;
+end;
+
 procedure TVideoMinerVideoSurface.SetOnPlayPauseClick(Value: TNotifyEvent);
 begin
   FOnPlayPauseClick := Value;
@@ -1117,6 +1133,13 @@ begin
   FOnMuteClick := Value;
   if FSeekBar <> nil then
     FSeekBar.OnMuteClick := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnPlaybackRateClick(Value: TNotifyEvent);
+begin
+  FOnPlaybackRateClick := Value;
+  if FSeekBar <> nil then
+    FSeekBar.OnPlaybackRateClick := Value;
 end;
 
 procedure TVideoMinerVideoSurface.SetOnSeek(Value: TVideoMinerOverlaySeekEvent);

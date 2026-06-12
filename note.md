@@ -318,6 +318,19 @@ function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
 - 中央ボタンの左右に、数値なしの曲がった矢印で 10 秒戻し/10 秒進みのオーバーレイボタンを追加。
 - オーバーレイ GUI は抽象基底 `TVideoMinerOverlayControl` から継承する形にし、プレビュー表示領域から割合でサイズと位置を決める方針。
 
+### 再生速度
+
+- 2026-06-12 に、再生速度の段階実装として `1.0x` / `1.5x` / `2.0x` の切り替えを追加した。
+- 下側オーバーレイのシークバー周辺に速度ボタンを表示し、クリックまたは `R` キーで循環する。
+- 状態は `VideoMinerPlaybackController` が持ち、表示とクリック判定は `VideoMinerOverlay` / `VideoMinerVideoView` / `VideoMinerCommandController` を通す。
+- 2026-06-12 の次段階で、`1.5x` / `2.0x` でも簡易音声倍速を鳴らすようにした。
+- 当初の簡易音声倍速は PCM の入力サンプルを間引く方式だったが、その後、窓単位の切り貼りとクロスフェードで出力 PCM を短くする簡易 time-stretch に置き換えた。
+- 2026-06-12 に `avfilter-11.dll` を `Win64\Debug` / `Win64\Release` へ追加し、FFmpeg filter の `atempo` を優先して使う `FFmpegAudioTempo.pas` を追加した。
+- `TVideoMinerAudioPlayback.TransformPcmForPlaybackRate` は、まず `atempo` 変換を試し、失敗した場合だけ簡易 time-stretch へフォールバックする。
+- `TVideoMinerAudioPlayback` は入力側のデコード済みサンプル数と waveOut へ積んだ出力サンプル数を分けて扱う。
+- `avfilter-11.dll` は `LoadLibrary` 確認済み。実動画で音質や同期を確認し、問題があれば `%TEMP%\VideoMiner_playback_debug.log` の `audio_tempo_fallback` と `audio_pump` を見る。
+- `TempoSmokeTest` で 48kHz/stereo/s16 の 1 秒 PCM を `atempo=1.5` に通し、`input=48000` / `output=32080` の出力を確認済み。
+
 ## ビルド
 
 Debug Win64 ビルド例:

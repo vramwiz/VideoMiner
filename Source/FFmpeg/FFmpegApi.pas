@@ -112,6 +112,11 @@ type
   PPAVCodecContext = ^PAVCodecContext;
   PAVBufferRef = Pointer;
   PPAVBufferRef = ^PAVBufferRef;
+  PAVFilter = Pointer;
+  PAVFilterContext = Pointer;
+  PPAVFilterContext = ^PAVFilterContext;
+  PAVFilterGraph = Pointer;
+  PPAVFilterGraph = ^PAVFilterGraph;
   PSwsContext = Pointer;
   PSwrContext = Pointer;
   PPSwrContext = ^PSwrContext;
@@ -150,6 +155,36 @@ type
     pict_type: Integer; // 映像フレーム種別
     sample_aspect_ratio: TAVRational; // サンプルアスペクト比
     pts: Int64; // フレームの表示時刻
+    pkt_dts: Int64; // パケット由来のDTS
+    time_base: TAVRational; // フレーム時刻の時間単位
+    quality: Integer; // 品質値
+    opaque: Pointer; // 呼び出し側の私有データ
+    repeat_pict: Integer; // フレーム繰り返し情報
+    sample_rate: Integer; // 音声サンプルレート
+    buf: array[0..7] of PAVBufferRef; // フレームデータの参照バッファ
+    extended_buf: Pointer; // 拡張バッファ配列
+    nb_extended_buf: Integer; // 拡張バッファ数
+    side_data: Pointer; // サイドデータ配列
+    nb_side_data: Integer; // サイドデータ数
+    flags: Integer; // フレームフラグ
+    color_range: Integer; // 色範囲
+    color_primaries: Integer; // 色域
+    color_trc: Integer; // 伝達特性
+    colorspace: Integer; // 色空間
+    chroma_location: Integer; // クロマ位置
+    best_effort_timestamp: Int64; // 推定表示時刻
+    metadata: Pointer; // メタデータ
+    decode_error_flags: Integer; // デコードエラーフラグ
+    hw_frames_ctx: PAVBufferRef; // HW frame context
+    opaque_ref: PAVBufferRef; // 参照カウント付き私有データ
+    crop_top: NativeUInt; // クロップ上端
+    crop_bottom: NativeUInt; // クロップ下端
+    crop_left: NativeUInt; // クロップ左端
+    crop_right: NativeUInt; // クロップ右端
+    private_ref: Pointer; // FFmpeg内部参照
+    ch_layout: TAVChannelLayout; // 音声チャンネルレイアウト
+    duration: Int64; // フレーム長
+    alpha_mode: Integer; // alpha handling mode
   end;
 
   Tavformat_open_input = function(ps: PPAVFormatContext; url: PAnsiChar; fmt: Pointer; options: Pointer): Integer; cdecl;
@@ -192,6 +227,8 @@ type
   Tav_frame_get_buffer = function(frame: PAVFrame; align: Integer): Integer; cdecl;
   Tav_frame_make_writable = function(frame: PAVFrame): Integer; cdecl;
   Tav_frame_unref = procedure(frame: PAVFrame); cdecl;
+  Tav_samples_get_buffer_size = function(linesize: PInteger; nb_channels,
+    nb_samples, sample_fmt, align: Integer): Integer; cdecl;
   Tav_strerror = function(errnum: Integer; errbuf: PAnsiChar; errbuf_size: NativeUInt): Integer; cdecl;
   Tav_get_sample_fmt_name = function(sample_fmt: Integer): PAnsiChar; cdecl;
   Tav_opt_set = function(obj: Pointer; name, val: PAnsiChar; search_flags: Integer): Integer; cdecl;
@@ -213,6 +250,21 @@ type
   Tswr_convert = function(s: PSwrContext; out_arg: Pointer; out_count: Integer; in_arg: Pointer; in_count: Integer): Integer; cdecl;
   Tswr_free = procedure(s: PPSwrContext); cdecl;
 
+  Tavfilter_get_by_name = function(name: PAnsiChar): PAVFilter; cdecl;
+  Tavfilter_graph_alloc = function: PAVFilterGraph; cdecl;
+  Tavfilter_graph_create_filter = function(filt_ctx: PPAVFilterContext;
+    filt: PAVFilter; name, args: PAnsiChar; opaque: Pointer;
+    graph_ctx: PAVFilterGraph): Integer; cdecl;
+  Tavfilter_link = function(src: PAVFilterContext; srcpad: Cardinal;
+    dst: PAVFilterContext; dstpad: Cardinal): Integer; cdecl;
+  Tavfilter_graph_config = function(graphctx: PAVFilterGraph;
+    log_ctx: Pointer): Integer; cdecl;
+  Tavfilter_graph_free = procedure(graph: PPAVFilterGraph); cdecl;
+  Tav_buffersrc_add_frame_flags = function(buffer_src: PAVFilterContext;
+    frame: PAVFrame; flags: Integer): Integer; cdecl;
+  Tav_buffersink_get_frame = function(ctx: PAVFilterContext;
+    frame: PAVFrame): Integer; cdecl;
+
 const
   AVMEDIA_TYPE_VIDEO = 0;
   AVMEDIA_TYPE_AUDIO = 1;
@@ -233,6 +285,7 @@ const
   AVERROR_EAGAIN = -11;
   AV_NOPTS_VALUE = -9223372036854775808;
   AV_SAMPLE_FMT_S16 = 1;
+  AV_BUFFERSRC_FLAG_KEEP_REF = 8;
   AUDIO_OUTPUT_SAMPLE_RATE = 48000;
   AUDIO_OUTPUT_CHANNELS = 2;
 
@@ -248,6 +301,7 @@ type
     class var FLoaded: Boolean; // FFmpeg DLLロード済みフラグ
     class var FAvUtil: HMODULE; // avutil DLLハンドル
     class var FAvCodec: HMODULE; // avcodec DLLハンドル
+    class var FAvFilter: HMODULE; // avfilter DLLハンドル
     class var FAvFormat: HMODULE; // avformat DLLハンドル
     class var FSwResample: HMODULE; // swresample DLLハンドル
     class var FSwScale: HMODULE; // swscale DLLハンドル
@@ -272,8 +326,11 @@ type
     class var av_packet_unref: Tav_packet_unref; // AVPacketの参照を解放する関数
     class var av_frame_alloc: Tav_frame_alloc; // AVFrameを確保する関数
     class var av_frame_free: Tav_frame_free; // AVFrameを解放する関数
+    class var av_frame_get_buffer: Tav_frame_get_buffer; // AVFrame用バッファを確保する関数
+    class var av_frame_make_writable: Tav_frame_make_writable; // AVFrameを書き込み可能にする関数
     class var av_strerror: Tav_strerror; // FFmpegエラーコードを文字列化する関数
     class var av_get_sample_fmt_name: Tav_get_sample_fmt_name; // サンプル形式名を取得する関数
+    class var av_samples_get_buffer_size: Tav_samples_get_buffer_size; // 音声サンプルのバイト数を計算する関数
     class var av_channel_layout_default: Tav_channel_layout_default; // 標準チャンネルレイアウトを作る関数
     class var av_channel_layout_copy: Tav_channel_layout_copy; // チャンネルレイアウトをコピーする関数
     class var av_channel_layout_uninit: Tav_channel_layout_uninit; // チャンネルレイアウトを解放する関数
@@ -284,6 +341,14 @@ type
     class var swr_init: Tswr_init; // 音声変換コンテキストを初期化する関数
     class var swr_convert: Tswr_convert; // 音声フレームをPCMへ変換する関数
     class var swr_free: Tswr_free; // 音声変換コンテキストを解放する関数
+    class var avfilter_get_by_name: Tavfilter_get_by_name; // フィルタ名から定義を取得する関数
+    class var avfilter_graph_alloc: Tavfilter_graph_alloc; // フィルタグラフを作る関数
+    class var avfilter_graph_create_filter: Tavfilter_graph_create_filter; // グラフ内にフィルタを作る関数
+    class var avfilter_link: Tavfilter_link; // フィルタ同士を接続する関数
+    class var avfilter_graph_config: Tavfilter_graph_config; // フィルタグラフを確定する関数
+    class var avfilter_graph_free: Tavfilter_graph_free; // フィルタグラフを解放する関数
+    class var av_buffersrc_add_frame_flags: Tav_buffersrc_add_frame_flags; // ソースフィルタへフレームを渡す関数
+    class var av_buffersink_get_frame: Tav_buffersink_get_frame; // シンクフィルタからフレームを受け取る関数
     // この入力プラグインが置かれているフォルダを取得する。
     class function ModuleDirectory: string; static;
     // 指定DLLを実行ファイルフォルダからロードする。
@@ -362,12 +427,16 @@ begin
   FSwScale := LoadDll(DllPath, 'swscale-9.dll');
   FAvCodec := LoadDll(DllPath, 'avcodec-62.dll');
   FAvFormat := LoadDll(DllPath, 'avformat-62.dll');
+  FAvFilter := LoadDll(DllPath, 'avfilter-11.dll');
 
   av_strerror := Tav_strerror(LoadProc(FAvUtil, 'av_strerror'));
   av_get_sample_fmt_name := Tav_get_sample_fmt_name(LoadProc(FAvUtil, 'av_get_sample_fmt_name'));
   av_frame_alloc := Tav_frame_alloc(LoadProc(FAvUtil, 'av_frame_alloc'));
   av_frame_free := Tav_frame_free(LoadProc(FAvUtil, 'av_frame_free'));
+  av_frame_get_buffer := Tav_frame_get_buffer(LoadProc(FAvUtil, 'av_frame_get_buffer'));
+  av_frame_make_writable := Tav_frame_make_writable(LoadProc(FAvUtil, 'av_frame_make_writable'));
   av_frame_unref := Tav_frame_unref(LoadProc(FAvUtil, 'av_frame_unref'));
+  av_samples_get_buffer_size := Tav_samples_get_buffer_size(LoadProc(FAvUtil, 'av_samples_get_buffer_size'));
   av_hwdevice_ctx_create := Tav_hwdevice_ctx_create(LoadProc(FAvUtil, 'av_hwdevice_ctx_create'));
   av_hwframe_transfer_data := Tav_hwframe_transfer_data(LoadProc(FAvUtil, 'av_hwframe_transfer_data'));
   av_buffer_unref := Tav_buffer_unref(LoadProc(FAvUtil, 'av_buffer_unref'));
@@ -405,6 +474,15 @@ begin
   swr_init := Tswr_init(LoadProc(FSwResample, 'swr_init'));
   swr_convert := Tswr_convert(LoadProc(FSwResample, 'swr_convert'));
   swr_free := Tswr_free(LoadProc(FSwResample, 'swr_free'));
+
+  avfilter_get_by_name := Tavfilter_get_by_name(LoadProc(FAvFilter, 'avfilter_get_by_name'));
+  avfilter_graph_alloc := Tavfilter_graph_alloc(LoadProc(FAvFilter, 'avfilter_graph_alloc'));
+  avfilter_graph_create_filter := Tavfilter_graph_create_filter(LoadProc(FAvFilter, 'avfilter_graph_create_filter'));
+  avfilter_link := Tavfilter_link(LoadProc(FAvFilter, 'avfilter_link'));
+  avfilter_graph_config := Tavfilter_graph_config(LoadProc(FAvFilter, 'avfilter_graph_config'));
+  avfilter_graph_free := Tavfilter_graph_free(LoadProc(FAvFilter, 'avfilter_graph_free'));
+  av_buffersrc_add_frame_flags := Tav_buffersrc_add_frame_flags(LoadProc(FAvFilter, 'av_buffersrc_add_frame_flags'));
+  av_buffersink_get_frame := Tav_buffersink_get_frame(LoadProc(FAvFilter, 'av_buffersink_get_frame'));
 
   avformat_network_init;
   FLoaded := True;

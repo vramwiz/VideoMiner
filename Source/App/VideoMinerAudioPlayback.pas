@@ -3,8 +3,8 @@ unit VideoMinerAudioPlayback;
 interface
 
 uses
-  System.Diagnostics, System.SysUtils, FFmpegDecoder, FFmpegDecoderTypes,
-  VideoMinerDebugLog;
+  System.Diagnostics, System.Math, System.SysUtils, FFmpegDecoder,
+  FFmpegDecoderTypes, FFmpegAudioTempo, VideoMinerDebugLog;
 
 type
   TVideoMinerAudioPcmDecodedEvent = procedure(Sender: TObject;
@@ -13,6 +13,7 @@ type
   TVideoMinerAudioPlayback = class
   private const
     AUDIO_OUTPUT_SAMPLE_RATE = 48000;
+    AUDIO_OUTPUT_CHANNELS = 2;
     AUDIO_TARGET_QUEUE_MS = 1000;
     AUDIO_START_QUEUE_MS = 180;
     AUDIO_FADE_IN_MS = 12;
@@ -21,6 +22,8 @@ type
     FFinished: Boolean;
     FStartSamples: Int64;
     FQueuedSamples: Int64;
+    FQueuedOutputSamples: Int64;
+    FPlaybackRate: Double;
     FVolumePercent: Integer;
     FMuted: Boolean;
     FOnPcmDecoded: TVideoMinerAudioPcmDecodedEvent;
@@ -33,7 +36,10 @@ type
     procedure ApplyOutputVolume;
     function PlaybackSamplePosition: Int64;
     procedure SetMuted(Value: Boolean);
+    procedure SetPlaybackRate(Value: Double);
     procedure SetVolumePercent(Value: Integer);
+    function TransformPcmForPlaybackRate(const InputPcm: TBytes;
+      out OutputPcm: TBytes; out OutputSampleCount: Integer): Boolean;
   public
     constructor Create;
     destructor Destroy; override;
@@ -47,6 +53,7 @@ type
     property Muted: Boolean read FMuted write SetMuted;
     property OnPcmDecoded: TVideoMinerAudioPcmDecodedEvent read FOnPcmDecoded
       write FOnPcmDecoded;
+    property PlaybackRate: Double read FPlaybackRate write SetPlaybackRate;
     property VolumePercent: Integer read FVolumePercent write SetVolumePercent;
   end;
 
@@ -61,6 +68,7 @@ begin
   inherited Create;
   FDecoder := TFFmpegDecoder.Create;
   FFinished := True;
+  FPlaybackRate := 1.0;
   FVolumePercent := 100;
   FOpenFileName := '';
   FPlaybackClockActive := False;
@@ -79,6 +87,8 @@ function TVideoMinerAudioPlayback.StartAt(const FileName: string;
 var
   AudioInfo: TVideoInfo;
   Pcm: TBytes;
+  OutputPcm: TBytes;
+  OutputSampleCount: Integer;
   SampleCount: Integer;
   TargetSampleCount: Integer;
   Finished: Boolean;
@@ -152,14 +162,15 @@ begin
   FFinished := False;
   FStartSamples := (Int64(PositionMs) * AUDIO_OUTPUT_SAMPLE_RATE + 500) div 1000;
   FQueuedSamples := FStartSamples;
+  FQueuedOutputSamples := FStartSamples;
   FApplyFadeInNext := True;
   FPlaybackBaseMs := PositionMs;
   FPlaybackClockActive := False;
 
   Pcm := nil;
   SampleCount := Integer(FQueuedSamples);
-  TargetSampleCount := SampleCount +
-    Round(AUDIO_START_QUEUE_MS * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
+  TargetSampleCount := SampleCount + Ceil(
+    AUDIO_START_QUEUE_MS * AUDIO_OUTPUT_SAMPLE_RATE * FPlaybackRate / 1000) + 8;
   StepWatch := TStopwatch.StartNew;
   if not FDecoder.DecodeAudioPcm16Stereo48kUntil(TargetSampleCount, Pcm,
     SampleCount, Finished, ErrorMessage) then
@@ -182,7 +193,17 @@ begin
   FFinished := Finished;
   if Assigned(FOnPcmDecoded) then
     FOnPcmDecoded(Self, FStartSamples, Pcm);
-  ApplyFadeIn(Pcm);
+  if not TransformPcmForPlaybackRate(Pcm, OutputPcm, OutputSampleCount) then
+  begin
+    ErrorMessage := 'Failed to convert audio playback rate.';
+    FDecoder.Close;
+    FOpenFileName := '';
+    FFinished := True;
+    Result := False;
+    Exit;
+  end;
+  Inc(FQueuedOutputSamples, OutputSampleCount);
+  ApplyFadeIn(OutputPcm);
 
   StepWatch := TStopwatch.StartNew;
   if not FDecoder.StartAudioPlayback(ErrorMessage) then
@@ -203,8 +224,8 @@ begin
   ApplyOutputVolume;
 
   StepWatch := TStopwatch.StartNew;
-  if (Length(Pcm) > 0) and
-     (not FDecoder.QueueAudioPcm16Stereo48k(Pcm, ErrorMessage)) then
+  if (Length(OutputPcm) > 0) and
+     (not FDecoder.QueueAudioPcm16Stereo48k(OutputPcm, ErrorMessage)) then
   begin
     QueueMs := StepWatch.Elapsed.TotalMilliseconds;
     if DebugLogEnabled then
@@ -223,8 +244,9 @@ begin
     FPlaybackClockActive := True;
     if DebugLogEnabled then
       WriteVideoMinerDebugLog(Format(
-        'audio_start pos_ms=%d start_samples=%d queued_samples=%d initial_pcm_bytes=%d start_queue_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f decode_ms=%.3f output_start_ms=%.3f queue_ms=%.3f total_ms=%.3f finished=%s',
-        [PositionMs, FStartSamples, FQueuedSamples, Length(Pcm),
+        'audio_start pos_ms=%d rate=%.3f start_samples=%d queued_samples=%d queued_output_samples=%d initial_pcm_bytes=%d start_queue_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f decode_ms=%.3f output_start_ms=%.3f queue_ms=%.3f total_ms=%.3f finished=%s',
+        [PositionMs, FPlaybackRate, FStartSamples, FQueuedSamples,
+         FQueuedOutputSamples, Length(OutputPcm),
          AUDIO_START_QUEUE_MS, StopMs, OpenMs, SeekMs, DecodeMs, OutputStartMs,
          QueueMs, TotalWatch.Elapsed.TotalMilliseconds, BoolToStr(FFinished, True)]));
   end;
@@ -245,6 +267,7 @@ begin
   FFinished := True;
   FStartSamples := 0;
   FQueuedSamples := 0;
+  FQueuedOutputSamples := 0;
   FApplyFadeInNext := False;
   FPlaybackClockActive := False;
   FPlaybackBaseMs := 0;
@@ -261,7 +284,8 @@ begin
   if not FPlaybackClockActive then
     Exit(FStartSamples);
 
-  Result := (Int64(PlaybackPositionMs) * AUDIO_OUTPUT_SAMPLE_RATE + 500) div 1000;
+  Result := FStartSamples +
+    Round(FPlaybackClock.Elapsed.TotalMilliseconds * AUDIO_OUTPUT_SAMPLE_RATE / 1000);
 end;
 
 procedure TVideoMinerAudioPlayback.SetMuted(Value: Boolean);
@@ -285,6 +309,16 @@ begin
 
   FVolumePercent := Value;
   ApplyOutputVolume;
+end;
+
+procedure TVideoMinerAudioPlayback.SetPlaybackRate(Value: Double);
+begin
+  if Value <= 0 then
+    Value := 1.0;
+  if SameValue(FPlaybackRate, Value) then
+    Exit;
+
+  FPlaybackRate := Value;
 end;
 
 procedure TVideoMinerAudioPlayback.ApplyOutputVolume;
@@ -345,15 +379,129 @@ begin
   FApplyFadeInNext := False;
 end;
 
+function TVideoMinerAudioPlayback.TransformPcmForPlaybackRate(
+  const InputPcm: TBytes; out OutputPcm: TBytes;
+  out OutputSampleCount: Integer): Boolean;
+const
+  STRETCH_WINDOW_FRAMES = 2048;
+  STRETCH_OVERLAP_FRAMES = 512;
+var
+  Channel: Integer;
+  ExistingValue: Integer;
+  FadeIn: Double;
+  FadeOut: Double;
+  InputFrameCount: Integer;
+  OutputFrame: Integer;
+  OutputFrameCount: Integer;
+  SegmentFrame: Integer;
+  SegmentFrames: Integer;
+  SourceStartFrame: Integer;
+  SourceFrame: Integer;
+  SourceSamples: PSmallIntArray;
+  TargetSamples: PSmallIntArray;
+  TargetFrame: Integer;
+  TempoErrorMessage: string;
+  TempoPcm: TBytes;
+  TempoSampleCount: Integer;
+  Value: Integer;
+begin
+  Result := True;
+  OutputSampleCount := 0;
+  OutputPcm := nil;
+
+  InputFrameCount := Length(InputPcm) div
+    (AUDIO_OUTPUT_CHANNELS * SizeOf(SmallInt));
+  if InputFrameCount <= 0 then
+    Exit;
+
+  if SameValue(FPlaybackRate, 1.0) then
+  begin
+    OutputPcm := Copy(InputPcm);
+    OutputSampleCount := InputFrameCount;
+    Exit;
+  end;
+
+  if TempoPcm16Stereo48k(InputPcm, FPlaybackRate, TempoPcm,
+    TempoSampleCount, TempoErrorMessage) and (TempoSampleCount > 0) then
+  begin
+    OutputPcm := TempoPcm;
+    OutputSampleCount := TempoSampleCount;
+    Exit;
+  end;
+
+  if (TempoErrorMessage <> '') and VideoMinerDebugLogEnabled then
+    WriteVideoMinerDebugLog(Format(
+      'audio_tempo_fallback rate=%.3f input_bytes=%d err="%s"',
+      [FPlaybackRate, Length(InputPcm), TempoErrorMessage]));
+
+  OutputFrameCount := Floor(InputFrameCount / FPlaybackRate);
+  if OutputFrameCount <= 0 then
+    Exit;
+
+  SetLength(OutputPcm, OutputFrameCount * AUDIO_OUTPUT_CHANNELS *
+    SizeOf(SmallInt));
+  FillChar(OutputPcm[0], Length(OutputPcm), 0);
+  SourceSamples := PSmallIntArray(@InputPcm[0]);
+  TargetSamples := PSmallIntArray(@OutputPcm[0]);
+
+  OutputFrame := 0;
+  while OutputFrame < OutputFrameCount do
+  begin
+    SourceStartFrame := Floor(OutputFrame * FPlaybackRate);
+    if SourceStartFrame >= InputFrameCount then
+      Break;
+
+    SegmentFrames := Min(STRETCH_WINDOW_FRAMES,
+      Min(InputFrameCount - SourceStartFrame, OutputFrameCount - OutputFrame));
+    for SegmentFrame := 0 to SegmentFrames - 1 do
+    begin
+      TargetFrame := OutputFrame + SegmentFrame;
+      SourceFrame := SourceStartFrame + SegmentFrame;
+      if (OutputFrame > 0) and (SegmentFrame < STRETCH_OVERLAP_FRAMES) then
+      begin
+        FadeIn := SegmentFrame / STRETCH_OVERLAP_FRAMES;
+        FadeOut := 1.0 - FadeIn;
+      end
+      else
+      begin
+        FadeIn := 1.0;
+        FadeOut := 0.0;
+      end;
+
+      for Channel := 0 to AUDIO_OUTPUT_CHANNELS - 1 do
+      begin
+        Value := SourceSamples^[SourceFrame * AUDIO_OUTPUT_CHANNELS + Channel];
+        if FadeOut > 0 then
+        begin
+          ExistingValue := TargetSamples^[TargetFrame *
+            AUDIO_OUTPUT_CHANNELS + Channel];
+          Value := Round(ExistingValue * FadeOut + Value * FadeIn);
+        end;
+        if Value < Low(SmallInt) then
+          Value := Low(SmallInt)
+        else if Value > High(SmallInt) then
+          Value := High(SmallInt);
+        TargetSamples^[TargetFrame * AUDIO_OUTPUT_CHANNELS + Channel] :=
+          SmallInt(Value);
+      end;
+    end;
+
+    Inc(OutputFrame, STRETCH_WINDOW_FRAMES - STRETCH_OVERLAP_FRAMES);
+  end;
+  OutputSampleCount := OutputFrameCount;
+end;
+
 function TVideoMinerAudioPlayback.Pump(out ErrorMessage: string): Boolean;
 var
   Pcm: TBytes;
+  OutputPcm: TBytes;
+  OutputSampleCount: Integer;
   SampleCount: Integer;
   PlaybackSampleCount: Int64;
   RawQueuedSampleCount: Int64;
   QueuedSampleCount: Int64;
   TargetQueuedSampleCount: Integer;
-  TargetSampleCount: Integer;
+  TargetInputSampleCount: Integer;
   Finished: Boolean;
   QueuedBeforeMs: Int64;
   SkipReason: string;
@@ -379,7 +527,7 @@ begin
   Pcm := nil;
   SampleCount := Integer(FQueuedSamples);
   PlaybackSampleCount := PlaybackSamplePosition;
-  RawQueuedSampleCount := Int64(FQueuedSamples) - Int64(PlaybackSampleCount);
+  RawQueuedSampleCount := Int64(FQueuedOutputSamples) - Int64(PlaybackSampleCount);
   if RawQueuedSampleCount < 0 then
     QueuedSampleCount := 0
   else
@@ -396,10 +544,11 @@ begin
     Exit;
   end;
 
-  TargetSampleCount := SampleCount + Integer(TargetQueuedSampleCount - QueuedSampleCount);
+  TargetInputSampleCount := SampleCount + Ceil(
+    (TargetQueuedSampleCount - QueuedSampleCount) * FPlaybackRate) + 8;
   StartSample := SampleCount;
 
-  if not FDecoder.DecodeAudioPcm16Stereo48kUntil(TargetSampleCount, Pcm,
+  if not FDecoder.DecodeAudioPcm16Stereo48kUntil(TargetInputSampleCount, Pcm,
     SampleCount, Finished, ErrorMessage) then
   begin
     Stop;
@@ -412,10 +561,18 @@ begin
 
   if Assigned(FOnPcmDecoded) then
     FOnPcmDecoded(Self, StartSample, Pcm);
-  ApplyFadeIn(Pcm);
+  if not TransformPcmForPlaybackRate(Pcm, OutputPcm, OutputSampleCount) then
+  begin
+    Stop;
+    ErrorMessage := 'Failed to convert audio playback rate.';
+    Result := False;
+    Exit;
+  end;
+  Inc(FQueuedOutputSamples, OutputSampleCount);
+  ApplyFadeIn(OutputPcm);
 
-  if (Length(Pcm) > 0) and
-     (not FDecoder.QueueAudioPcm16Stereo48k(Pcm, ErrorMessage)) then
+  if (Length(OutputPcm) > 0) and
+     (not FDecoder.QueueAudioPcm16Stereo48k(OutputPcm, ErrorMessage)) then
   begin
     Stop;
     Result := False;
@@ -423,10 +580,11 @@ begin
 
   if VideoMinerDebugLogEnabled then
     WriteVideoMinerDebugLog(Format(
-      'audio_pump playback_ms=%d raw_queued_before_samples=%d queued_before_ms=%d queued_after_ms=%d pcm_bytes=%d sample_count=%d finished=%s result=%s err="%s"',
+      'audio_pump playback_ms=%d rate=%.3f raw_queued_before_samples=%d queued_before_ms=%d queued_after_ms=%d pcm_bytes=%d output_pcm_bytes=%d sample_count=%d queued_output_samples=%d finished=%s result=%s err="%s"',
       [PlaybackPositionMs, RawQueuedSampleCount, QueuedBeforeMs,
-       Round((Int64(FQueuedSamples) - PlaybackSamplePosition) * 1000 / AUDIO_OUTPUT_SAMPLE_RATE),
-       Length(Pcm), FQueuedSamples, BoolToStr(FFinished, True),
+       Round((Int64(FQueuedOutputSamples) - PlaybackSamplePosition) * 1000 / AUDIO_OUTPUT_SAMPLE_RATE),
+       Length(Pcm), Length(OutputPcm), FQueuedSamples, FQueuedOutputSamples,
+       BoolToStr(FFinished, True),
        BoolToStr(Result, True), ErrorMessage]));
 end;
 
@@ -435,7 +593,8 @@ begin
   if (FDecoder = nil) or (FQueuedSamples <= 0) or (not FPlaybackClockActive) then
     Exit(-1);
 
-  Result := FPlaybackBaseMs + Round(FPlaybackClock.Elapsed.TotalMilliseconds);
+  Result := FPlaybackBaseMs +
+    Round(FPlaybackClock.Elapsed.TotalMilliseconds * FPlaybackRate);
 end;
 
 end.

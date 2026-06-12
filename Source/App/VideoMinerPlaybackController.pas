@@ -3,8 +3,9 @@ unit VideoMinerPlaybackController;
 interface
 
 uses
-  Vcl.ExtCtrls, FFmpegDecoder, FFmpegDecoderTypes, VideoMinerAudioPlayback,
-  VideoMinerChapterManager, VideoMinerSettings, VideoMinerVideoView;
+  System.Diagnostics, Vcl.ExtCtrls, FFmpegDecoder, FFmpegDecoderTypes,
+  VideoMinerAudioPlayback, VideoMinerChapterManager, VideoMinerSettings,
+  VideoMinerVideoView;
 
 type
   TVideoMinerPlaybackEndResult = (perStop, perLoop, perNext);
@@ -23,9 +24,13 @@ type
   TVideoMinerPlaybackController = class
   private
     FAudioPlayback: TVideoMinerAudioPlayback;
+    FPlaybackRate: Double;
     FRestartPending: Boolean;
     FRestartPositionMs: Integer;
     FRestartTimer: TTimer;
+    FRateClock: TStopwatch;
+    FRateClockActive: Boolean;
+    FRateClockBaseMs: Integer;
     FVideoView: TVideoMinerVideoView;
     FPlaybackTimer: TTimer;
     FPreviewDecoder: TFFmpegDecoder;
@@ -58,6 +63,7 @@ type
       out ErrorMessage: string): Boolean;
     function PlaybackLagMs(AudioPositionMs, PositionMs: Integer): Integer;
     function PlaybackPositionMs: Integer;
+    function RateClockPositionMs(SeekMaxMs: Integer): Integer;
     function EndActionText(EndAction: TVideoMinerEndAction): string;
     function NextEndAction(EndAction: TVideoMinerEndAction):
       TVideoMinerEndAction;
@@ -82,6 +88,7 @@ type
     function SeekPositionForTick(PositionMs, AudioPositionMs,
       SeekMaxMs: Integer): Integer;
     procedure ScheduleRestart(PositionMs: Integer);
+    procedure SetPlaybackRate(Value: Double);
     function ShouldRestartLoop(EndAction: TVideoMinerEndAction;
       LoopSegmentStartMs, LoopSegmentEndMs, CurrentVideoPositionMs: Integer;
       out TargetMs: Integer): Boolean;
@@ -119,13 +126,13 @@ type
     procedure StopForSeek;
     procedure StopAtEnd;
     procedure StopPlayback;
+    property PlaybackRate: Double read FPlaybackRate write SetPlaybackRate;
   end;
 
 implementation
 
 uses
-  System.Diagnostics, System.SysUtils, VideoMinerDebugLog,
-  VideoMinerPlaybackTiming;
+  System.Math, System.SysUtils, VideoMinerDebugLog, VideoMinerPlaybackTiming;
 
 constructor TVideoMinerPlaybackController.Create(PlaybackTimer,
   RestartTimer: TTimer; AudioPlayback: TVideoMinerAudioPlayback;
@@ -137,6 +144,9 @@ begin
   FAudioPlayback := AudioPlayback;
   FVideoView := VideoView;
   FPreviewDecoder := PreviewDecoder;
+  FPlaybackRate := 1.0;
+  FRateClockActive := False;
+  FRateClockBaseMs := 0;
   FRestartPending := False;
   FRestartPositionMs := -1;
 end;
@@ -178,7 +188,9 @@ function TVideoMinerPlaybackController.CurrentPositionMs(
   UsePlaybackPosition: Boolean; SeekPositionMs, CurrentVideoPositionMs,
   SeekMaxMs: Integer): Integer;
 begin
-  if UsePlaybackPosition and (FAudioPlayback <> nil) then
+  if UsePlaybackPosition and FRateClockActive then
+    Result := RateClockPositionMs(SeekMaxMs)
+  else if UsePlaybackPosition and (FAudioPlayback <> nil) then
     Result := FAudioPlayback.PlaybackPositionMs
   else
     Result := SeekPositionMs;
@@ -488,6 +500,15 @@ begin
   end;
 
   AudioPositionMs := FAudioPlayback.PlaybackPositionMs;
+  if (AudioPositionMs < 0) and FRateClockActive then
+    AudioPositionMs := RateClockPositionMs(SeekMaxMs)
+  else if (AudioPositionMs < 0) and (not SameValue(FPlaybackRate, 1.0)) then
+  begin
+    FRateClockBaseMs := 0;
+    FRateClock := TStopwatch.StartNew;
+    FRateClockActive := True;
+    AudioPositionMs := RateClockPositionMs(SeekMaxMs);
+  end;
   if AudioPositionMs > SeekMaxMs then
     AudioPositionMs := SeekMaxMs;
 
@@ -520,10 +541,29 @@ end;
 
 function TVideoMinerPlaybackController.PlaybackPositionMs: Integer;
 begin
-  if FAudioPlayback <> nil then
+  if FRateClockActive then
+    Result := RateClockPositionMs(MaxInt)
+  else if FAudioPlayback <> nil then
     Result := FAudioPlayback.PlaybackPositionMs
   else
     Result := -1;
+end;
+
+function TVideoMinerPlaybackController.RateClockPositionMs(
+  SeekMaxMs: Integer): Integer;
+begin
+  if not FRateClockActive then
+  begin
+    Result := -1;
+    Exit;
+  end;
+
+  Result := FRateClockBaseMs +
+    Round(FRateClock.Elapsed.TotalMilliseconds * FPlaybackRate);
+  if Result < 0 then
+    Result := 0
+  else if (SeekMaxMs >= 0) and (Result > SeekMaxMs) then
+    Result := SeekMaxMs;
 end;
 
 procedure TVideoMinerPlaybackController.LogPlaybackTick(const VideoFile: string;
@@ -547,6 +587,16 @@ begin
     FRestartTimer.Enabled := False;
     FRestartTimer.Enabled := True;
   end;
+end;
+
+procedure TVideoMinerPlaybackController.SetPlaybackRate(Value: Double);
+begin
+  if Value <= 0 then
+    Value := 1.0;
+  if SameValue(FPlaybackRate, Value) then
+    Exit;
+
+  FPlaybackRate := Value;
 end;
 
 function TVideoMinerPlaybackController.SeekPositionForTick(PositionMs,
@@ -809,6 +859,8 @@ begin
   end;
   VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
 
+  FAudioPlayback.PlaybackRate := FPlaybackRate;
+  FRateClockActive := False;
   StepWatch := TStopwatch.StartNew;
   if not FAudioPlayback.StartAt(VideoFile, VideoInfo, TargetMs,
     ErrorMessage) then
@@ -825,6 +877,13 @@ begin
     Exit;
   end;
   AudioStartMs := StepWatch.Elapsed.TotalMilliseconds;
+  if (not SameValue(FPlaybackRate, 1.0)) and
+     (FAudioPlayback.PlaybackPositionMs < 0) then
+  begin
+    FRateClockBaseMs := TargetMs;
+    FRateClock := TStopwatch.StartNew;
+    FRateClockActive := True;
+  end;
 
   FPlaybackTimer.Enabled := True;
   FVideoView.PlaybackActive := True;
@@ -900,6 +959,8 @@ begin
   end;
 
   AudioPositionMs := FAudioPlayback.PlaybackPositionMs;
+  if (AudioPositionMs < 0) and FRateClockActive then
+    AudioPositionMs := RateClockPositionMs(SeekMaxMs);
   if AudioPositionMs < 0 then
     Exit;
 
@@ -1123,6 +1184,7 @@ begin
     FAudioPlayback.SilenceOutput;
   if FPlaybackTimer <> nil then
     FPlaybackTimer.Enabled := False;
+  FRateClockActive := False;
   ClearRestart;
   if FAudioPlayback <> nil then
     FAudioPlayback.StopOutput;
@@ -1140,6 +1202,7 @@ begin
     FPlaybackTimer.Enabled := False;
   if FVideoView <> nil then
     FVideoView.PlaybackActive := False;
+  FRateClockActive := False;
   ClearRestart;
   if FAudioPlayback <> nil then
     FAudioPlayback.StopOutput;

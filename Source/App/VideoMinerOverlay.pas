@@ -153,8 +153,12 @@ type
     FOnEndActionClick: TNotifyEvent;
     FOnFullScreenClick: TNotifyEvent;
     FOnMuteClick: TNotifyEvent;
+    FOnPlaybackRateClick: TNotifyEvent;
     FOnSeek: TVideoMinerOverlaySeekEvent;
     FOnVolumeChange: TVideoMinerOverlayVolumeEvent;
+    FPlaybackRateButtonHovered: Boolean;
+    FPlaybackRateButtonPressed: Boolean;
+    FPlaybackRateText: string;
     FPositionMs: Integer;
     FVolumeDragging: Boolean;
     FVolumeHovered: Boolean;
@@ -188,6 +192,8 @@ type
     function MuteButtonAlpha: Byte;
     function MuteButtonHitTest(const Point: TPoint): Boolean;
     function MuteButtonRect: TRect;
+    function PlaybackRateButtonHitTest(const Point: TPoint): Boolean;
+    function PlaybackRateButtonRect: TRect;
     function PositionFromPoint(const Point: TPoint): Integer;
     procedure DrawChapterMarkers(Canvas: TCanvas; const Track: TRect);
     procedure DrawTextButton(Canvas: TCanvas; const ButtonRect: TRect;
@@ -197,6 +203,7 @@ type
     procedure SetChapters(const Value: TVideoMinerOverlayChapters);
     procedure SetFullScreen(Value: Boolean);
     procedure SetMuted(Value: Boolean);
+    procedure SetPlaybackRateText(const Value: string);
     procedure SetVolumePercent(Value: Integer);
     function TrackRect: TRect;
     function VolumeFromPoint(const Point: TPoint): Integer;
@@ -222,9 +229,11 @@ type
     property OnEndActionClick: TNotifyEvent read FOnEndActionClick write FOnEndActionClick;
     property OnFullScreenClick: TNotifyEvent read FOnFullScreenClick write FOnFullScreenClick;
     property OnMuteClick: TNotifyEvent read FOnMuteClick write FOnMuteClick;
+    property OnPlaybackRateClick: TNotifyEvent read FOnPlaybackRateClick write FOnPlaybackRateClick;
     property OnSeek: TVideoMinerOverlaySeekEvent read FOnSeek write FOnSeek;
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent read FOnVolumeChange write FOnVolumeChange;
     property Muted: Boolean read FMuted write SetMuted;
+    property PlaybackRateText: string read FPlaybackRateText write SetPlaybackRateText;
     property VolumePercent: Integer read FVolumePercent write SetVolumePercent;
   end;
 
@@ -1526,6 +1535,22 @@ begin
     LabelRect.Right + 22 + Size, LabelRect.Top - 2 + Size);
 end;
 
+function TVideoMinerOverlaySeekBar.PlaybackRateButtonHitTest(
+  const Point: TPoint): Boolean;
+begin
+  Result := BoundsHitTest(Point) and PtInRect(PlaybackRateButtonRect,
+    System.Types.Point(Point.X - Bounds.Left, Point.Y - Bounds.Top));
+end;
+
+function TVideoMinerOverlaySeekBar.PlaybackRateButtonRect: TRect;
+var
+  MuteRect: TRect;
+begin
+  MuteRect := MuteButtonRect;
+  Result := Rect(MuteRect.Right + 12, MuteRect.Top, MuteRect.Right + 66,
+    MuteRect.Bottom);
+end;
+
 function TVideoMinerOverlaySeekBar.VolumeLabelRect: TRect;
 var
   RowTop: Integer;
@@ -1677,6 +1702,14 @@ begin
     Exit;
   end;
 
+  if PlaybackRateButtonHitTest(Point) then
+  begin
+    FPlaybackRateButtonPressed := True;
+    FPlaybackRateButtonHovered := True;
+    FHovered := True;
+    Exit;
+  end;
+
   if VolumeHitTest(Point) then
   begin
     FVolumeDragging := True;
@@ -1706,6 +1739,7 @@ var
   NewHovered: Boolean;
   NewMuteButtonHovered: Boolean;
   NewPositionMs: Integer;
+  NewPlaybackRateButtonHovered: Boolean;
   NewVolume: Integer;
   NewVolumeHovered: Boolean;
 begin
@@ -1762,6 +1796,13 @@ begin
     Result := True;
   end;
 
+  NewPlaybackRateButtonHovered := PlaybackRateButtonHitTest(Point);
+  if NewPlaybackRateButtonHovered <> FPlaybackRateButtonHovered then
+  begin
+    FPlaybackRateButtonHovered := NewPlaybackRateButtonHovered;
+    Result := True;
+  end;
+
   if FDragging then
   begin
     NewPositionMs := PositionFromPoint(Point);
@@ -1793,6 +1834,7 @@ var
   DeleteChapterButtonClicked: Boolean;
   FullScreenButtonClicked: Boolean;
   MuteButtonClicked: Boolean;
+  PlaybackRateButtonClicked: Boolean;
   SeekPositionMs: Integer;
 begin
   Result := FDragging or FVolumeDragging or BoundsHitTest(Point);
@@ -1816,6 +1858,17 @@ begin
     Result := True;
     if MuteButtonClicked and Assigned(FOnMuteClick) then
       FOnMuteClick(Self);
+    Exit;
+  end;
+
+  if FPlaybackRateButtonPressed then
+  begin
+    PlaybackRateButtonClicked := PlaybackRateButtonHitTest(Point);
+    FPlaybackRateButtonPressed := False;
+    FPlaybackRateButtonHovered := PlaybackRateButtonClicked;
+    Result := True;
+    if PlaybackRateButtonClicked and Assigned(FOnPlaybackRateClick) then
+      FOnPlaybackRateClick(Self);
     Exit;
   end;
 
@@ -1899,6 +1952,7 @@ var
   PositionRatio: Double;
   ShadowRadius: Integer;
   MuteRect: TRect;
+  PlaybackRateRect: TRect;
   Text: string;
   TextSize: TSize;
   TextTop: Integer;
@@ -1923,6 +1977,7 @@ begin
   DeleteChapterRect := DeleteChapterButtonRect;
   AddChapterRect := AddChapterButtonRect;
   MuteRect := MuteButtonRect;
+  PlaybackRateRect := PlaybackRateButtonRect;
 
   if FMaxMs > 0 then
     PositionRatio := DisplayPositionMs / FMaxMs
@@ -1980,6 +2035,12 @@ begin
   if FMuteButtonHovered or FMuteButtonPressed or FMuted then
     DrawAlphaRoundRect(Canvas, MuteRect, 8, 38);
   DrawMuteIcon(Canvas, MuteRect, MuteButtonAlpha);
+
+  Text := FPlaybackRateText;
+  if Text = '' then
+    Text := '1.0x';
+  DrawTextButton(Canvas, PlaybackRateRect, Text, Text <> '1.0x',
+    FPlaybackRateButtonHovered, FPlaybackRateButtonPressed, $0024D9F0);
 
   if FFullScreenButtonHovered or FFullScreenButtonPressed then
     DrawAlphaRoundRect(Canvas, ButtonRect, 8, 38);
@@ -2044,6 +2105,11 @@ end;
 procedure TVideoMinerOverlaySeekBar.SetMuted(Value: Boolean);
 begin
   FMuted := Value;
+end;
+
+procedure TVideoMinerOverlaySeekBar.SetPlaybackRateText(const Value: string);
+begin
+  FPlaybackRateText := Value;
 end;
 
 procedure TVideoMinerOverlaySeekBar.SetEndActionText(const Value: string);

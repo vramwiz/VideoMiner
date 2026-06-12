@@ -94,10 +94,12 @@ type
     procedure CheckOverlayClick(Sender: TObject);
     procedure DeleteChapterOverlayClick(Sender: TObject);
     procedure CycleEndAction;
+    procedure CyclePlaybackRate;
     procedure EndActionOverlayClick(Sender: TObject);
     procedure ToggleFullScreen;
     procedure RefreshChapterOverlay;
     procedure UpdateEndActionButton;
+    procedure UpdatePlaybackRateButton;
     procedure UpdateMaximizeButton;
     function LoadVideoFile(const FileName: string; AutoPlay: Boolean;
       RestoreLoopPosition: Boolean = True): Boolean;
@@ -210,6 +212,7 @@ begin
   FCommandController.OnNavigate := NavigateBy;
   FCommandController.OnOpenDialog := OpenFromDialog;
   FCommandController.OnPlaybackActiveOrPending := PlaybackActiveOrPending;
+  FCommandController.OnPlaybackRateCycle := CyclePlaybackRate;
   FCommandController.OnPlayFromCurrentPosition := PlayFromCurrentPosition;
   FCommandController.OnSaveAudioSettings := SaveAudioPlaybackSettings;
   FCommandController.OnSeekByMs := SeekByMs;
@@ -249,6 +252,7 @@ begin
   FPlaybackController := TVideoMinerPlaybackController.Create(TimerPlayback,
     FRestartPlaybackTimer, FAudioPlayback, FVideoView, FPreviewDecoder);
   UpdateEndActionButton;
+  UpdatePlaybackRateButton;
   FCurrentVideoPositionMs := -1;
   FSeekPositionMs := 0;
   FSeekMaxMs := 0;
@@ -445,6 +449,35 @@ begin
   SaveLoopPlaybackPosition;
 end;
 
+procedure TVideoMinerMainForm.CyclePlaybackRate;
+var
+  CurrentRate: Double;
+  PositionMs: Integer;
+  WasPlaying: Boolean;
+begin
+  if FPlaybackController = nil then
+    Exit;
+
+  WasPlaying := PlaybackActiveOrPending;
+  PositionMs := CurrentPlaybackPositionMs;
+  CurrentRate := FPlaybackController.PlaybackRate;
+  if SameValue(CurrentRate, 1.0) then
+    FPlaybackController.PlaybackRate := 1.5
+  else if SameValue(CurrentRate, 1.5) then
+    FPlaybackController.PlaybackRate := 2.0
+  else
+    FPlaybackController.PlaybackRate := 1.0;
+
+  UpdatePlaybackRateButton;
+  if WasPlaying then
+  begin
+    FPlaybackController.StopPlayback;
+    StartPlaybackAtMs(PositionMs, True);
+  end
+  else
+    UpdateInfoLabel;
+end;
+
 procedure TVideoMinerMainForm.EndActionOverlayClick(Sender: TObject);
 begin
   CycleEndAction;
@@ -555,6 +588,22 @@ begin
     Exit;
 
   FVideoView.EndActionText := FPlaybackController.EndActionText(FEndAction);
+end;
+
+procedure TVideoMinerMainForm.UpdatePlaybackRateButton;
+var
+  RateText: string;
+begin
+  if (FVideoView = nil) or (FPlaybackController = nil) then
+    Exit;
+
+  if SameValue(FPlaybackController.PlaybackRate, 1.5) then
+    RateText := '1.5x'
+  else if SameValue(FPlaybackController.PlaybackRate, 2.0) then
+    RateText := '2.0x'
+  else
+    RateText := '1.0x';
+  FVideoView.PlaybackRateText := RateText;
 end;
 
 procedure TVideoMinerMainForm.UpdateMaximizeButton;

@@ -12,6 +12,7 @@ type
     OpenDialog: TShortcutActionProc;
     NavigatePrevious: TShortcutActionProc;
     NavigateNext: TShortcutActionProc;
+    CyclePlaybackRate: TShortcutActionProc;
     SeekToFirstFrame: TShortcutActionProc;
     SeekToLastFrame: TShortcutActionProc;
     ToggleFullScreen: TShortcutActionProc;
@@ -42,6 +43,7 @@ begin
   Shortcuts.Add(VK_RIGHT, [], Handlers.NavigateNext);
   Shortcuts.Add(VK_PRIOR, [], Handlers.NavigatePrevious);
   Shortcuts.Add(VK_NEXT, [], Handlers.NavigateNext);
+  Shortcuts.Add(Ord('R'), [], Handlers.CyclePlaybackRate);
   Shortcuts.Add(VK_HOME, [], Handlers.SeekToFirstFrame);
   Shortcuts.Add(VK_END, [], Handlers.SeekToLastFrame);
   Shortcuts.Add(VK_UP, [], Handlers.VolumeUp);

@@ -21,6 +21,7 @@ type
     FOnNavigate: TVideoMinerCommandDeltaProc;
     FOnOpenDialog: TVideoMinerCommandProc;
     FOnPlaybackActiveOrPending: TVideoMinerCommandBoolFunc;
+    FOnPlaybackRateCycle: TVideoMinerCommandProc;
     FOnPlayFromCurrentPosition: TVideoMinerCommandProc;
     FOnSaveAudioSettings: TVideoMinerCommandProc;
     FOnSeekByMs: TVideoMinerCommandDeltaProc;
@@ -36,6 +37,7 @@ type
     procedure BindVideoView;
     procedure RegisterShortcuts(Shortcuts: TShortcutAction);
     procedure ChangeVolumeBy(DeltaPercent: Integer);
+    procedure CyclePlaybackRate;
     procedure FirstFrameClick(Sender: TObject);
     procedure FullScreenClick(Sender: TObject);
     procedure LastFrameClick(Sender: TObject);
@@ -43,6 +45,7 @@ type
     procedure NavigateNextClick(Sender: TObject);
     procedure NavigatePreviousClick(Sender: TObject);
     procedure OpenDialog;
+    procedure PlaybackRateClick(Sender: TObject);
     procedure PlayPauseClick(Sender: TObject);
     procedure Seek(Sender: TObject; PositionMs: Integer);
     procedure SeekToFirstFrame;
@@ -67,6 +70,8 @@ type
       write FOnOpenDialog;
     property OnPlaybackActiveOrPending: TVideoMinerCommandBoolFunc
       read FOnPlaybackActiveOrPending write FOnPlaybackActiveOrPending;
+    property OnPlaybackRateCycle: TVideoMinerCommandProc
+      read FOnPlaybackRateCycle write FOnPlaybackRateCycle;
     property OnPlayFromCurrentPosition: TVideoMinerCommandProc
       read FOnPlayFromCurrentPosition write FOnPlayFromCurrentPosition;
     property OnSaveAudioSettings: TVideoMinerCommandProc read FOnSaveAudioSettings
@@ -109,6 +114,7 @@ begin
   FVideoView.OnMuteClick := MuteClick;
   FVideoView.OnNavigateNextClick := NavigateNextClick;
   FVideoView.OnNavigatePreviousClick := NavigatePreviousClick;
+  FVideoView.OnPlaybackRateClick := PlaybackRateClick;
   FVideoView.OnPlayPauseClick := PlayPauseClick;
   FVideoView.OnSeek := Seek;
   FVideoView.OnSkipBackwardClick := SkipBackwardClick;
@@ -131,6 +137,7 @@ begin
   Handlers.ToggleFullScreen := ToggleFullScreen;
   Handlers.ToggleMute := ToggleMute;
   Handlers.TogglePlayPause := TogglePlayPause;
+  Handlers.CyclePlaybackRate := CyclePlaybackRate;
   Handlers.VolumeDown := VolumeDown;
   Handlers.VolumeUp := VolumeUp;
   RegisterVideoMinerShortcuts(Shortcuts, Handlers);
@@ -159,6 +166,12 @@ begin
   SyncVolumeToView;
   if Assigned(FOnSaveAudioSettings) then
     FOnSaveAudioSettings;
+end;
+
+procedure TVideoMinerCommandController.CyclePlaybackRate;
+begin
+  if Assigned(FOnPlaybackRateCycle) then
+    FOnPlaybackRateCycle;
 end;
 
 procedure TVideoMinerCommandController.FirstFrameClick(Sender: TObject);
@@ -195,6 +208,11 @@ procedure TVideoMinerCommandController.OpenDialog;
 begin
   if Assigned(FOnOpenDialog) then
     FOnOpenDialog;
+end;
+
+procedure TVideoMinerCommandController.PlaybackRateClick(Sender: TObject);
+begin
+  CyclePlaybackRate;
 end;
 
 procedure TVideoMinerCommandController.PlayPauseClick(Sender: TObject);

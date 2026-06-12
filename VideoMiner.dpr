@@ -26,6 +26,7 @@ uses
   ResizeEdges in 'Source\Lib\ResizeEdges\ResizeEdges.pas',
   ShortcutAction in 'Source\Lib\ShortcutAction\ShortcutAction.pas',
   FFmpegApi in 'Source\FFmpeg\FFmpegApi.pas',
+  FFmpegAudioTempo in 'Source\FFmpeg\FFmpegAudioTempo.pas',
   FFmpegFrameConvert in 'Source\FFmpeg\FFmpegFrameConvert.pas',
   FFmpegQsvDecode in 'Source\FFmpeg\FFmpegQsvDecode.pas',
   FFmpegStreamInfo in 'Source\FFmpeg\FFmpegStreamInfo.pas',
