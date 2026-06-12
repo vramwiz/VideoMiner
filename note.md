@@ -664,6 +664,21 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
 - ループモードではない、または手動チャプターがなくなった場合は、古い `PlaybackPositionMs` を削除して誤復元を防ぐ。
 - ファイル切り替え時とフォーム終了時の両方で保存するため、アプリ終了だけでなく次の動画へ移る場合も現在位置を失いにくい。
 
+### 外部更新の自動再読み込み
+
+- 2026-06-12 に、現在開いている動画ファイルの外部更新を検知して自動再読み込みする処理を追加した。
+- `Source\Lib\FolderWatch\FolderWatch.pas` を `VideoMiner.dpr` / `VideoMiner.dproj` に登録し、現在開いている動画のフォルダを監視する。
+- `TVideoMinerMainForm` に `TFolderWatch` と `FReloadCurrentFileTimer` を持たせ、`OnFileChange` で現在ファイルが含まれる場合だけ再読み込み候補にする。
+- 更新イベントでは即座に開き直さず、`CURRENT_FILE_RELOAD_SETTLE_MS = 1500` のタイマーを使って連続更新をまとめる。
+- タイマー発火後も、更新日時とファイルサイズが次回確認で同じになるまで待つ。出力中で読めない場合も、タイマーを再開して待つ。
+- 更新日時とサイズが、動画を開いた時に記録した値から変わっていれば、外部更新されたものとして `LoadVideoFile(FileName, False, False)` で読み込み直す。
+- 外部更新リロードでは、ループ位置復元を使わず先頭フレームを表示する。
+- `Check` の ON/OFF、音量、終了動作などの設定状態は維持する。
+- `FChapterManager.Clear` により自動チェックの一時的な警告チャプターは削除される。手動チャプターは保存状態から再読み込みされる。
+- 再読み込み中の監視イベントで再帰的に処理しないよう、`FReloadingCurrentFile` でガードする。
+- `FolderWatch.pas` は今回ビルド対象になったため、既存の未使用ローカル変数 `FilePath` を `ScanAndCompare` から削除した。
+- Git の CRLF 警告対策として `.gitattributes` を追加し、Delphi/Markdown などのテキストは `eol=crlf`、画像や `.res` などは binary に固定した。
+
 ### 試したが注意が必要なこと
 
 - 音声位置に追いつかせるため、表示なしで大量に `DecodeNextFrame(..., ConvertFrame=False)` を回す処理を入れたが、音声だけ先に進み、後から映像が早送りで表示される挙動になったため外した。

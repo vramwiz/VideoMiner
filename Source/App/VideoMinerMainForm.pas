@@ -7,7 +7,8 @@ uses
   System.Math, System.Types,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
   Vcl.ExtCtrls, Vcl.Graphics, Vcl.StdCtrls, ActiveX, DropAgent, FFmpegDecoder,
-  FFmpegDecoderTypes, ResizeEdges, ShortcutAction, VideoMinerAudioPlayback,
+  FFmpegDecoderTypes, FolderWatch, ResizeEdges, ShortcutAction,
+  VideoMinerAudioPlayback,
   VideoMinerChapterManager, VideoMinerCommandController, VideoMinerMediaList, VideoMinerDebugLog,
   VideoMinerFrameCheck, VideoMinerMediaOpen, VideoMinerSettings,
   VideoMinerPlaybackController, VideoMinerPlaybackTiming,
@@ -65,6 +66,15 @@ type
     FPendingOpenFiles: TStringList;
     FProcessingOpenQueue: Boolean;
     FRestartPlaybackTimer: TTimer;
+    FReloadCurrentFileTimer: TTimer;
+    FFolderWatcher: TFolderWatch;
+    FWatchedFolder: string;
+    FReloadingCurrentFile: Boolean;
+    FPendingReloadHasStamp: Boolean;
+    FPendingReloadLastWriteTime: TDateTime;
+    FPendingReloadSize: Int64;
+    FVideoFileLastWriteTime: TDateTime;
+    FVideoFileSize: Int64;
     FPlaybackController: TVideoMinerPlaybackController;
     FCommandController: TVideoMinerCommandController;
     FWindowModeController: TVideoMinerWindowModeController;
@@ -89,7 +99,8 @@ type
     procedure RefreshChapterOverlay;
     procedure UpdateEndActionButton;
     procedure UpdateMaximizeButton;
-    function LoadVideoFile(const FileName: string; AutoPlay: Boolean): Boolean;
+    function LoadVideoFile(const FileName: string; AutoPlay: Boolean;
+      RestoreLoopPosition: Boolean = True): Boolean;
     procedure DropFiles(Sender: TObject; Control: TWinControl; const FileNames: TArray<string>);
     procedure UpdateNavigationButtons;
     procedure NavigateBy(Delta: Integer);
@@ -125,6 +136,16 @@ type
     procedure FinishPlaybackAtEnd;
     procedure QueueOpenAndPlayFile(const FileName: string);
     procedure ProcessOpenQueue;
+    procedure ConfigureCurrentFileWatch;
+    function CurrentFileInList(const FileNames: TStringList): Boolean;
+    function CurrentFileCanBeRead: Boolean;
+    function ReadCurrentFileStamp(out LastWriteTime: TDateTime;
+      out Size: Int64): Boolean;
+    procedure ScheduleCurrentFileReload;
+    procedure ReloadCurrentFileTimer(Sender: TObject);
+    procedure FolderWatchFileChange(Sender: TObject; const AddFiles: TStringList;
+      const DelFiles: TStringList; const UpdateFiles: TStringList);
+    procedure UpdateCurrentFileStamp;
     procedure WMCopyData(var Message: TWMCopyData); message WM_COPYDATA;
     procedure WMMove(var Message: TWMMove); message WM_MOVE;
     procedure WMNCHitTest(var Message: TWMNCHitTest); message WM_NCHITTEST;
@@ -153,6 +174,7 @@ const
   COPYDATA_OPEN_FILE = $564D0001;
   UI_INFO_UPDATE_INTERVAL_MS = 250;
   SEEK_RESTART_DELAY_MS = 15;
+  CURRENT_FILE_RELOAD_SETTLE_MS = 1500;
   TITLE_BAR_COLOR = $00171617;
   CLOSE_BUTTON_HOVER_COLOR = $00232323;
   CAPTION_BUTTON_HOVER_COLOR = $00232323;
@@ -217,6 +239,13 @@ begin
   FRestartPlaybackTimer.Enabled := False;
   FRestartPlaybackTimer.Interval := SEEK_RESTART_DELAY_MS;
   FRestartPlaybackTimer.OnTimer := RestartPlaybackTimer;
+  FReloadCurrentFileTimer := TTimer.Create(Self);
+  FReloadCurrentFileTimer.Enabled := False;
+  FReloadCurrentFileTimer.Interval := CURRENT_FILE_RELOAD_SETTLE_MS;
+  FReloadCurrentFileTimer.OnTimer := ReloadCurrentFileTimer;
+  FFolderWatcher := TFolderWatch.Create;
+  FFolderWatcher.FirstScanDone := True;
+  FFolderWatcher.OnFileChange := FolderWatchFileChange;
   FPlaybackController := TVideoMinerPlaybackController.Create(TimerPlayback,
     FRestartPlaybackTimer, FAudioPlayback, FVideoView, FPreviewDecoder);
   UpdateEndActionButton;
@@ -255,6 +284,10 @@ begin
     FVideoView.PlaybackActive := False;
   if FRestartPlaybackTimer <> nil then
     FRestartPlaybackTimer.Enabled := False;
+  if FReloadCurrentFileTimer <> nil then
+    FReloadCurrentFileTimer.Enabled := False;
+  if FFolderWatcher <> nil then
+    FFolderWatcher.Stop;
   if FAudioPlayback <> nil then
     FAudioPlayback.Stop;
   FDropAgent.Free;
@@ -262,6 +295,7 @@ begin
   FCommandController.Free;
   FShortcuts.Free;
   FPlaybackController.Free;
+  FFolderWatcher.Free;
   if FWindowModeController <> nil then
     FWindowModeController.SaveWindowBounds;
   FWindowModeController.Free;
@@ -706,7 +740,8 @@ begin
     LabelAppTitle.Caption := Text;
 end;
 
-function TVideoMinerMainForm.LoadVideoFile(const FileName: string; AutoPlay: Boolean): Boolean;
+function TVideoMinerMainForm.LoadVideoFile(const FileName: string;
+  AutoPlay: Boolean; RestoreLoopPosition: Boolean): Boolean;
 var
   ErrorMessage: string;
   OpenResult: TVideoMinerMediaOpenResult;
@@ -718,6 +753,10 @@ begin
     SetStatusCaption(ErrorMessage);
     Exit;
   end;
+
+  if FReloadCurrentFileTimer <> nil then
+    FReloadCurrentFileTimer.Enabled := False;
+  FPendingReloadHasStamp := False;
 
   SaveManualChapterState;
   SaveLoopPlaybackPosition;
@@ -747,6 +786,8 @@ begin
     FMediaList, OpenResult) then
   begin
     FVideoFile := '';
+    ConfigureCurrentFileWatch;
+    UpdateCurrentFileStamp;
     FVideoView.PlaybackActive := False;
     Caption := 'VideoMiner';
     SetTitleBarText(Caption);
@@ -757,6 +798,8 @@ begin
 
   FVideoInfo := OpenResult.Info;
   FVideoFile := OpenResult.FileName;
+  ConfigureCurrentFileWatch;
+  UpdateCurrentFileStamp;
   Caption := Format('%s (%d/%d)', [ExtractFileName(FVideoFile),
     FMediaList.CurrentIndex + 1, FMediaList.Count]);
   SetTitleBarText(Caption);
@@ -775,7 +818,7 @@ begin
   UpdateNavigationButtons;
   UpdateInfoLabel;
   RefreshChapterOverlay;
-  if not TryRestoreLoopPlaybackPosition then
+  if (not RestoreLoopPosition) or (not TryRestoreLoopPlaybackPosition) then
     ShowFrameAtMs(0);
 
   if AutoPlay then
@@ -1043,6 +1086,172 @@ begin
     end;
   finally
     FProcessingOpenQueue := False;
+  end;
+end;
+
+procedure TVideoMinerMainForm.ConfigureCurrentFileWatch;
+var
+  Folder: string;
+begin
+  if FFolderWatcher = nil then
+    Exit;
+
+  if FVideoFile = '' then
+  begin
+    FFolderWatcher.Stop;
+    FWatchedFolder := '';
+    Exit;
+  end;
+
+  Folder := IncludeTrailingPathDelimiter(ExtractFilePath(FVideoFile));
+  if SameText(FWatchedFolder, Folder) then
+    Exit;
+
+  FFolderWatcher.Stop;
+  FWatchedFolder := Folder;
+  FFolderWatcher.FolderPath := Folder;
+  FFolderWatcher.IncludeSubFolders := False;
+  FFolderWatcher.FirstScanDone := True;
+  FFolderWatcher.Start;
+end;
+
+function TVideoMinerMainForm.CurrentFileInList(
+  const FileNames: TStringList): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  if (FileNames = nil) or (FVideoFile = '') then
+    Exit;
+
+  for I := 0 to FileNames.Count - 1 do
+  begin
+    if SameText(ExpandFileName(FileNames[I]), ExpandFileName(FVideoFile)) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
+function TVideoMinerMainForm.ReadCurrentFileStamp(
+  out LastWriteTime: TDateTime; out Size: Int64): Boolean;
+var
+  SearchRec: TSearchRec;
+begin
+  LastWriteTime := 0;
+  Size := -1;
+  Result := False;
+  if FVideoFile = '' then
+    Exit;
+
+  if FindFirst(FVideoFile, faAnyFile, SearchRec) <> 0 then
+    Exit;
+  try
+    if (SearchRec.Attr and faDirectory) <> 0 then
+      Exit;
+
+    LastWriteTime := SearchRec.TimeStamp;
+    Size := SearchRec.Size;
+    Result := True;
+  finally
+    FindClose(SearchRec);
+  end;
+end;
+
+function TVideoMinerMainForm.CurrentFileCanBeRead: Boolean;
+var
+  Stream: TFileStream;
+begin
+  Result := False;
+  if FVideoFile = '' then
+    Exit;
+
+  try
+    Stream := TFileStream.Create(FVideoFile, fmOpenRead or fmShareDenyNone);
+    try
+      Result := True;
+    finally
+      Stream.Free;
+    end;
+  except
+    Result := False;
+  end;
+end;
+
+procedure TVideoMinerMainForm.ScheduleCurrentFileReload;
+begin
+  if (FReloadCurrentFileTimer = nil) or (FVideoFile = '') or
+     FReloadingCurrentFile then
+    Exit;
+
+  FPendingReloadHasStamp := False;
+  FReloadCurrentFileTimer.Enabled := False;
+  FReloadCurrentFileTimer.Enabled := True;
+end;
+
+procedure TVideoMinerMainForm.FolderWatchFileChange(Sender: TObject;
+  const AddFiles, DelFiles, UpdateFiles: TStringList);
+begin
+  if FReloadingCurrentFile then
+    Exit;
+
+  if CurrentFileInList(AddFiles) or CurrentFileInList(DelFiles) or
+     CurrentFileInList(UpdateFiles) then
+    ScheduleCurrentFileReload;
+end;
+
+procedure TVideoMinerMainForm.ReloadCurrentFileTimer(Sender: TObject);
+var
+  FileName: string;
+  LastWriteTime: TDateTime;
+  Size: Int64;
+begin
+  if FReloadCurrentFileTimer <> nil then
+    FReloadCurrentFileTimer.Enabled := False;
+
+  if (FVideoFile = '') or FReloadingCurrentFile then
+    Exit;
+
+  if (not ReadCurrentFileStamp(LastWriteTime, Size)) or
+     (not CurrentFileCanBeRead) then
+  begin
+    if FReloadCurrentFileTimer <> nil then
+      FReloadCurrentFileTimer.Enabled := True;
+    Exit;
+  end;
+
+  if (not FPendingReloadHasStamp) or
+     (FPendingReloadLastWriteTime <> LastWriteTime) or
+     (FPendingReloadSize <> Size) then
+  begin
+    FPendingReloadLastWriteTime := LastWriteTime;
+    FPendingReloadSize := Size;
+    FPendingReloadHasStamp := True;
+    if FReloadCurrentFileTimer <> nil then
+      FReloadCurrentFileTimer.Enabled := True;
+    Exit;
+  end;
+
+  FPendingReloadHasStamp := False;
+  if (FVideoFileLastWriteTime = LastWriteTime) and (FVideoFileSize = Size) then
+    Exit;
+
+  FileName := FVideoFile;
+  FReloadingCurrentFile := True;
+  try
+    LoadVideoFile(FileName, False, False);
+  finally
+    FReloadingCurrentFile := False;
+  end;
+end;
+
+procedure TVideoMinerMainForm.UpdateCurrentFileStamp;
+begin
+  if not ReadCurrentFileStamp(FVideoFileLastWriteTime, FVideoFileSize) then
+  begin
+    FVideoFileLastWriteTime := 0;
+    FVideoFileSize := -1;
   end;
 end;
 

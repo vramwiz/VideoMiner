@@ -142,6 +142,7 @@
         </DCCReference>
         <DCCReference Include="Source\App\VideoMinerSettings.pas"/>
         <DCCReference Include="Source\Lib\DropAgent\DropAgent.pas"/>
+        <DCCReference Include="Source\Lib\FolderWatch\FolderWatch.pas"/>
         <DCCReference Include="Source\Lib\ResizeEdges\ResizeEdges.pas"/>
         <DCCReference Include="Source\Lib\ShortcutAction\ShortcutAction.pas"/>
         <DCCReference Include="Source\FFmpeg\FFmpegApi.pas"/>

@@ -1,0 +1,17 @@
+* text=auto
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.dpr text eol=crlf
+*.dproj text eol=crlf
+*.inc text eol=crlf
+*.iss text eol=crlf
+*.md text eol=crlf
+*.pas text eol=crlf
+*.rc text eol=crlf
+*.txt text eol=crlf
+
+*.ico binary
+*.png binary
+*.res binary
+*.zip binary

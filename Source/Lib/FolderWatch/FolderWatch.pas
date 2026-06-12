@@ -408,7 +408,6 @@ end;
 procedure TFolderWatchThread.ScanAndCompare;
 var
   CurrentFiles: TDictionary<string, TDateTime>;
-  FilePath: string;
   AddList, DelList, ModList: TStringList;
   Pair: TPair<string, TDateTime>;
   Value: TDateTime;
