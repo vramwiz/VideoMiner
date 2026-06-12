@@ -7,6 +7,9 @@ uses
   VideoMinerDebugLog;
 
 type
+  TVideoMinerAudioPcmDecodedEvent = procedure(Sender: TObject;
+    StartSample: Int64; const Pcm: TBytes) of object;
+
   TVideoMinerAudioPlayback = class
   private const
     AUDIO_OUTPUT_SAMPLE_RATE = 48000;
@@ -20,6 +23,7 @@ type
     FQueuedSamples: Int64;
     FVolumePercent: Integer;
     FMuted: Boolean;
+    FOnPcmDecoded: TVideoMinerAudioPcmDecodedEvent;
     FApplyFadeInNext: Boolean;
     FOpenFileName: string;
     FPlaybackClock: TStopwatch;
@@ -41,6 +45,8 @@ type
     function Pump(out ErrorMessage: string): Boolean;
     function PlaybackPositionMs: Integer;
     property Muted: Boolean read FMuted write SetMuted;
+    property OnPcmDecoded: TVideoMinerAudioPcmDecodedEvent read FOnPcmDecoded
+      write FOnPcmDecoded;
     property VolumePercent: Integer read FVolumePercent write SetVolumePercent;
   end;
 
@@ -174,6 +180,8 @@ begin
 
   FQueuedSamples := SampleCount;
   FFinished := Finished;
+  if Assigned(FOnPcmDecoded) then
+    FOnPcmDecoded(Self, FStartSamples, Pcm);
   ApplyFadeIn(Pcm);
 
   StepWatch := TStopwatch.StartNew;
@@ -349,6 +357,7 @@ var
   Finished: Boolean;
   QueuedBeforeMs: Int64;
   SkipReason: string;
+  StartSample: Int64;
 begin
   ErrorMessage := '';
   Result := True;
@@ -388,6 +397,7 @@ begin
   end;
 
   TargetSampleCount := SampleCount + Integer(TargetQueuedSampleCount - QueuedSampleCount);
+  StartSample := SampleCount;
 
   if not FDecoder.DecodeAudioPcm16Stereo48kUntil(TargetSampleCount, Pcm,
     SampleCount, Finished, ErrorMessage) then
@@ -400,6 +410,8 @@ begin
   FQueuedSamples := SampleCount;
   FFinished := Finished;
 
+  if Assigned(FOnPcmDecoded) then
+    FOnPcmDecoded(Self, StartSample, Pcm);
   ApplyFadeIn(Pcm);
 
   if (Length(Pcm) > 0) and

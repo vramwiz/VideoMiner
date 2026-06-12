@@ -9,7 +9,7 @@ uses
   Vcl.ExtCtrls, Vcl.Graphics, Vcl.StdCtrls, ActiveX, DropAgent, FFmpegDecoder,
   FFmpegDecoderTypes, ResizeEdges, ShortcutAction, VideoMinerAudioPlayback,
   VideoMinerChapterManager, VideoMinerCommandController, VideoMinerMediaList, VideoMinerDebugLog,
-  VideoMinerMediaOpen, VideoMinerSettings,
+  VideoMinerFrameCheck, VideoMinerMediaOpen, VideoMinerSettings,
   VideoMinerPlaybackController, VideoMinerPlaybackTiming,
   VideoMinerVideoView, VideoMinerWindowChrome, VideoMinerWindowModeController;
 
@@ -78,6 +78,8 @@ type
     procedure InitializeTitleIcon;
     procedure SetCaptionButtonColor(Sender: TObject; Color: TColor);
     procedure AddChapterOverlayClick(Sender: TObject);
+    procedure MaybeAutoCheckAudio(Sender: TObject; StartSample: Int64;
+      const Pcm: TBytes);
     procedure MaybeAutoCheckFrame(PositionMs: Integer);
     procedure CheckOverlayClick(Sender: TObject);
     procedure DeleteChapterOverlayClick(Sender: TObject);
@@ -174,6 +176,7 @@ begin
   FDecoder := TFFmpegDecoder.Create;
   FPreviewDecoder := TFFmpegDecoder.Create;
   FAudioPlayback := TVideoMinerAudioPlayback.Create;
+  FAudioPlayback.OnPcmDecoded := MaybeAutoCheckAudio;
   FMediaList := TVideoMinerMediaList.Create;
   FChapterManager := TVideoMinerChapterManager.Create;
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
@@ -425,9 +428,34 @@ begin
   SaveLoopPlaybackPosition;
 end;
 
+procedure TVideoMinerMainForm.MaybeAutoCheckAudio(Sender: TObject;
+  StartSample: Int64; const Pcm: TBytes);
+var
+  Changed: Boolean;
+begin
+  if FChapterManager = nil then
+    Exit;
+
+  if (not FVideoInfo.Audio.Present) or (FVideoInfo.Audio.OpenError <> '') then
+  begin
+    FChapterManager.MaybeAutoCheckAudio(StartSample, nil, FSeekMaxMs);
+    Exit;
+  end;
+
+  Changed := FChapterManager.MaybeAutoCheckAudio(StartSample, Pcm, FSeekMaxMs);
+  if Changed then
+  begin
+    RefreshChapterOverlay;
+    ConfigureLoopSegment(CurrentPlaybackPositionMs);
+    SaveManualChapterState;
+    SaveLoopPlaybackPosition;
+  end;
+end;
+
 procedure TVideoMinerMainForm.MaybeAutoCheckFrame(PositionMs: Integer);
 var
   Changed: Boolean;
+  Signature: TVideoMinerFrameSignature;
 begin
   if (FChapterManager = nil) or (FVideoView = nil) then
     Exit;
@@ -435,11 +463,17 @@ begin
   if not FChapterManager.CheckEnabled then
   begin
     FChapterManager.MaybeAutoCheckFrame(PositionMs, False, FSeekMaxMs);
+    FillChar(Signature, SizeOf(Signature), 0);
+    FChapterManager.MaybeAutoCheckFrameDifference(PositionMs, Signature,
+      FSeekMaxMs);
     Exit;
   end;
 
   Changed := FChapterManager.MaybeAutoCheckFrame(PositionMs,
     FVideoView.CurrentFrameCornersMostlyDark, FSeekMaxMs);
+  if FVideoView.CurrentFrameSignature(Signature) then
+    Changed := FChapterManager.MaybeAutoCheckFrameDifference(PositionMs,
+      Signature, FSeekMaxMs) or Changed;
   if Changed then
   begin
     RefreshChapterOverlay;

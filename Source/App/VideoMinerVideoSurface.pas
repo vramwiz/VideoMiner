@@ -4,7 +4,8 @@ interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.Classes, System.Types, Vcl.Controls,
-  Vcl.ExtCtrls, Vcl.Graphics, VideoMinerBossGesture, VideoMinerOverlay;
+  Vcl.ExtCtrls, Vcl.Graphics, VideoMinerBossGesture, VideoMinerFrameCheck,
+  VideoMinerOverlay;
 
 type
   TVideoMinerVideoSurface = class(TCustomControl)
@@ -117,6 +118,8 @@ type
     function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean;
     function CurrentFrameCornersMostlyDark: Boolean;
+    function CurrentFrameSignature(
+      out Signature: TVideoMinerFrameSignature): Boolean;
     function PrepareBgrx32Frame(Width, Height: Integer; out Buffer: Pointer;
       out BufferStride: Integer): Boolean;
     procedure Present;
@@ -156,7 +159,7 @@ implementation
 
 uses
   System.Diagnostics, System.Math, System.SysUtils, VideoMinerBossOverlay,
-  VideoMinerDebugLog, VideoMinerFrameCheck;
+  VideoMinerDebugLog;
 
 const
   VIDEO_SURFACE_MAX_ZOOM = 8.0;
@@ -291,6 +294,12 @@ end;
 function TVideoMinerVideoSurface.CurrentFrameCornersMostlyDark: Boolean;
 begin
   Result := FrameCornersMostlyDark(FBitmap);
+end;
+
+function TVideoMinerVideoSurface.CurrentFrameSignature(
+  out Signature: TVideoMinerFrameSignature): Boolean;
+begin
+  Result := BuildFrameSignature(FBitmap, Signature);
 end;
 
 procedure TVideoMinerVideoSurface.ResetZoom;

@@ -10,7 +10,9 @@ type
   TVideoMinerOverlayEdgeDirection = (edFirst, edLast);
   TVideoMinerOverlayFileNavDirection = (fndPrevious, fndNext);
   TVideoMinerOverlayChapterSeverity = (csGreen, csYellow, csRed);
-  TVideoMinerOverlayChapterSource = (chsAutoCheck, chsUser);
+  TVideoMinerOverlayChapterSource = (chsAutoCheck, chsAutoCheckAudio,
+    chsAutoCheckChannel, chsAutoCheckFrameDiff, chsAutoCheckVolumeJump,
+    chsAutoCheckClipping, chsUser);
   TVideoMinerOverlayChapter = record
     PositionMs: Integer;
     Severity: TVideoMinerOverlayChapterSeverity;

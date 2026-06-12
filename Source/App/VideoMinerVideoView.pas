@@ -4,7 +4,8 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Types, Vcl.Controls, Vcl.ExtCtrls,
-  Vcl.Graphics, FFmpegDecoder, VideoMinerOverlay, VideoMinerVideoSurface;
+  Vcl.Graphics, FFmpegDecoder, VideoMinerFrameCheck, VideoMinerOverlay,
+  VideoMinerVideoSurface;
 
 type
   TVideoMinerVideoView = class
@@ -54,6 +55,8 @@ type
     function DecodeNextFrameToScratch(Decoder: TFFmpegDecoder;
       out PositionMs: Integer; out ErrorMessage: string): Boolean;
     function CurrentFrameCornersMostlyDark: Boolean;
+    function CurrentFrameSignature(
+      out Signature: TVideoMinerFrameSignature): Boolean;
     function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean;
     function ShowNextFrame(Decoder: TFFmpegDecoder; out PositionMs: Integer;
@@ -102,6 +105,12 @@ end;
 function TVideoMinerVideoView.CurrentFrameCornersMostlyDark: Boolean;
 begin
   Result := (FSurface <> nil) and FSurface.CurrentFrameCornersMostlyDark;
+end;
+
+function TVideoMinerVideoView.CurrentFrameSignature(
+  out Signature: TVideoMinerFrameSignature): Boolean;
+begin
+  Result := (FSurface <> nil) and FSurface.CurrentFrameSignature(Signature);
 end;
 
 function TVideoMinerVideoView.PrepareBitmapFrameBuffer(Bitmap: TBitmap;

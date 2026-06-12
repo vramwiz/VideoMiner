@@ -3,7 +3,8 @@ unit VideoMinerChapterManager;
 interface
 
 uses
-  System.Math, System.SysUtils, VideoMinerOverlay, VideoMinerSettings;
+  System.Math, System.SysUtils, VideoMinerFrameCheck, VideoMinerOverlay,
+  VideoMinerSettings;
 
 type
   TVideoMinerLoopSegment = record
@@ -13,13 +14,31 @@ type
 
   TVideoMinerChapterManager = class
   private
+    FAutoCheckChannelStartMs: Integer;
     FAutoCheckDarkStartMs: Integer;
+    FAutoCheckFrameDiffHasPending: Boolean;
+    FAutoCheckFrameDiffHasPrev: Boolean;
+    FAutoCheckFrameDiffPendingBeforeSignature: TVideoMinerFrameSignature;
+    FAutoCheckFrameDiffPendingPositionMs: Integer;
+    FAutoCheckFrameDiffPendingSignature: TVideoMinerFrameSignature;
+    FAutoCheckFrameDiffPrevPositionMs: Integer;
+    FAutoCheckFrameDiffPrevSignature: TVideoMinerFrameSignature;
+    FAutoCheckSilenceStartMs: Integer;
+    FAutoCheckVolumeHasPrev: Boolean;
+    FAutoCheckVolumePrevLevel: Integer;
+    FAutoCheckVolumePrevStartMs: Integer;
     FChapters: TVideoMinerOverlayChapters;
     FCheckEnabled: Boolean;
-    function FindNearbyAutoCheckChapter(PositionMs: Integer): Integer;
+    function AddOrUpdateAutoCheckChapter(PositionMs: Integer;
+      Severity: TVideoMinerOverlayChapterSeverity;
+      Source: TVideoMinerOverlayChapterSource; MaxMs: Integer): Boolean;
+    function FindNearbyAutoCheckChapter(PositionMs: Integer;
+      Source: TVideoMinerOverlayChapterSource): Integer;
     function ChapterVisible(const Chapter: TVideoMinerOverlayChapter): Boolean;
     function LoopSegmentStartPositionMs(PositionMs, LastPositionMs: Integer): Integer;
     function LoopSegmentEndPositionMs(PositionMs, LastPositionMs: Integer): Integer;
+    procedure ResetAudioCheck;
+    procedure ResetFrameDifferenceCheck;
   public
     constructor Create;
     procedure Clear;
@@ -27,6 +46,10 @@ type
     function DeleteNearestManualChapter(PositionMs, MaxMs: Integer): Boolean;
     function ToggleCheckEnabled: Boolean;
     function MaybeAutoCheckFrame(PositionMs: Integer; IsDarkFrame: Boolean;
+      MaxMs: Integer): Boolean;
+    function MaybeAutoCheckFrameDifference(PositionMs: Integer;
+      const Signature: TVideoMinerFrameSignature; MaxMs: Integer): Boolean;
+    function MaybeAutoCheckAudio(StartSample: Int64; const Pcm: TBytes;
       MaxMs: Integer): Boolean;
     function DisplayChapters: TVideoMinerOverlayChapters;
     function HasManualChapters: Boolean;
@@ -46,26 +69,68 @@ const
   AUTO_CHECK_DARK_RED_DURATION_MS = 500;
   AUTO_CHECK_END_RED_ZONE_MS = 1500;
   AUTO_CHECK_MARKER_MERGE_MS = 3000;
+  AUTO_CHECK_AUDIO_SAMPLE_RATE = 48000;
+  AUTO_CHECK_AUDIO_CHANNELS = 2;
+  AUTO_CHECK_AUDIO_SILENCE_YELLOW_DURATION_MS = 1000;
+  AUTO_CHECK_AUDIO_SILENCE_RED_DURATION_MS = 3000;
+  AUTO_CHECK_AUDIO_LEADING_SILENCE_MS = 500;
+  AUTO_CHECK_AUDIO_CHANNEL_YELLOW_DURATION_MS = 300;
+  AUTO_CHECK_AUDIO_CHANNEL_RED_DURATION_MS = 1000;
+  AUTO_CHECK_AUDIO_SILENCE_PEAK = 256;
+  AUTO_CHECK_AUDIO_ACTIVE_PEAK = 1800;
+  AUTO_CHECK_AUDIO_CHANNEL_RATIO = 8.0;
+  AUTO_CHECK_AUDIO_VOLUME_ACTIVE_LEVEL = 800;
+  AUTO_CHECK_AUDIO_VOLUME_JUMP_DELTA = 1800;
+  AUTO_CHECK_AUDIO_VOLUME_JUMP_RATIO = 4.0;
+  AUTO_CHECK_AUDIO_VOLUME_RED_LEVEL = 12000;
+  AUTO_CHECK_AUDIO_VOLUME_RED_RATIO = 8.0;
+  AUTO_CHECK_AUDIO_VOLUME_MAX_GAP_MS = 500;
+  AUTO_CHECK_AUDIO_CLIPPING_PEAK = 32700;
+  AUTO_CHECK_AUDIO_CLIPPING_SAMPLE_COUNT = 3;
+  AUTO_CHECK_FRAME_DIFF_SPIKE_SCORE = 80;
+  AUTO_CHECK_FRAME_DIFF_STABLE_SCORE = 25;
+  AUTO_CHECK_FRAME_DIFF_MAX_GAP_MS = 250;
   CHAPTER_NAVIGATION_IGNORE_NEAR_MS = 300;
   MANUAL_CHAPTER_DELETE_NEAR_MS = 3000;
 
 constructor TVideoMinerChapterManager.Create;
 begin
   inherited Create;
+  ResetAudioCheck;
   FAutoCheckDarkStartMs := -1;
+  ResetFrameDifferenceCheck;
   FCheckEnabled := False;
 end;
 
 procedure TVideoMinerChapterManager.Clear;
 begin
   SetLength(FChapters, 0);
+  ResetAudioCheck;
   FAutoCheckDarkStartMs := -1;
+  ResetFrameDifferenceCheck;
+end;
+
+procedure TVideoMinerChapterManager.ResetAudioCheck;
+begin
+  FAutoCheckChannelStartMs := -1;
+  FAutoCheckSilenceStartMs := -1;
+  FAutoCheckVolumeHasPrev := False;
+  FAutoCheckVolumePrevLevel := 0;
+  FAutoCheckVolumePrevStartMs := -1;
+end;
+
+procedure TVideoMinerChapterManager.ResetFrameDifferenceCheck;
+begin
+  FAutoCheckFrameDiffHasPending := False;
+  FAutoCheckFrameDiffHasPrev := False;
+  FAutoCheckFrameDiffPendingPositionMs := -1;
+  FAutoCheckFrameDiffPrevPositionMs := -1;
 end;
 
 function TVideoMinerChapterManager.ChapterVisible(
   const Chapter: TVideoMinerOverlayChapter): Boolean;
 begin
-  Result := (Chapter.Source <> chsAutoCheck) or FCheckEnabled;
+  Result := (Chapter.Source = chsUser) or FCheckEnabled;
 end;
 
 procedure TVideoMinerChapterManager.AddManualChapter(PositionMs, MaxMs: Integer);
@@ -125,12 +190,16 @@ function TVideoMinerChapterManager.ToggleCheckEnabled: Boolean;
 begin
   FCheckEnabled := not FCheckEnabled;
   if not FCheckEnabled then
+  begin
+    ResetAudioCheck;
     FAutoCheckDarkStartMs := -1;
+    ResetFrameDifferenceCheck;
+  end;
   Result := FCheckEnabled;
 end;
 
 function TVideoMinerChapterManager.FindNearbyAutoCheckChapter(
-  PositionMs: Integer): Integer;
+  PositionMs: Integer; Source: TVideoMinerOverlayChapterSource): Integer;
 var
   I: Integer;
 begin
@@ -138,7 +207,7 @@ begin
 
   for I := 0 to High(FChapters) do
   begin
-    if (FChapters[I].Source = chsAutoCheck) and
+    if (FChapters[I].Source = Source) and
        (Abs(FChapters[I].PositionMs - PositionMs) <= AUTO_CHECK_MARKER_MERGE_MS) then
     begin
       Result := I;
@@ -147,12 +216,41 @@ begin
   end;
 end;
 
+function TVideoMinerChapterManager.AddOrUpdateAutoCheckChapter(
+  PositionMs: Integer; Severity: TVideoMinerOverlayChapterSeverity;
+  Source: TVideoMinerOverlayChapterSource; MaxMs: Integer): Boolean;
+var
+  Chapter: TVideoMinerOverlayChapter;
+  Index: Integer;
+begin
+  Result := False;
+  if MaxMs <= 0 then
+    Exit;
+
+  Index := FindNearbyAutoCheckChapter(PositionMs, Source);
+  if Index >= 0 then
+  begin
+    if Ord(Severity) > Ord(FChapters[Index].Severity) then
+    begin
+      FChapters[Index].Severity := Severity;
+      Result := True;
+    end;
+    Exit;
+  end;
+
+  Chapter.PositionMs := Max(0, Min(MaxMs, PositionMs));
+  Chapter.Severity := Severity;
+  Chapter.Source := Source;
+  Index := Length(FChapters);
+  SetLength(FChapters, Index + 1);
+  FChapters[Index] := Chapter;
+  Result := True;
+end;
+
 function TVideoMinerChapterManager.MaybeAutoCheckFrame(PositionMs: Integer;
   IsDarkFrame: Boolean; MaxMs: Integer): Boolean;
 var
-  Chapter: TVideoMinerOverlayChapter;
   DarkDurationMs: Integer;
-  Index: Integer;
   Severity: TVideoMinerOverlayChapterSeverity;
 begin
   Result := False;
@@ -180,24 +278,218 @@ begin
      (MaxMs - PositionMs <= AUTO_CHECK_END_RED_ZONE_MS) then
     Severity := csRed;
 
-  Index := FindNearbyAutoCheckChapter(FAutoCheckDarkStartMs);
-  if Index >= 0 then
+  Result := AddOrUpdateAutoCheckChapter(FAutoCheckDarkStartMs, Severity,
+    chsAutoCheck, MaxMs);
+end;
+
+function TVideoMinerChapterManager.MaybeAutoCheckFrameDifference(
+  PositionMs: Integer; const Signature: TVideoMinerFrameSignature;
+  MaxMs: Integer): Boolean;
+var
+  DiffBeforeCurrent: Integer;
+  DiffPendingCurrent: Integer;
+  DiffPrevCurrent: Integer;
+  PendingMatchedStableFrame: Boolean;
+begin
+  Result := False;
+  if (not FCheckEnabled) or (PositionMs < 0) or (MaxMs <= 0) then
   begin
-    if Ord(Severity) > Ord(FChapters[Index].Severity) then
-    begin
-      FChapters[Index].Severity := Severity;
-      Result := True;
-    end;
+    ResetFrameDifferenceCheck;
     Exit;
   end;
 
-  Chapter.PositionMs := Max(0, Min(MaxMs, FAutoCheckDarkStartMs));
-  Chapter.Severity := Severity;
-  Chapter.Source := chsAutoCheck;
-  Index := Length(FChapters);
-  SetLength(FChapters, Index + 1);
-  FChapters[Index] := Chapter;
-  Result := True;
+  if (not FAutoCheckFrameDiffHasPrev) or
+     (PositionMs <= FAutoCheckFrameDiffPrevPositionMs) or
+     (PositionMs - FAutoCheckFrameDiffPrevPositionMs >
+      AUTO_CHECK_FRAME_DIFF_MAX_GAP_MS) then
+  begin
+    FAutoCheckFrameDiffPrevSignature := Signature;
+    FAutoCheckFrameDiffPrevPositionMs := PositionMs;
+    FAutoCheckFrameDiffHasPrev := True;
+    FAutoCheckFrameDiffHasPending := False;
+    Exit;
+  end;
+
+  DiffPrevCurrent := FrameSignatureDifference(FAutoCheckFrameDiffPrevSignature,
+    Signature);
+  PendingMatchedStableFrame := False;
+
+  if FAutoCheckFrameDiffHasPending then
+  begin
+    DiffPendingCurrent := FrameSignatureDifference(
+      FAutoCheckFrameDiffPendingSignature, Signature);
+    DiffBeforeCurrent := FrameSignatureDifference(
+      FAutoCheckFrameDiffPendingBeforeSignature, Signature);
+    PendingMatchedStableFrame :=
+      (DiffPendingCurrent >= AUTO_CHECK_FRAME_DIFF_SPIKE_SCORE) and
+      (DiffBeforeCurrent <= AUTO_CHECK_FRAME_DIFF_STABLE_SCORE);
+    if PendingMatchedStableFrame then
+      Result := AddOrUpdateAutoCheckChapter(
+        FAutoCheckFrameDiffPendingPositionMs, csYellow,
+        chsAutoCheckFrameDiff, MaxMs);
+    FAutoCheckFrameDiffHasPending := False;
+  end;
+
+  if (not PendingMatchedStableFrame) and
+     (DiffPrevCurrent >= AUTO_CHECK_FRAME_DIFF_SPIKE_SCORE) then
+  begin
+    FAutoCheckFrameDiffPendingBeforeSignature :=
+      FAutoCheckFrameDiffPrevSignature;
+    FAutoCheckFrameDiffPendingSignature := Signature;
+    FAutoCheckFrameDiffPendingPositionMs := PositionMs;
+    FAutoCheckFrameDiffHasPending := True;
+  end;
+
+  FAutoCheckFrameDiffPrevSignature := Signature;
+  FAutoCheckFrameDiffPrevPositionMs := PositionMs;
+end;
+
+function TVideoMinerChapterManager.MaybeAutoCheckAudio(StartSample: Int64;
+  const Pcm: TBytes; MaxMs: Integer): Boolean;
+var
+  ChannelAbnormal: Boolean;
+  ChannelDurationMs: Integer;
+  ClippedSamples: Integer;
+  DurationMs: Integer;
+  FrameCount: Integer;
+  I: Integer;
+  LeftSample: SmallInt;
+  MaxAbsLeft: Integer;
+  MaxAbsRight: Integer;
+  RightSample: SmallInt;
+  Sample: Integer;
+  Severity: TVideoMinerOverlayChapterSeverity;
+  SilenceDurationMs: Integer;
+  StartMs: Integer;
+  SumAbsLeft: Int64;
+  SumAbsRight: Int64;
+  VolumeDelta: Integer;
+  VolumeLevel: Integer;
+  VolumeRatio: Double;
+begin
+  Result := False;
+  if (not FCheckEnabled) or (MaxMs <= 0) or (Length(Pcm) <= 0) then
+  begin
+    ResetAudioCheck;
+    Exit;
+  end;
+
+  FrameCount := Length(Pcm) div (AUTO_CHECK_AUDIO_CHANNELS * SizeOf(SmallInt));
+  if FrameCount <= 0 then
+    Exit;
+
+  StartMs := (StartSample * 1000) div AUTO_CHECK_AUDIO_SAMPLE_RATE;
+  DurationMs := (Int64(FrameCount) * 1000) div AUTO_CHECK_AUDIO_SAMPLE_RATE;
+  if DurationMs <= 0 then
+    DurationMs := 1;
+
+  MaxAbsLeft := 0;
+  MaxAbsRight := 0;
+  SumAbsLeft := 0;
+  SumAbsRight := 0;
+  ClippedSamples := 0;
+  for I := 0 to FrameCount - 1 do
+  begin
+    Move(Pcm[I * 4], LeftSample, SizeOf(SmallInt));
+    Move(Pcm[I * 4 + 2], RightSample, SizeOf(SmallInt));
+
+    Sample := Abs(LeftSample);
+    if Sample > MaxAbsLeft then
+      MaxAbsLeft := Sample;
+    Inc(SumAbsLeft, Sample);
+    if Sample >= AUTO_CHECK_AUDIO_CLIPPING_PEAK then
+      Inc(ClippedSamples);
+
+    Sample := Abs(RightSample);
+    if Sample > MaxAbsRight then
+      MaxAbsRight := Sample;
+    Inc(SumAbsRight, Sample);
+    if Sample >= AUTO_CHECK_AUDIO_CLIPPING_PEAK then
+      Inc(ClippedSamples);
+  end;
+
+  if ClippedSamples >= AUTO_CHECK_AUDIO_CLIPPING_SAMPLE_COUNT then
+    Result := AddOrUpdateAutoCheckChapter(StartMs, csRed,
+      chsAutoCheckClipping, MaxMs) or Result;
+
+  VolumeLevel := (SumAbsLeft + SumAbsRight) div
+    Max(1, FrameCount * AUTO_CHECK_AUDIO_CHANNELS);
+  if (not FAutoCheckVolumeHasPrev) or
+     (StartMs <= FAutoCheckVolumePrevStartMs) or
+     (StartMs - FAutoCheckVolumePrevStartMs >
+      AUTO_CHECK_AUDIO_VOLUME_MAX_GAP_MS) then
+  begin
+    FAutoCheckVolumeHasPrev := True;
+    FAutoCheckVolumePrevLevel := VolumeLevel;
+    FAutoCheckVolumePrevStartMs := StartMs;
+  end
+  else
+  begin
+    if (FAutoCheckVolumePrevLevel >= AUTO_CHECK_AUDIO_VOLUME_ACTIVE_LEVEL) and
+       (VolumeLevel >= AUTO_CHECK_AUDIO_VOLUME_ACTIVE_LEVEL) then
+    begin
+      VolumeDelta := Abs(VolumeLevel - FAutoCheckVolumePrevLevel);
+      VolumeRatio := Max(VolumeLevel, FAutoCheckVolumePrevLevel) /
+        Max(1, Min(VolumeLevel, FAutoCheckVolumePrevLevel));
+      if (VolumeDelta >= AUTO_CHECK_AUDIO_VOLUME_JUMP_DELTA) and
+         (VolumeRatio >= AUTO_CHECK_AUDIO_VOLUME_JUMP_RATIO) then
+      begin
+        Severity := csYellow;
+        if (VolumeRatio >= AUTO_CHECK_AUDIO_VOLUME_RED_RATIO) and
+           (VolumeLevel >= AUTO_CHECK_AUDIO_VOLUME_RED_LEVEL) then
+          Severity := csRed;
+        Result := AddOrUpdateAutoCheckChapter(StartMs, Severity,
+          chsAutoCheckVolumeJump, MaxMs) or Result;
+      end;
+    end;
+    FAutoCheckVolumePrevLevel := VolumeLevel;
+    FAutoCheckVolumePrevStartMs := StartMs;
+  end;
+
+  if (MaxAbsLeft <= AUTO_CHECK_AUDIO_SILENCE_PEAK) and
+     (MaxAbsRight <= AUTO_CHECK_AUDIO_SILENCE_PEAK) then
+  begin
+    if FAutoCheckSilenceStartMs < 0 then
+      FAutoCheckSilenceStartMs := StartMs;
+    SilenceDurationMs := StartMs + DurationMs - FAutoCheckSilenceStartMs;
+    if SilenceDurationMs >= AUTO_CHECK_AUDIO_SILENCE_YELLOW_DURATION_MS then
+    begin
+      Severity := csYellow;
+      if (FAutoCheckSilenceStartMs > AUTO_CHECK_AUDIO_LEADING_SILENCE_MS) and
+         (SilenceDurationMs >= AUTO_CHECK_AUDIO_SILENCE_RED_DURATION_MS) then
+        Severity := csRed;
+      Result := AddOrUpdateAutoCheckChapter(FAutoCheckSilenceStartMs, Severity,
+        chsAutoCheckAudio, MaxMs) or Result;
+    end;
+  end
+  else
+    FAutoCheckSilenceStartMs := -1;
+
+  ChannelAbnormal :=
+    ((MaxAbsLeft <= AUTO_CHECK_AUDIO_SILENCE_PEAK) and
+     (MaxAbsRight >= AUTO_CHECK_AUDIO_ACTIVE_PEAK)) or
+    ((MaxAbsRight <= AUTO_CHECK_AUDIO_SILENCE_PEAK) and
+     (MaxAbsLeft >= AUTO_CHECK_AUDIO_ACTIVE_PEAK)) or
+    ((SumAbsLeft > 0) and (SumAbsRight > 0) and
+     ((SumAbsLeft / SumAbsRight >= AUTO_CHECK_AUDIO_CHANNEL_RATIO) or
+      (SumAbsRight / SumAbsLeft >= AUTO_CHECK_AUDIO_CHANNEL_RATIO)));
+
+  if ChannelAbnormal then
+  begin
+    if FAutoCheckChannelStartMs < 0 then
+      FAutoCheckChannelStartMs := StartMs;
+    ChannelDurationMs := StartMs + DurationMs - FAutoCheckChannelStartMs;
+    if ChannelDurationMs >= AUTO_CHECK_AUDIO_CHANNEL_YELLOW_DURATION_MS then
+    begin
+      Severity := csYellow;
+      if ChannelDurationMs >= AUTO_CHECK_AUDIO_CHANNEL_RED_DURATION_MS then
+        Severity := csRed;
+      Result := AddOrUpdateAutoCheckChapter(FAutoCheckChannelStartMs, Severity,
+        chsAutoCheckChannel, MaxMs) or Result;
+    end;
+  end
+  else
+    FAutoCheckChannelStartMs := -1;
 end;
 
 function TVideoMinerChapterManager.DisplayChapters: TVideoMinerOverlayChapters;
