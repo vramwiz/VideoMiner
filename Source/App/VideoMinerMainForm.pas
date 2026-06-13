@@ -4,7 +4,7 @@ interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
-  System.Math, System.Types,
+  System.Diagnostics, System.Math, System.Types,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
   Vcl.ExtCtrls, Vcl.Graphics, Vcl.StdCtrls, ActiveX, DropAgent, FFmpegDecoder,
   FFmpegDecoderTypes, FolderWatch, ResizeEdges, ShortcutAction,
@@ -180,6 +180,7 @@ const
   TITLE_BAR_COLOR = $00171617;
   CLOSE_BUTTON_HOVER_COLOR = $00232323;
   CAPTION_BUTTON_HOVER_COLOR = $00232323;
+  SLOW_OPEN_LOG_MS = 200;
 
 {$R *.dfm}
 
@@ -794,15 +795,32 @@ function TVideoMinerMainForm.LoadVideoFile(const FileName: string;
 var
   ErrorMessage: string;
   OpenResult: TVideoMinerMediaOpenResult;
+  TotalWatch: TStopwatch;
+  StepWatch: TStopwatch;
+  ValidateMs: Double;
+  CleanupMs: Double;
+  OpenMs: Double;
+  FirstFrameMs: Double;
+  AutoPlayMs: Double;
 begin
   Result := False;
+  TotalWatch := TStopwatch.StartNew;
 
+  StepWatch := TStopwatch.StartNew;
   if not ValidateVideoMinerMediaFile(FileName, ErrorMessage) then
   begin
+    ValidateMs := StepWatch.Elapsed.TotalMilliseconds;
+    WriteVideoMinerSlowLog(Format(
+      'open_failed step="validate" file="%s" drive="%s" autoplay=%s validate_ms=%.3f total_ms=%.3f err="%s"',
+      [ExtractFileName(FileName), ExtractFileDrive(FileName),
+       BoolToStr(AutoPlay, True), ValidateMs, TotalWatch.Elapsed.TotalMilliseconds,
+       ErrorMessage]));
     SetStatusCaption(ErrorMessage);
     Exit;
   end;
+  ValidateMs := StepWatch.Elapsed.TotalMilliseconds;
 
+  StepWatch := TStopwatch.StartNew;
   if FReloadCurrentFileTimer <> nil then
     FReloadCurrentFileTimer.Enabled := False;
   FPendingReloadHasStamp := False;
@@ -830,10 +848,13 @@ begin
   finally
     FUpdatingSeek := False;
   end;
+  CleanupMs := StepWatch.Elapsed.TotalMilliseconds;
 
+  StepWatch := TStopwatch.StartNew;
   if not OpenVideoMinerMediaFile(FileName, FDecoder, FPreviewDecoder,
     FMediaList, OpenResult) then
   begin
+    OpenMs := StepWatch.Elapsed.TotalMilliseconds;
     FVideoFile := '';
     ConfigureCurrentFileWatch;
     UpdateCurrentFileStamp;
@@ -842,8 +863,14 @@ begin
     SetTitleBarText(Caption);
     UpdateNavigationButtons;
     SetStatusCaption(OpenResult.ErrorMessage);
+    WriteVideoMinerSlowLog(Format(
+      'open_failed step="decoder_open" file="%s" drive="%s" autoplay=%s validate_ms=%.3f cleanup_ms=%.3f open_ms=%.3f total_ms=%.3f err="%s"',
+      [ExtractFileName(FileName), ExtractFileDrive(FileName),
+       BoolToStr(AutoPlay, True), ValidateMs, CleanupMs, OpenMs,
+       TotalWatch.Elapsed.TotalMilliseconds, OpenResult.ErrorMessage]));
     Exit;
   end;
+  OpenMs := StepWatch.Elapsed.TotalMilliseconds;
 
   FVideoInfo := OpenResult.Info;
   FVideoFile := OpenResult.FileName;
@@ -867,14 +894,27 @@ begin
   UpdateNavigationButtons;
   UpdateInfoLabel;
   RefreshChapterOverlay;
+  StepWatch := TStopwatch.StartNew;
   if (not RestoreLoopPosition) or (not TryRestoreLoopPlaybackPosition) then
     ShowFrameAtMs(0);
+  FirstFrameMs := StepWatch.Elapsed.TotalMilliseconds;
 
+  StepWatch := TStopwatch.StartNew;
   if AutoPlay then
     PlayFromCurrentPosition;
+  AutoPlayMs := StepWatch.Elapsed.TotalMilliseconds;
 
   RememberVideoMinerMediaFile(FileName);
   Result := True;
+  if (TotalWatch.Elapsed.TotalMilliseconds >= SLOW_OPEN_LOG_MS) or
+     (OpenMs >= SLOW_OPEN_LOG_MS) or (FirstFrameMs >= SLOW_OPEN_LOG_MS) or
+     (AutoPlayMs >= SLOW_OPEN_LOG_MS) then
+    WriteVideoMinerSlowLog(Format(
+      'open_done file="%s" drive="%s" autoplay=%s restore_loop=%s validate_ms=%.3f cleanup_ms=%.3f open_ms=%.3f first_frame_ms=%.3f autoplay_ms=%.3f total_ms=%.3f duration_ms=%d fps=%.3f',
+      [ExtractFileName(FVideoFile), ExtractFileDrive(FVideoFile),
+       BoolToStr(AutoPlay, True), BoolToStr(RestoreLoopPosition, True),
+       ValidateMs, CleanupMs, OpenMs, FirstFrameMs, AutoPlayMs,
+       TotalWatch.Elapsed.TotalMilliseconds, FSeekMaxMs, FVideoInfo.Fps]));
 end;
 
 function TVideoMinerMainForm.OpenAndPlayFile(const FileName: string): Boolean;
@@ -1064,7 +1104,7 @@ procedure TVideoMinerMainForm.StartPlaybackAtMs(PositionMs: Integer;
 begin
   FPlaybackController.StartPlaybackAtMs(FDecoder, FVideoFile, FVideoInfo,
     FEndAction, FChapterManager, FSeekMaxMs, PositionMs, LastFrameSeekPositionMs,
-    FrameAlreadyShown, FCurrentVideoPositionMs, FSeekPositionMs,
+    FrameAlreadyShown, False, FCurrentVideoPositionMs, FSeekPositionMs,
     FLoopSegmentStartMs, FLoopSegmentEndMs, FSeekGuardTargetMs,
     FSeekGuardRemaining, SetStatusCaption);
 end;
@@ -1313,8 +1353,11 @@ end;
 procedure TVideoMinerMainForm.RestartPlaybackTimer(Sender: TObject);
 var
   TargetMs: Integer;
+  FrameAlreadyShown: Boolean;
+  FastSeek: Boolean;
 begin
-  if not FPlaybackController.ConsumeRestart(TargetMs) then
+  if not FPlaybackController.ConsumeRestart(TargetMs, FrameAlreadyShown,
+    FastSeek) then
     Exit;
 
   if (FVideoFile = '') or (TargetMs < 0) or (TargetMs >= FSeekMaxMs) then
@@ -1323,7 +1366,11 @@ begin
   if VideoMinerDebugLogEnabled then
     WriteVideoMinerDebugLog(Format('restart_playback target_ms=%d',
       [TargetMs]));
-  StartPlaybackAtMs(TargetMs, True);
+  FPlaybackController.StartPlaybackAtMs(FDecoder, FVideoFile, FVideoInfo,
+    FEndAction, FChapterManager, FSeekMaxMs, TargetMs, LastFrameSeekPositionMs,
+    FrameAlreadyShown, FastSeek, FCurrentVideoPositionMs, FSeekPositionMs,
+    FLoopSegmentStartMs, FLoopSegmentEndMs, FSeekGuardTargetMs,
+    FSeekGuardRemaining, SetStatusCaption);
 end;
 
 procedure TVideoMinerMainForm.WMNCHitTest(var Message: TWMNCHitTest);

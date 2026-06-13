@@ -25,6 +25,8 @@ type
   private
     FAudioPlayback: TVideoMinerAudioPlayback;
     FPlaybackRate: Double;
+    FRestartFastSeek: Boolean;
+    FRestartFrameAlreadyShown: Boolean;
     FRestartPending: Boolean;
     FRestartPositionMs: Integer;
     FRestartTimer: TTimer;
@@ -40,7 +42,8 @@ type
       PreviewDecoder: TFFmpegDecoder);
     function ActiveOrPending: Boolean;
     procedure ClearRestart;
-    function ConsumeRestart(out PositionMs: Integer): Boolean;
+    function ConsumeRestart(out PositionMs: Integer;
+      out FrameAlreadyShown: Boolean; out FastSeek: Boolean): Boolean;
     function CurrentPositionMs(UsePlaybackPosition: Boolean;
       SeekPositionMs, CurrentVideoPositionMs, SeekMaxMs: Integer): Integer;
     function DecodeNextFrame(Decoder: TFFmpegDecoder; UseScratchFrame: Boolean;
@@ -87,19 +90,21 @@ type
       out AudioPositionMs: Integer; out ErrorMessage: string): Boolean;
     function SeekPositionForTick(PositionMs, AudioPositionMs,
       SeekMaxMs: Integer): Integer;
-    procedure ScheduleRestart(PositionMs: Integer);
+    procedure ScheduleRestart(PositionMs: Integer; FrameAlreadyShown: Boolean = True;
+      FastSeek: Boolean = False);
     procedure SetPlaybackRate(Value: Double);
     function ShouldRestartLoop(EndAction: TVideoMinerEndAction;
       LoopSegmentStartMs, LoopSegmentEndMs, CurrentVideoPositionMs: Integer;
       out TargetMs: Integer): Boolean;
     function StartAtMs(Decoder: TFFmpegDecoder; const VideoFile: string;
       const VideoInfo: TVideoInfo; SeekMaxMs, PositionMs: Integer;
-      FrameAlreadyShown: Boolean; out TargetMs: Integer;
+      FrameAlreadyShown: Boolean; FastSeek: Boolean; out TargetMs: Integer;
       out ErrorMessage: string): Boolean;
     procedure StartPlaybackAtMs(Decoder: TFFmpegDecoder; const VideoFile: string;
       const VideoInfo: TVideoInfo; EndAction: TVideoMinerEndAction;
       ChapterManager: TVideoMinerChapterManager; SeekMaxMs, PositionMs,
       LastFrameSeekPositionMs: Integer; FrameAlreadyShown: Boolean;
+      FastSeek: Boolean;
       var CurrentVideoPositionMs, SeekPositionMs, LoopSegmentStartMs,
       LoopSegmentEndMs, SeekGuardTargetMs, SeekGuardRemaining: Integer;
       SetStatus: TVideoMinerPlaybackStatusProc);
@@ -134,6 +139,11 @@ implementation
 uses
   System.Math, System.SysUtils, VideoMinerDebugLog, VideoMinerPlaybackTiming;
 
+const
+  SLOW_PREVIEW_LOG_MS = 120;
+  SLOW_START_LOG_MS = 150;
+  SLOW_TICK_LOG_MS = 80;
+
 constructor TVideoMinerPlaybackController.Create(PlaybackTimer,
   RestartTimer: TTimer; AudioPlayback: TVideoMinerAudioPlayback;
   VideoView: TVideoMinerVideoView; PreviewDecoder: TFFmpegDecoder);
@@ -147,6 +157,8 @@ begin
   FPlaybackRate := 1.0;
   FRateClockActive := False;
   FRateClockBaseMs := 0;
+  FRestartFastSeek := False;
+  FRestartFrameAlreadyShown := True;
   FRestartPending := False;
   FRestartPositionMs := -1;
 end;
@@ -161,13 +173,16 @@ end;
 procedure TVideoMinerPlaybackController.ClearRestart;
 begin
   FRestartPending := False;
+  FRestartFastSeek := False;
+  FRestartFrameAlreadyShown := True;
   FRestartPositionMs := -1;
   if FRestartTimer <> nil then
     FRestartTimer.Enabled := False;
 end;
 
 function TVideoMinerPlaybackController.ConsumeRestart(
-  out PositionMs: Integer): Boolean;
+  out PositionMs: Integer; out FrameAlreadyShown: Boolean;
+  out FastSeek: Boolean): Boolean;
 begin
   if FRestartTimer <> nil then
     FRestartTimer.Enabled := False;
@@ -176,12 +191,18 @@ begin
   if not Result then
   begin
     PositionMs := -1;
+    FrameAlreadyShown := True;
+    FastSeek := False;
     Exit;
   end;
 
   FRestartPending := False;
   PositionMs := FRestartPositionMs;
+  FrameAlreadyShown := FRestartFrameAlreadyShown;
+  FastSeek := FRestartFastSeek;
   FRestartPositionMs := -1;
+  FRestartFastSeek := False;
+  FRestartFrameAlreadyShown := True;
 end;
 
 function TVideoMinerPlaybackController.CurrentPositionMs(
@@ -578,10 +599,13 @@ begin
      TimerInterval]));
 end;
 
-procedure TVideoMinerPlaybackController.ScheduleRestart(PositionMs: Integer);
+procedure TVideoMinerPlaybackController.ScheduleRestart(PositionMs: Integer;
+  FrameAlreadyShown: Boolean; FastSeek: Boolean);
 begin
   FRestartPending := True;
   FRestartPositionMs := PositionMs;
+  FRestartFastSeek := FastSeek;
+  FRestartFrameAlreadyShown := FrameAlreadyShown;
   if FRestartTimer <> nil then
   begin
     FRestartTimer.Enabled := False;
@@ -626,8 +650,11 @@ var
   TriedCount: Integer;
   J: Integer;
   AlreadyTried: Boolean;
+  TotalWatch: TStopwatch;
+  TotalMs: Double;
 begin
   Result := False;
+  TotalWatch := TStopwatch.StartNew;
   ShownPositionMs := PositionMs;
   ErrorMessage := '';
   LastErrorMessage := '';
@@ -666,11 +693,20 @@ begin
     begin
       ShownPositionMs := AttemptMs;
       Result := True;
+      TotalMs := TotalWatch.Elapsed.TotalMilliseconds;
+      if TotalMs >= SLOW_PREVIEW_LOG_MS then
+        WriteVideoMinerSlowLog(Format(
+          'show_frame_near_slow target_ms=%d shown_ms=%d attempts=%d total_ms=%.3f',
+          [PositionMs, ShownPositionMs, TriedCount, TotalMs]));
       Exit;
     end;
   end;
 
   ErrorMessage := LastErrorMessage;
+  WriteVideoMinerSlowLog(Format(
+    'show_frame_near_failed target_ms=%d attempts=%d total_ms=%.3f err="%s"',
+    [PositionMs, TriedCount, TotalWatch.Elapsed.TotalMilliseconds,
+     ErrorMessage]));
 end;
 
 procedure TVideoMinerPlaybackController.SeekToMs(const VideoFile: string;
@@ -688,6 +724,7 @@ var
   StepWatch: TStopwatch;
   StopMs: Double;
   PreviewMs: Double;
+  FastRestart: Boolean;
   DebugLogEnabled: Boolean;
 begin
   if (VideoFile = '') or (SeekMaxMs <= 0) then
@@ -711,23 +748,35 @@ begin
     WriteVideoMinerDebugLog(Format('seek target_ms=%d was_playing=%s',
       [TargetMs, BoolToStr(WasPlaying, True)]));
 
+  PreviewMs := 0;
+  FastRestart := ResumeIfPlaying and WasPlaying and (TargetMs < SeekMaxMs);
   Seeking := True;
   try
-    StepWatch := TStopwatch.StartNew;
-    if not ShowFrameNearMs(TargetMs, SeekMaxMs, ShownPositionMs,
-      ErrorMessage) then
+    if FastRestart then
     begin
+      ShownPositionMs := TargetMs;
+      WriteVideoMinerSlowLog(Format(
+        'seek_fast_restart target_ms=%d stop_ms=%.3f total_ms=%.3f',
+        [TargetMs, StopMs, TotalWatch.Elapsed.TotalMilliseconds]));
+    end
+    else
+    begin
+      StepWatch := TStopwatch.StartNew;
+      if not ShowFrameNearMs(TargetMs, SeekMaxMs, ShownPositionMs,
+        ErrorMessage) then
+      begin
+        PreviewMs := StepWatch.Elapsed.TotalMilliseconds;
+        if DebugLogEnabled then
+          WriteVideoMinerDebugLog(Format(
+            'seek_failed step="preview" target_ms=%d was_playing=%s stop_ms=%.3f preview_ms=%.3f total_ms=%.3f err="%s"',
+            [TargetMs, BoolToStr(WasPlaying, True), StopMs, PreviewMs,
+             TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+        if Assigned(SetStatus) then
+          SetStatus('Failed to decode frame: ' + ErrorMessage);
+        Exit;
+      end;
       PreviewMs := StepWatch.Elapsed.TotalMilliseconds;
-      if DebugLogEnabled then
-        WriteVideoMinerDebugLog(Format(
-          'seek_failed step="preview" target_ms=%d was_playing=%s stop_ms=%.3f preview_ms=%.3f total_ms=%.3f err="%s"',
-          [TargetMs, BoolToStr(WasPlaying, True), StopMs, PreviewMs,
-           TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
-      if Assigned(SetStatus) then
-        SetStatus('Failed to decode frame: ' + ErrorMessage);
-      Exit;
     end;
-    PreviewMs := StepWatch.Elapsed.TotalMilliseconds;
 
     CurrentVideoPositionMs := ShownPositionMs;
     UpdatingSeek := True;
@@ -746,11 +795,18 @@ begin
   end;
 
   if ResumeIfPlaying and WasPlaying and (ShownPositionMs < SeekMaxMs) then
-    ScheduleRestart(ShownPositionMs);
+    ScheduleRestart(ShownPositionMs, not FastRestart, FastRestart);
 
   if DebugLogEnabled then
     WriteVideoMinerDebugLog(Format(
       'seek_done target_ms=%d shown_ms=%d was_playing=%s resume=%s stop_ms=%.3f preview_ms=%.3f total_ms=%.3f',
+      [TargetMs, ShownPositionMs, BoolToStr(WasPlaying, True),
+       BoolToStr(ResumeIfPlaying and WasPlaying and (ShownPositionMs < SeekMaxMs), True),
+       StopMs, PreviewMs, TotalWatch.Elapsed.TotalMilliseconds]));
+  if (TotalWatch.Elapsed.TotalMilliseconds >= SLOW_START_LOG_MS) or
+     (StopMs >= SLOW_PREVIEW_LOG_MS) or (PreviewMs >= SLOW_PREVIEW_LOG_MS) then
+    WriteVideoMinerSlowLog(Format(
+      'seek_slow target_ms=%d shown_ms=%d was_playing=%s resume=%s stop_ms=%.3f preview_ms=%.3f total_ms=%.3f',
       [TargetMs, ShownPositionMs, BoolToStr(WasPlaying, True),
        BoolToStr(ResumeIfPlaying and WasPlaying and (ShownPositionMs < SeekMaxMs), True),
        StopMs, PreviewMs, TotalWatch.Elapsed.TotalMilliseconds]));
@@ -768,8 +824,8 @@ end;
 
 function TVideoMinerPlaybackController.StartAtMs(Decoder: TFFmpegDecoder;
   const VideoFile: string; const VideoInfo: TVideoInfo; SeekMaxMs,
-  PositionMs: Integer; FrameAlreadyShown: Boolean; out TargetMs: Integer;
-  out ErrorMessage: string): Boolean;
+  PositionMs: Integer; FrameAlreadyShown: Boolean; FastSeek: Boolean;
+  out TargetMs: Integer; out ErrorMessage: string): Boolean;
 var
   OpenInfo: TVideoInfo;
   ReuseErrorMessage: string;
@@ -814,7 +870,7 @@ begin
 
   StepWatch := TStopwatch.StartNew;
   if not FVideoView.ShowFrameAt(Decoder, TargetMs, ReuseErrorMessage,
-    not FrameAlreadyShown) then
+    not FrameAlreadyShown, FastSeek) then
   begin
     VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
     if DebugLogEnabled then
@@ -822,6 +878,10 @@ begin
         'start_playback_reuse_failed file="%s" target_ms=%d video_seek_ms=%.3f total_ms=%.3f err="%s"',
         [ExtractFileName(VideoFile), TargetMs, VideoSeekMs,
          TotalWatch.Elapsed.TotalMilliseconds, ReuseErrorMessage]));
+    WriteVideoMinerSlowLog(Format(
+      'start_playback_reuse_failed file="%s" target_ms=%d video_seek_ms=%.3f total_ms=%.3f err="%s"',
+      [ExtractFileName(VideoFile), TargetMs, VideoSeekMs,
+       TotalWatch.Elapsed.TotalMilliseconds, ReuseErrorMessage]));
 
     StepWatch := TStopwatch.StartNew;
     Decoder.Close;
@@ -833,6 +893,10 @@ begin
           'start_playback_failed step="video_open_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f total_ms=%.3f err="%s"',
           [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs,
            TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+      WriteVideoMinerSlowLog(Format(
+        'start_playback_failed step="video_open_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f total_ms=%.3f err="%s"',
+        [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs,
+         TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
       if FVideoView <> nil then
         FVideoView.PlaybackActive := False;
       ErrorMessage := 'Failed to reopen video decoder: ' + ErrorMessage;
@@ -843,7 +907,7 @@ begin
 
     StepWatch := TStopwatch.StartNew;
     if not FVideoView.ShowFrameAt(Decoder, TargetMs, ErrorMessage,
-      not FrameAlreadyShown) then
+      not FrameAlreadyShown, FastSeek) then
     begin
       VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
       if DebugLogEnabled then
@@ -851,6 +915,10 @@ begin
           'start_playback_failed step="video_seek_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f total_ms=%.3f err="%s"',
           [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs, VideoSeekMs,
            TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+      WriteVideoMinerSlowLog(Format(
+        'start_playback_failed step="video_seek_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f total_ms=%.3f err="%s"',
+        [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs, VideoSeekMs,
+         TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
       if FVideoView <> nil then
         FVideoView.PlaybackActive := False;
       ErrorMessage := 'Failed to seek video decoder: ' + ErrorMessage;
@@ -871,6 +939,10 @@ begin
         'start_playback_failed step="audio_start" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f audio_start_ms=%.3f total_ms=%.3f err="%s"',
         [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs, VideoSeekMs,
          AudioStartMs, TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+    WriteVideoMinerSlowLog(Format(
+      'start_playback_failed step="audio_start" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f audio_start_ms=%.3f total_ms=%.3f err="%s"',
+      [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs, VideoSeekMs,
+       AudioStartMs, TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
     if FVideoView <> nil then
       FVideoView.PlaybackActive := False;
     ErrorMessage := 'Failed to start audio playback: ' + ErrorMessage;
@@ -893,6 +965,14 @@ begin
       [ExtractFileName(VideoFile), TargetMs, BoolToStr(FrameAlreadyShown, True),
        BoolToStr(VideoReopened, True), VideoPrepareMs, VideoSeekMs,
        AudioStartMs, TotalWatch.Elapsed.TotalMilliseconds]));
+  if (TotalWatch.Elapsed.TotalMilliseconds >= SLOW_START_LOG_MS) or
+     (VideoSeekMs >= SLOW_PREVIEW_LOG_MS) or
+     (AudioStartMs >= SLOW_PREVIEW_LOG_MS) then
+    WriteVideoMinerSlowLog(Format(
+      'start_playback_slow file="%s" target_ms=%d frame_already_shown=%s video_reopen=%s video_prepare_ms=%.3f video_seek_ms=%.3f audio_start_ms=%.3f total_ms=%.3f',
+      [ExtractFileName(VideoFile), TargetMs, BoolToStr(FrameAlreadyShown, True),
+       BoolToStr(VideoReopened, True), VideoPrepareMs, VideoSeekMs,
+       AudioStartMs, TotalWatch.Elapsed.TotalMilliseconds]));
 
   Result := True;
 end;
@@ -901,7 +981,8 @@ procedure TVideoMinerPlaybackController.StartPlaybackAtMs(
   Decoder: TFFmpegDecoder; const VideoFile: string; const VideoInfo: TVideoInfo;
   EndAction: TVideoMinerEndAction; ChapterManager: TVideoMinerChapterManager;
   SeekMaxMs, PositionMs, LastFrameSeekPositionMs: Integer;
-  FrameAlreadyShown: Boolean; var CurrentVideoPositionMs, SeekPositionMs,
+  FrameAlreadyShown: Boolean; FastSeek: Boolean;
+  var CurrentVideoPositionMs, SeekPositionMs,
   LoopSegmentStartMs, LoopSegmentEndMs, SeekGuardTargetMs,
   SeekGuardRemaining: Integer; SetStatus: TVideoMinerPlaybackStatusProc);
 var
@@ -912,7 +993,7 @@ begin
     Exit;
 
   if not StartAtMs(Decoder, VideoFile, VideoInfo, SeekMaxMs, PositionMs,
-    FrameAlreadyShown, TargetMs, ErrorMessage) then
+    FrameAlreadyShown, FastSeek, TargetMs, ErrorMessage) then
   begin
     if (ErrorMessage <> '') and Assigned(SetStatus) then
       SetStatus(ErrorMessage);
@@ -1013,15 +1094,18 @@ var
   LaggingVideoResult: TVideoMinerLaggingVideoResult;
   SeekGuardResult: TVideoMinerSeekGuardResult;
   UseScratchFrame: Boolean;
+  SlowLogEnabled: Boolean;
+  TotalMs: Double;
 begin
   DebugLogEnabled := VideoMinerDebugLogEnabled;
-  if DebugLogEnabled then
+  SlowLogEnabled := VideoMinerSlowLogEnabled;
+  if DebugLogEnabled or SlowLogEnabled then
     TotalWatch := TStopwatch.StartNew;
   PumpMs := 0;
   DecodeMs := 0;
   SyncMs := 0;
 
-  if DebugLogEnabled then
+  if DebugLogEnabled or SlowLogEnabled then
     StepWatch := TStopwatch.StartNew;
   if not PrepareTick(IsSeeking, (VideoFile <> '') and (Decoder <> nil),
     SeekMaxMs, AudioPositionMs, ErrorMessage) then
@@ -1030,7 +1114,7 @@ begin
       SetStatus(ErrorMessage);
     Exit;
   end;
-  if DebugLogEnabled then
+  if DebugLogEnabled or SlowLogEnabled then
     PumpMs := StepWatch.Elapsed.TotalMilliseconds;
 
   PositionMs := -1;
@@ -1062,7 +1146,7 @@ begin
 
     UseScratchFrame := ConvertFrame and (AudioPositionMs < 0);
 
-    if DebugLogEnabled then
+    if DebugLogEnabled or SlowLogEnabled then
       StepWatch := TStopwatch.StartNew;
     DecodeResult := DecodeNextFrame(Decoder, UseScratchFrame, ConvertFrame,
       PositionMs, ErrorMessage);
@@ -1077,7 +1161,7 @@ begin
         SetStatus('Failed to decode next frame: ' + ErrorMessage);
       Exit;
     end;
-    if DebugLogEnabled then
+    if DebugLogEnabled or SlowLogEnabled then
       DecodeMs := DecodeMs + StepWatch.Elapsed.TotalMilliseconds;
 
     if UseScratchFrame and ShouldDropBackwardScratchFrame(VideoFile,
@@ -1126,7 +1210,7 @@ begin
       CurrentVideoPositionMs := PositionMs;
   until ConvertFrame;
 
-  if DebugLogEnabled then
+  if DebugLogEnabled or SlowLogEnabled then
     StepWatch := TStopwatch.StartNew;
   if (not DidSeekToAudio) and
      (not SyncVideoToAudio(Decoder, SeekMaxMs, PositionMs, ErrorMessage)) then
@@ -1137,7 +1221,7 @@ begin
   end;
   if PositionMs >= 0 then
     CurrentVideoPositionMs := PositionMs;
-  if DebugLogEnabled then
+  if DebugLogEnabled or SlowLogEnabled then
     SyncMs := StepWatch.Elapsed.TotalMilliseconds;
 
   if ShouldRestartLoop(EndAction, LoopSegmentStartMs, LoopSegmentEndMs,
@@ -1175,6 +1259,17 @@ begin
       LogPlaybackTick(VideoFile, AudioPositionMs, PositionMs, LagMs, DropCount,
         DidSeekToAudio, PumpMs, DecodeMs, SyncMs,
         TotalWatch.Elapsed.TotalMilliseconds, 0);
+  end;
+  if SlowLogEnabled then
+  begin
+    TotalMs := TotalWatch.Elapsed.TotalMilliseconds;
+    if (TotalMs >= SLOW_TICK_LOG_MS) or (PumpMs >= SLOW_TICK_LOG_MS) or
+       (DecodeMs >= SLOW_TICK_LOG_MS) or (SyncMs >= SLOW_TICK_LOG_MS) then
+      WriteVideoMinerSlowLog(Format(
+        'playback_tick_slow file="%s" audio_ms=%d video_ms=%d lag_ms=%d drop_count=%d seek_to_audio=%s pump_ms=%.3f decode_ms=%.3f sync_ms=%.3f total_ms=%.3f',
+        [ExtractFileName(VideoFile), AudioPositionMs, PositionMs, LagMs,
+         DropCount, BoolToStr(DidSeekToAudio, True), PumpMs, DecodeMs, SyncMs,
+         TotalMs]));
   end;
 end;
 

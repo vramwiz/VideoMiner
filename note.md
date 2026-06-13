@@ -363,6 +363,21 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
   - 主な行は `playback_tick`、`paint`、`start_playback`、`restart_playback`。
   - `playback_tick` では `audio_ms`、`video_ms`、`lag_ms`、`drop_count`、`pump_ms`、`decode_ms`、`sync_ms`、`total_ms`、`timer_interval` を確認する。
   - `paint` では `paint_ms` を確認し、`Canvas.StretchDraw` を含む描画負荷を見る。
+- 2026-06-13 に、通常の毎 tick 詳細ログとは別に、DEBUG ビルドだけで遅い操作を記録する slow log を追加した。
+  - `WriteVideoMinerSlowLog` は DEBUG ビルドで有効、Release では無効。
+  - 主な行は `open_done`、`show_frame_near_slow`、`seek_slow`、`start_playback_slow`、`audio_start_slow`、`audio_pump_slow`、`playback_tick_slow`。
+  - NAS 上の `\\taketani\bbb` の実測では、open はおおむね 196-316ms、再生開始は `audio_start_slow` の `output_start_ms` が 149-185ms 程度。
+  - 10 秒送り相当のシークでは `show_frame_near_slow` が 123-191ms、`seek_slow` 全体が 157-221ms 程度。現状で最初に疑う場所はシーク後の `ShowFrameNearMs` / `FVideoView.ShowFrameAt`。
+- 2026-06-13 に、再生中シークの軽量化として `seek_fast_restart` ルートを追加した。
+  - 再生中に `+10s` / `-10s` などで移動する場合、従来は `PreviewDecoder` で一度フレーム表示してから再生用 `Decoder` で再開していた。
+  - 新ルートでは、再生中だけプレビュー側の `ShowFrameNearMs` を省き、再開時の `StartAtMs` で一回だけフレーム取得する。
+  - 停止中や末尾へのシークは従来通りプレビュー表示する。
+  - さらに再生開始・再開用の映像取得だけ `DecodeFrameToBgrx32Fast` を使い、近いフレームを優先して復帰時間を短縮する。停止中プレビューは従来の正確寄り seek のまま。
+  - 音声側は初期キューを 180ms から 100ms、補充目標を 1000ms から 600ms に下げ、一回の音声デコード固まりを小さくした。
+  - `\\taketani\bbb\Balloon\melpo-MP4589S-MB3-01.wmv` の再計測では、`seek_fast_restart` は 2.6-6.6ms 程度。`start_playback_slow` / `audio_start_slow` は閾値以上では出なくなった。
+  - その後、一時停止からの通常再生でも fast seek が効いて数フレーム前が一瞬表示される可能性があったため、fast seek は `seek_fast_restart` からの自動再開時だけ使うように限定した。
+  - ユーザー確認では、今回の調整で体感はかなり改善した。残る停止感は、再開前に最低限の音声バッファを溜める処理として許容する方針。
+  - ここからさらに削りすぎると音切れや同期ズレが出やすいため、現時点では初期キュー 100ms / 補充目標 600ms を当面の落としどころにする。
 - ユーザー操作でシークバーを動かした場合と、コード側でシークバー位置を更新した場合を分けるため、`FUpdatingSeek` を使う。
 - 再生中にシークする処理では、タイマーと音声再生を一度止めてから位置を変更し、必要なら再生を再開する。
 - 二重起動時の受信処理は、`WM_COPYDATA` 内で直接重い処理をせず、キューに積んでから処理する。

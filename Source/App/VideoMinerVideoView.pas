@@ -51,7 +51,8 @@ type
     destructor Destroy; override;
     procedure Clear;
     function ShowFrameAt(Decoder: TFFmpegDecoder; PositionMs: Integer;
-      out ErrorMessage: string; PresentFrame: Boolean = True): Boolean;
+      out ErrorMessage: string; PresentFrame: Boolean = True;
+      FastSeek: Boolean = False): Boolean;
     function DecodeNextFrame(Decoder: TFFmpegDecoder; ConvertFrame: Boolean;
       out PositionMs: Integer; out ErrorMessage: string): Boolean;
     function DecodeNextFrameToScratch(Decoder: TFFmpegDecoder;
@@ -394,7 +395,8 @@ begin
 end;
 
 function TVideoMinerVideoView.ShowFrameAt(Decoder: TFFmpegDecoder;
-  PositionMs: Integer; out ErrorMessage: string; PresentFrame: Boolean): Boolean;
+  PositionMs: Integer; out ErrorMessage: string; PresentFrame: Boolean;
+  FastSeek: Boolean): Boolean;
 var
   Buffer: Pointer;
   BufferStride: Integer;
@@ -423,9 +425,17 @@ begin
     end;
   end;
 
-  if not Decoder.DecodeFrameToBgrx32(PositionMs, Buffer, BufferStride,
-    ErrorMessage) then
+  if FastSeek then
+    Result := Decoder.DecodeFrameToBgrx32Fast(PositionMs, Buffer,
+      BufferStride, ErrorMessage)
+  else
+    Result := Decoder.DecodeFrameToBgrx32(PositionMs, Buffer, BufferStride,
+      ErrorMessage);
+  if not Result then
+  begin
+    Result := False;
     Exit;
+  end;
 
   if PresentFrame then
     PresentImmediate(FSurface.Bitmap);

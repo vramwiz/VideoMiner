@@ -13,17 +13,26 @@ function DecodeFrameToBgrx32(
   out ErrorMessage: string
 ): Boolean;
 
+function DecodeFrameToBgrx32Fast(
+  Context: TFFmpegDecoderContext;
+  PositionMs: Integer;
+  Buffer: Pointer;
+  BufferStride: Integer;
+  out ErrorMessage: string
+): Boolean;
+
 implementation
 
 uses
   System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo;
 
 
-function DecodeFrameToBgrx32(
+function DecodeFrameToBgrx32Internal(
   Context: TFFmpegDecoderContext;
   PositionMs: Integer;
   Buffer: Pointer;
   BufferStride: Integer;
+  FastSeek: Boolean;
   out ErrorMessage: string
 ): Boolean;
 var
@@ -36,6 +45,7 @@ var
   Ret: Integer;
   FrameTs: Int64;
   TargetTs: Int64;
+  SeekFlags: Integer;
   DidTransfer: Boolean;
   TransferErrorMessage: string;
 begin
@@ -62,7 +72,14 @@ begin
 
   try
     TargetTs := StreamTimestampFromMs(Stream, PositionMs);
-    Ret := TFFmpegApi.av_seek_frame(FormatContext, Context.StreamIndex, TargetTs, AVSEEK_FLAG_BACKWARD);
+    SeekFlags := AVSEEK_FLAG_BACKWARD;
+    if FastSeek then
+      SeekFlags := SeekFlags or AVSEEK_FLAG_ANY;
+    Ret := TFFmpegApi.av_seek_frame(FormatContext, Context.StreamIndex,
+      TargetTs, SeekFlags);
+    if (Ret < 0) and FastSeek then
+      Ret := TFFmpegApi.av_seek_frame(FormatContext, Context.StreamIndex,
+        TargetTs, AVSEEK_FLAG_BACKWARD);
     if Ret < 0 then
     begin
       ErrorMessage := TFFmpegApi.ErrorText(Ret);
@@ -92,7 +109,7 @@ begin
         while TFFmpegApi.avcodec_receive_frame(CodecContext, Frame) = 0 do
         begin
           FrameTs := Frame.pts;
-          if (FrameTs <> AV_NOPTS_VALUE) and (FrameTs >= TargetTs) then
+          if FastSeek or ((FrameTs <> AV_NOPTS_VALUE) and (FrameTs >= TargetTs)) then
           begin
             ConvertSourceFrame := Frame;
             DidTransfer := False;
@@ -119,6 +136,30 @@ begin
     on E: Exception do
       ErrorMessage := E.ClassName + ': ' + E.Message;
   end;
+end;
+
+function DecodeFrameToBgrx32(
+  Context: TFFmpegDecoderContext;
+  PositionMs: Integer;
+  Buffer: Pointer;
+  BufferStride: Integer;
+  out ErrorMessage: string
+): Boolean;
+begin
+  Result := DecodeFrameToBgrx32Internal(Context, PositionMs, Buffer,
+    BufferStride, False, ErrorMessage);
+end;
+
+function DecodeFrameToBgrx32Fast(
+  Context: TFFmpegDecoderContext;
+  PositionMs: Integer;
+  Buffer: Pointer;
+  BufferStride: Integer;
+  out ErrorMessage: string
+): Boolean;
+begin
+  Result := DecodeFrameToBgrx32Internal(Context, PositionMs, Buffer,
+    BufferStride, True, ErrorMessage);
 end;
 
 end.

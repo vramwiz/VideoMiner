@@ -59,6 +59,7 @@ type
     function DecodeFrameToBitmap(PositionMs: Integer; Bitmap: TBitmap; out ErrorMessage: string): Boolean; overload;
     // 指定ミリ秒位置へシークしてフレームを32bit BGRxバッファへ直接変換する
     function DecodeFrameToBgrx32(PositionMs: Integer; Buffer: Pointer; BufferStride: Integer; out ErrorMessage: string): Boolean;
+    function DecodeFrameToBgrx32Fast(PositionMs: Integer; Buffer: Pointer; BufferStride: Integer; out ErrorMessage: string): Boolean;
     // 指定ミリ秒位置へシークしてフレームを24bit BGRバッファへ直接変換する
     function DecodeFrameToBgr24(PositionMs: Integer; Buffer: Pointer; BufferStride: Integer; out ErrorMessage: string): Boolean;
     // 指定ミリ秒位置へシークしてフレームをYUY2バッファへ直接変換する
@@ -635,6 +636,15 @@ begin
 end;
 
 // 指定ミリ秒位置へシークしてフレームを24bit BGRバッファへ直接変換する
+function TFFmpegDecoder.DecodeFrameToBgrx32Fast(PositionMs: Integer;
+  Buffer: Pointer; BufferStride: Integer; out ErrorMessage: string): Boolean;
+begin
+  SyncContextFromFields;
+  Result := FFmpegDecoderSeekBgrx32.DecodeFrameToBgrx32Fast(
+    FContext, PositionMs, Buffer, BufferStride, ErrorMessage);
+  SyncFieldsFromContext;
+end;
+
 function TFFmpegDecoder.DecodeFrameToBgr24(PositionMs: Integer; Buffer: Pointer; BufferStride: Integer; out ErrorMessage: string): Boolean;
 begin
   SyncContextFromFields;

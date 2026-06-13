@@ -4,7 +4,9 @@ interface
 
 procedure ClearVideoMinerDebugLog(const Reason: string);
 procedure WriteVideoMinerDebugLog(const Msg: string);
+procedure WriteVideoMinerSlowLog(const Msg: string);
 function VideoMinerDebugLogEnabled: Boolean;
+function VideoMinerSlowLogEnabled: Boolean;
 function VideoMinerDebugLogFileName: string;
 
 implementation
@@ -14,11 +16,21 @@ uses
 
 const
   VIDEO_MINER_DEBUG_LOG_ENABLED = False;
+  VIDEO_MINER_SLOW_LOG_ENABLED = True;
 
 function VideoMinerDebugLogEnabled: Boolean;
 begin
 {$IFDEF DEBUG}
   Result := VIDEO_MINER_DEBUG_LOG_ENABLED;
+{$ELSE}
+  Result := False;
+{$ENDIF}
+end;
+
+function VideoMinerSlowLogEnabled: Boolean;
+begin
+{$IFDEF DEBUG}
+  Result := VIDEO_MINER_SLOW_LOG_ENABLED;
 {$ELSE}
   Result := False;
 {$ENDIF}
@@ -30,16 +42,13 @@ begin
     'VideoMiner_playback_debug.log';
 end;
 
-procedure WriteVideoMinerDebugLine(const Msg: string);
+procedure WriteVideoMinerLogLine(const Msg: string);
 {$IFDEF DEBUG}
 var
   F: TextFile;
   LogFileName: string;
   Line: string;
 begin
-  if not VideoMinerDebugLogEnabled then
-    Exit;
-
   Line := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
     ' [VideoMiner] ' + Msg;
   OutputDebugString(PChar(Line));
@@ -64,22 +73,15 @@ end;
 procedure ClearVideoMinerDebugLog(const Reason: string);
 {$IFDEF DEBUG}
 var
-  F: TextFile;
-  Line: string;
+  LogFileName: string;
 begin
-  if not VideoMinerDebugLogEnabled then
+  if not (VideoMinerDebugLogEnabled or VideoMinerSlowLogEnabled) then
     Exit;
 
-  AssignFile(F, VideoMinerDebugLogFileName);
-  Rewrite(F);
-  try
-    Line := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
-      ' [VideoMiner] log_clear ' + Reason;
-    Writeln(F, Line);
-    OutputDebugString(PChar(Line));
-  finally
-    CloseFile(F);
-  end;
+  LogFileName := VideoMinerDebugLogFileName;
+  if FileExists(LogFileName) then
+    DeleteFile(LogFileName);
+  WriteVideoMinerLogLine('log_clear ' + Reason);
 end;
 {$ELSE}
 begin
@@ -88,7 +90,14 @@ end;
 
 procedure WriteVideoMinerDebugLog(const Msg: string);
 begin
-  WriteVideoMinerDebugLine(Msg);
+  if VideoMinerDebugLogEnabled then
+    WriteVideoMinerLogLine(Msg);
+end;
+
+procedure WriteVideoMinerSlowLog(const Msg: string);
+begin
+  if VideoMinerSlowLogEnabled then
+    WriteVideoMinerLogLine(Msg);
 end;
 
 end.
