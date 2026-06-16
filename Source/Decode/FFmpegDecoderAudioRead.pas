@@ -1,10 +1,14 @@
-ï»¿unit FFmpegDecoderAudioRead;
+unit FFmpegDecoderAudioRead;
+
+// FFmpeg ‚©‚ç‰¹ºƒtƒŒ[ƒ€‚ğ“Ç‚İAPCM16 stereo 48kHz ‚Æ‚µ‚Äæ‚èo‚·B
+// ‰¹ºƒV[ƒNŒã‚ÌƒTƒ“ƒvƒ‹”jŠü‚âAÀƒtƒŒ[ƒ€Œ`®‚É‡‚í‚¹‚½ resampler Äì¬‚à‚±‚±‚Åˆµ‚¤B
 
 interface
 
 uses
   System.SysUtils, FFmpegApi, FFmpegDecoderContext;
 
+// –Ú•WƒTƒ“ƒvƒ‹”‚É“Í‚­‚Ü‚Å‰¹º‚ğ“Ç‚İAPCM ƒoƒbƒtƒ@‚Ö’Ç‰Á‚·‚éB
 function DecodeAudioPcm16Stereo48kUntil(
   Context: TFFmpegDecoderContext;
   TargetSampleCount: Integer;
@@ -14,6 +18,7 @@ function DecodeAudioPcm16Stereo48kUntil(
   out ErrorMessage: string
 ): Boolean;
 
+// ‰¹ºƒXƒgƒŠ[ƒ€‚ğw’è‚Ö–ß‚µAƒV[ƒN’¼Œã‚Ì•s—vƒTƒ“ƒvƒ‹”jŠüˆÊ’u‚ğİ’è‚·‚éB
 function SeekAudioToMs(
   Context: TFFmpegDecoderContext;
   PositionMs: Integer;
@@ -25,6 +30,7 @@ implementation
 uses
   FFmpegAudioConvert, FFmpegAudioOpen;
 
+// ‰¹ºƒXƒgƒŠ[ƒ€‚ğw’è‚Ö–ß‚µAƒV[ƒN’¼Œã‚Ì•s—vƒTƒ“ƒvƒ‹”jŠüˆÊ’u‚ğİ’è‚·‚éB
 function SeekAudioToMs(
   Context: TFFmpegDecoderContext;
   PositionMs: Integer;
@@ -59,6 +65,7 @@ begin
   Result := True;
 end;
 
+// –Ú•WƒTƒ“ƒvƒ‹”‚É“Í‚­‚Ü‚Å‰¹º‚ğ“Ç‚İAPCM ƒoƒbƒtƒ@‚Ö’Ç‰Á‚·‚éB
 function DecodeAudioPcm16Stereo48kUntil(
   Context: TFFmpegDecoderContext;
   TargetSampleCount: Integer;

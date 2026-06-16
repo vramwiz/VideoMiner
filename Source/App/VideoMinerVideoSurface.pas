@@ -1,4 +1,7 @@
-ï»¿unit VideoMinerVideoSurface;
+unit VideoMinerVideoSurface;
+
+// “®‰æƒtƒŒ[ƒ€‚ğ’¼Ú•`‰æ‚µA‚»‚Ìã‚É VideoMiner ê—p overlay ‘€ì‚ğd‚Ë‚é•\¦–ÊB
+// ƒY[ƒ€/ƒpƒ“Aƒ}ƒEƒX“ü—ÍAƒ{ƒX‚ª—ˆ‚½ƒ‚[ƒhAƒV[ƒNƒo[‚â’†‰›ƒ{ƒ^ƒ“‚Ì•`‰æ‚ğ’S“–‚·‚éB
 
 interface
 
@@ -10,127 +13,185 @@ uses
 type
   TVideoMinerVideoSurface = class(TCustomControl)
   private
-    FBitmap: TBitmap;
-    FBossExitButtonRect: TRect;                          // boss     : å½è£…ç”»é¢ã®è§£é™¤ãƒœã‚¿ãƒ³ä½ç½®
-    FBossGestureDetector: TVideoMinerBossGestureDetector; // boss     : ãƒã‚¦ã‚¹å¾€å¾©ã‚¸ã‚§ã‚¹ãƒãƒ£ãƒ¼æ¤œå‡ºå™¨
-    FBossMode: Boolean;                                  // boss     : å‹•ç”»ã‚’éš ã—ã¦å½è£…ç”»é¢ã‚’è¡¨ç¤ºä¸­ã‹
-    FPaintBuffer: TBitmap;
-    FFirstFrameButton: TVideoMinerOverlayEdgeButton;
-    FLastFrameButton: TVideoMinerOverlayEdgeButton;
-    FNextFileButton: TVideoMinerOverlayFileNavButton;
-    FPanMoved: Boolean;
-    FPanning: Boolean;
-    FPanStartCenterX: Double;
-    FPanStartCenterY: Double;
-    FPanStartPoint: TPoint;
-    FPendingSurfaceClick: Boolean;
-    FSurfaceClickArmed: Boolean;
-    FSurfaceClickTimer: TTimer;
-    FOnBossExitClick: TNotifyEvent;                      // boss     : å½è£…ç”»é¢ã®è§£é™¤ãƒœã‚¿ãƒ³ãŒæŠ¼ã•ã‚ŒãŸ
-    FOnBossGesture: TNotifyEvent;                        // boss     : ãƒœã‚¹ãŒæ¥ãŸã‚¸ã‚§ã‚¹ãƒãƒ£ãƒ¼ãŒæˆç«‹ã—ãŸ
-    FOnAddChapterClick: TNotifyEvent;
-    FOnCheckClick: TNotifyEvent;
-    FOnDeleteChapterClick: TNotifyEvent;
-    FOnEndActionClick: TNotifyEvent;
-    FOnFirstFrameClick: TNotifyEvent;
-    FOnFullScreenClick: TNotifyEvent;
-    FOnLastFrameClick: TNotifyEvent;
-    FOnMuteClick: TNotifyEvent;
-    FOnNavigateNextClick: TNotifyEvent;
-    FOnNavigatePreviousClick: TNotifyEvent;
-    FOnPlaybackRateClick: TNotifyEvent;
-    FOnPlayPauseClick: TNotifyEvent;
-    FOnSeek: TVideoMinerOverlaySeekEvent;
-    FOnSeekByWheel: TVideoMinerOverlaySeekEvent;
-    FOnSkipBackwardClick: TNotifyEvent;
-    FOnSkipForwardClick: TNotifyEvent;
-    FOnVolumeChange: TVideoMinerOverlayVolumeEvent;
-    FOverlayVisible: Boolean;
-    FPlayPauseButton: TVideoMinerOverlayPlayPauseButton;
-    FPreviousFileButton: TVideoMinerOverlayFileNavButton;
-    FPreviewRect: TRect;
-    FSeekBar: TVideoMinerOverlaySeekBar;
-    FSeekBarVisible: Boolean;
-    FSeekWheelFrameStepMs: Integer;
-    FSkipBackwardButton: TVideoMinerOverlaySkipButton;
-    FSkipForwardButton: TVideoMinerOverlaySkipButton;
-    FZoomCenterX: Double;
-    FZoomCenterY: Double;
-    FZoomScale: Double;
+    FBitmap                 : TBitmap;                           // Œ»İ•\¦‚·‚é 32bit “®‰æƒtƒŒ[ƒ€
+    FBossExitButtonRect     : TRect;                             // ‹U‘•‰æ–Ê‚Ì‰ğœƒ{ƒ^ƒ“ˆÊ’u
+    FBossGestureDetector    : TVideoMinerBossGestureDetector;    // ƒ{ƒX‚ª—ˆ‚½ƒ‚[ƒh”­“®—p‚Ìƒ}ƒEƒXƒWƒFƒXƒ`ƒƒ[ŒŸoŠí
+    FBossMode               : Boolean;                           // “®‰æ‚ğ‰B‚µ‚Ä‹U‘•‰æ–Ê‚ğ•\¦’†‚©
+    FPaintBuffer            : TBitmap;                           // overlay •\¦‚Ì‚¿‚ç‚Â‚«‚ğ—}‚¦‚é•`‰æ—pƒoƒbƒtƒ@
+    FFirstFrameButton       : TVideoMinerOverlayEdgeButton;      // æ“ªƒtƒŒ[ƒ€‚ÖˆÚ“®‚·‚é’†‰›ƒ{ƒ^ƒ“
+    FLastFrameButton        : TVideoMinerOverlayEdgeButton;      // ––”öƒtƒŒ[ƒ€‚ÖˆÚ“®‚·‚é’†‰›ƒ{ƒ^ƒ“
+    FNextFileButton         : TVideoMinerOverlayFileNavButton;   // Ÿ“®‰æ‚ÖˆÚ“®‚·‚é‰E’[ƒ{ƒ^ƒ“
+    FPanMoved               : Boolean;                           // ‰Ÿ‰ºŒã‚Éƒpƒ“ˆÚ“®‚ª”­¶‚µ‚½‚©
+    FPanning                : Boolean;                           // ƒY[ƒ€’†‚Ìƒhƒ‰ƒbƒOˆÚ“®‚ğˆ—’†‚©
+    FPanStartCenterX        : Double;                            // ƒpƒ“ŠJn‚Ì‰æ‘œ’†S X
+    FPanStartCenterY        : Double;                            // ƒpƒ“ŠJn‚Ì‰æ‘œ’†S Y
+    FPanStartPoint          : TPoint;                            // ƒpƒ“ŠJn‚ÌƒNƒ‰ƒCƒAƒ“ƒgÀ•W
+    FPendingSurfaceClick    : Boolean;                           // ƒ_ƒuƒ‹ƒNƒŠƒbƒN”»’è‘Ò‚¿‚Ì’PƒNƒŠƒbƒN‚ª‚ ‚é‚©
+    FSurfaceClickArmed      : Boolean;                           // Œ»İ‚Ì‰Ÿ‰º‚ª’PƒNƒŠƒbƒNŒó•â‚©
+    FSurfaceClickTimer      : TTimer;                            // ƒ_ƒuƒ‹ƒNƒŠƒbƒN—P—\Œã‚ÉÄ¶Ø‘Ö‚ğ”­‰Î‚·‚éƒ^ƒCƒ}[
+    FOnBossExitClick        : TNotifyEvent;                      // ‹U‘•‰æ–Ê‚Ì‰ğœƒ{ƒ^ƒ“‚ª‰Ÿ‚³‚ê‚½’Ê’mæ
+    FOnBossGesture          : TNotifyEvent;                      // ƒ{ƒX‚ª—ˆ‚½ƒWƒFƒXƒ`ƒƒ[¬—§‚Ì’Ê’mæ
+    FOnAddChapterClick      : TNotifyEvent;                      // ƒ`ƒƒƒvƒ^[’Ç‰Áƒ{ƒ^ƒ“‚Ì’Ê’mæ
+    FOnCheckClick           : TNotifyEvent;                      // Check ƒ{ƒ^ƒ“‚Ì’Ê’mæ
+    FOnDeleteChapterClick   : TNotifyEvent;                      // ƒ`ƒƒƒvƒ^[íœƒ{ƒ^ƒ“‚Ì’Ê’mæ
+    FOnEndActionClick       : TNotifyEvent;                      // I’[“’B“®ìƒ{ƒ^ƒ“‚Ì’Ê’mæ
+    FOnFirstFrameClick      : TNotifyEvent;                      // æ“ªƒtƒŒ[ƒ€ƒ{ƒ^ƒ“‚Ì’Ê’mæ
+    FOnFullScreenClick      : TNotifyEvent;                      // ‘S‰æ–Êƒ{ƒ^ƒ“‚Ü‚½‚Íƒ_ƒuƒ‹ƒNƒŠƒbƒN‚Ì’Ê’mæ
+    FOnLastFrameClick       : TNotifyEvent;                      // ––”öƒtƒŒ[ƒ€ƒ{ƒ^ƒ“‚Ì’Ê’mæ
+    FOnMuteClick            : TNotifyEvent;                      // ƒ~ƒ…[ƒgƒ{ƒ^ƒ“‚Ì’Ê’mæ
+    FOnNavigateNextClick    : TNotifyEvent;                      // Ÿ“®‰æƒ{ƒ^ƒ“‚Ì’Ê’mæ
+    FOnNavigatePreviousClick: TNotifyEvent;                      // ‘O“®‰æƒ{ƒ^ƒ“‚Ì’Ê’mæ
+    FOnPlaybackRateClick    : TNotifyEvent;                      // Ä¶‘¬“xƒ{ƒ^ƒ“‚Ì’Ê’mæ
+    FOnPlayPauseClick       : TNotifyEvent;                      // Ä¶/ˆê’â~ƒ{ƒ^ƒ“‚Ü‚½‚Í’PƒNƒŠƒbƒN‚Ì’Ê’mæ
+    FOnSeek                 : TVideoMinerOverlaySeekEvent;       // ƒV[ƒNƒo[‘€ì‚Ì’Ê’mæ
+    FOnSeekByWheel          : TVideoMinerOverlaySeekEvent;       // ƒV[ƒNƒo[ãƒzƒC[ƒ‹‘€ì‚Ì’Ê’mæ
+    FOnSkipBackwardClick    : TNotifyEvent;                      // 10 •b–ß‚µƒ{ƒ^ƒ“‚Ì’Ê’mæ
+    FOnSkipForwardClick     : TNotifyEvent;                      // 10 •bi‚İƒ{ƒ^ƒ“‚Ì’Ê’mæ
+    FOnVolumeChange         : TVideoMinerOverlayVolumeEvent;     // ‰¹—Ê•ÏX‚Ì’Ê’mæ
+    FOverlayVisible         : Boolean;                           // ’†‰› overlay ƒ{ƒ^ƒ“ŒQ‚ğ•\¦’†‚©
+    FPlayPauseButton        : TVideoMinerOverlayPlayPauseButton; // Ä¶/ˆê’â~‚Ì’†‰›ƒ{ƒ^ƒ“
+    FPreviousFileButton     : TVideoMinerOverlayFileNavButton;   // ‘O“®‰æ‚ÖˆÚ“®‚·‚é¶’[ƒ{ƒ^ƒ“
+    FPreviewRect            : TRect;                             // “®‰æƒtƒŒ[ƒ€‚ªÀÛ‚É•`‰æ‚³‚ê‚é—Ìˆæ
+    FSeekBar                : TVideoMinerOverlaySeekBar;         // ‰º‘¤‚ÌƒV[ƒN/‰¹—Ê/ó‘Ô‘€ìƒo[
+    FSeekBarVisible         : Boolean;                           // ‰º‘¤ƒV[ƒNƒo[‚ğ•\¦’†‚©
+    FSeekWheelFrameStepMs   : Integer;                           // Check ’†ƒzƒC[ƒ‹ƒV[ƒN‚Ì 1 ƒXƒeƒbƒv• ms
+    FSkipBackwardButton     : TVideoMinerOverlaySkipButton;      // 10 •b–ß‚µ‚Ì’†‰›ƒ{ƒ^ƒ“
+    FSkipForwardButton      : TVideoMinerOverlaySkipButton;      // 10 •bi‚İ‚Ì’†‰›ƒ{ƒ^ƒ“
+    FZoomCenterX            : Double;                            // ƒY[ƒ€•\¦‚Ì‰æ‘œ’†S X
+    FZoomCenterY            : Double;                            // ƒY[ƒ€•\¦‚Ì‰æ‘œ’†S Y
+    FZoomScale              : Double;                            // Œ»İ‚ÌƒY[ƒ€”{—¦
+    // •Û—¯’†‚Ì’PƒNƒŠƒbƒNÄ¶Ø‘Ö‚ğæ‚èÁ‚·
     procedure CancelPendingSurfaceClick;
+    // ƒY[ƒ€”{—¦‚Æ’†SˆÊ’u‚ğ‰æ‘œ”ÍˆÍ“à‚Öû‚ß‚é
     procedure ClampZoomCenter;
+    // w’èˆÊ’u‚©‚çƒpƒ“‘€ì‚ğŠJn‚Å‚«‚é‚©•Ô‚·
     function CanStartPan(const Point: TPoint): Boolean;
+    // w’èˆÊ’u‚©‚ç“®‰æ–Ê‚Ì’PƒNƒŠƒbƒN‘€ì‚ğŠJn‚Å‚«‚é‚©•Ô‚·
     function CanStartSurfaceClick(const Point: TPoint): Boolean;
+    // Ÿ“®‰æƒ{ƒ^ƒ“‚É“–‚½‚Á‚Ä‚¢‚é‚©•Ô‚·
     function HitNextFileButton(const Point: TPoint): Boolean;
+    // ‘O“®‰æƒ{ƒ^ƒ“‚É“–‚½‚Á‚Ä‚¢‚é‚©•Ô‚·
     function HitPreviousFileButton(const Point: TPoint): Boolean;
+    // Œ»İ‚ÌƒY[ƒ€ó‘Ô‚É]‚Á‚Ä“®‰æƒtƒŒ[ƒ€‚ğ•`‰æ‚·‚é
     procedure DrawFrame(Canvas: TCanvas; const DestRect: TRect);
+    // ƒNƒ‰ƒCƒAƒ“ƒg—Ìˆæ“à‚É“®‰æ‘S‘Ì‚ªû‚Ü‚é•`‰æ‹éŒ`‚ğ•Ô‚·
     function FitRect: TRect;
+    // ’†‰› overlay ƒ{ƒ^ƒ“ŒQ‚É“–‚½‚Á‚Ä‚¢‚é‚©•Ô‚·
     function HitAnyOverlayButton(const Point: TPoint): Boolean;
+    // ‰º‘¤ƒV[ƒNƒo[‚É“–‚½‚Á‚Ä‚¢‚é‚©•Ô‚·
     function HitSeekBar(const Point: TPoint): Boolean;
-    function ImagePointFromClient(const Point: TPoint; out ImageX,
-      ImageY: Double): Boolean;
+    // ƒNƒ‰ƒCƒAƒ“ƒgÀ•W‚ğŒ»İ‚ÌƒY[ƒ€ó‘Ô‚Ì‰æ‘œÀ•W‚Ö•ÏŠ·‚·‚é
+    function ImagePointFromClient(const Point: TPoint; out ImageX, ImageY: Double): Boolean;
+    // overlay •”•i‚ğ‚Ü‚Æ‚ß‚ÄÄ•`‰æ‘ÎÛ‚É‚·‚é
     procedure InvalidateAllOverlayControls;
+    // w’è overlay •”•i‚Ìü•Ó‚¾‚¯‚ğÄ•`‰æ‘ÎÛ‚É‚·‚é
     procedure InvalidateOverlayControl(Control: TVideoMinerOverlayControl);
+    // “™”{‘S‘Ì•\¦‚Ö–ß‚·
     procedure ResetZoom;
-    // ãƒœã‚¹ãŒæ¥ãŸãƒ¢ãƒ¼ãƒ‰ä¸­ã®æç”»/å…¥åŠ›çŠ¶æ…‹ã¸åˆ‡ã‚Šæ›¿ãˆã‚‹
+    // ƒ{ƒX‚ª—ˆ‚½ƒ‚[ƒh’†‚Ì•`‰æ/“ü—Íó‘Ô‚ÖØ‚è‘Ö‚¦‚é
     procedure SetBossMode(Value: Boolean);
+    // Ÿ“®‰æ‚ÖˆÚ“®‚Å‚«‚é‚©‚ğ overlay ‚Ö“n‚·
     procedure SetCanNavigateNext(Value: Boolean);
+    // ‘O“®‰æ‚ÖˆÚ“®‚Å‚«‚é‚©‚ğ overlay ‚Ö“n‚·
     procedure SetCanNavigatePrevious(Value: Boolean);
+    // Check ‘€ì‚Ì—LŒøó‘Ô‚ğ overlay ‚Ö“n‚·
     procedure SetCheckEnabled(Value: Boolean);
+    // •\¦—pƒ`ƒƒƒvƒ^[ˆÊ’u‚ğ overlay ‚Ö“n‚·
     procedure SetChapters(const Value: TVideoMinerOverlayChapters);
+    // I’[“’B“®ì‚Ì•\¦•¶š—ñ‚ğ overlay ‚Ö“n‚·
     procedure SetEndActionText(const Value: string);
+    // ‰º‘¤ƒV[ƒNƒo[‚Ì•\¦ó‘Ô‚ğØ‚è‘Ö‚¦‚é
     procedure SetSeekBarVisible(Value: Boolean);
+    // Check ’†ƒzƒC[ƒ‹ƒV[ƒN‚Ì 1 ƒXƒeƒbƒv•‚ğİ’è‚·‚é
     procedure SetSeekWheelFrameStepMs(Value: Integer);
+    // ‘S‰æ–Êó‘Ô‚ğ overlay ‚Ö“n‚·
     procedure SetFullScreen(Value: Boolean);
+    // ’†‰› overlay ƒ{ƒ^ƒ“ŒQ‚Ì•\¦ó‘Ô‚ğØ‚è‘Ö‚¦‚é
     procedure SetOverlayVisible(Value: Boolean);
+    // æ“ªƒtƒŒ[ƒ€ƒ{ƒ^ƒ“‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnFirstFrameClick(Value: TNotifyEvent);
+    // ‹U‘•‰æ–Ê‰ğœƒ{ƒ^ƒ“‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnBossExitClick(Value: TNotifyEvent);
+    // ƒ{ƒX‚ª—ˆ‚½ƒWƒFƒXƒ`ƒƒ[¬—§‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnBossGesture(Value: TNotifyEvent);
+    // ƒ`ƒƒƒvƒ^[’Ç‰Áƒ{ƒ^ƒ“‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnAddChapterClick(Value: TNotifyEvent);
+    // Check ƒ{ƒ^ƒ“‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnCheckClick(Value: TNotifyEvent);
+    // ƒ`ƒƒƒvƒ^[íœƒ{ƒ^ƒ“‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnDeleteChapterClick(Value: TNotifyEvent);
+    // I’[“’B“®ìƒ{ƒ^ƒ“‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnEndActionClick(Value: TNotifyEvent);
+    // ‘S‰æ–Êƒ{ƒ^ƒ“‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnFullScreenClick(Value: TNotifyEvent);
+    // ––”öƒtƒŒ[ƒ€ƒ{ƒ^ƒ“‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnLastFrameClick(Value: TNotifyEvent);
+    // ƒ~ƒ…[ƒgó‘Ô‚ğ overlay ‚Ö“n‚·
     procedure SetMuted(Value: Boolean);
+    // ƒ~ƒ…[ƒgƒ{ƒ^ƒ“‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnMuteClick(Value: TNotifyEvent);
+    // Ÿ“®‰æƒ{ƒ^ƒ“‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnNavigateNextClick(Value: TNotifyEvent);
+    // ‘O“®‰æƒ{ƒ^ƒ“‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnNavigatePreviousClick(Value: TNotifyEvent);
+    // Ä¶‘¬“xƒ{ƒ^ƒ“‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnPlaybackRateClick(Value: TNotifyEvent);
+    // Ä¶/ˆê’â~ƒ{ƒ^ƒ“‚Æ’PƒNƒŠƒbƒN‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
+    // ƒV[ƒNƒo[‘€ì‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
+    // ƒV[ƒNƒo[ãƒzƒC[ƒ‹‘€ì‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnSeekByWheel(Value: TVideoMinerOverlaySeekEvent);
+    // 10 •b–ß‚µƒ{ƒ^ƒ“‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnSkipBackwardClick(Value: TNotifyEvent);
+    // 10 •bi‚İƒ{ƒ^ƒ“‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnSkipForwardClick(Value: TNotifyEvent);
+    // ‰¹—Ê•ÏX‚Ì’Ê’mæ‚ğİ’è‚·‚é
     procedure SetOnVolumeChange(Value: TVideoMinerOverlayVolumeEvent);
+    // Ä¶’†‚©‚Ç‚¤‚©‚ğ overlay ‚Ö“n‚·
     procedure SetPlaybackActive(Value: Boolean);
+    // Ä¶‘¬“x•\¦•¶š—ñ‚ğ overlay ‚Ö“n‚·
     procedure SetPlaybackRateText(const Value: string);
+    // ‰¹—Êƒp[ƒZƒ“ƒg‚ğ overlay ‚Ö“n‚·
     procedure SetVolumePercent(Value: Integer);
+    // ’PƒNƒŠƒbƒN‚ªŠm’è‚µ‚½“_‚ÅÄ¶/ˆê’â~‚ğ”­‰Î‚·‚é
     procedure SurfaceClickTimer(Sender: TObject);
+    // ”wŒiÁ‹‚ğ—}~‚µ‚Ä“®‰æ–Ê‚Ì‚¿‚ç‚Â‚«‚ğ”ğ‚¯‚é
     procedure WMEraseBkgnd(var Message: TWMEraseBkgnd); message WM_ERASEBKGND;
   protected
+    // ƒ_ƒuƒ‹ƒNƒŠƒbƒN‚ğ‘S‰æ–ÊØ‚è‘Ö‚¦‚Æ‚µ‚Äˆµ‚¤
     procedure DblClick; override;
-    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X,
-      Y: Integer); override;
+    // overlayAƒpƒ“AƒV[ƒNƒo[A’PƒNƒŠƒbƒNŒó•â‚Ì‰Ÿ‰ºó‘Ô‚ğŠJn‚·‚é
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    // ƒpƒ“ˆÚ“®AƒWƒFƒXƒ`ƒƒ[ŒŸoAoverlay hover ‚ğXV‚·‚é
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
-    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X,
-      Y: Integer); override;
-    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
-      MousePos: TPoint): Boolean; override;
+    // ‰Ÿ‰º’†‚Ì overlayAƒpƒ“AƒV[ƒNƒo[A’PƒNƒŠƒbƒNŒó•â‚ğŠm’è‚·‚é
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    // ƒ}ƒEƒXƒzƒC[ƒ‹‚ğƒY[ƒ€‚Ü‚½‚ÍƒV[ƒNƒo[ãƒV[ƒN‚Æ‚µ‚Äˆ—‚·‚é
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean; override;
+    // “®‰æAoverlayAƒ{ƒX‚ª—ˆ‚½‰æ–Ê‚ğŒ»İó‘Ô‚É‰‚¶‚Ä•`‰æ‚·‚é
     procedure Paint; override;
   public
+    // “®‰æ•\¦—p BitmapAoverlay •”•iA“ü—Íƒ^ƒCƒ}[‚ğ¶¬‚·‚é
     constructor Create(AOwner: TComponent); override;
+    // ¶¬‚µ‚½ overlay •”•i‚Æ•`‰æƒoƒbƒtƒ@‚ğ‰ğ•ú‚·‚é
     destructor Destroy; override;
+    // •\¦ƒtƒŒ[ƒ€‚Æ overlay ó‘Ô‚ğ‹ó‚É‚·‚é
     procedure Clear;
-    function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer;
-      MousePos: TPoint): Boolean;
+    // ŠO•”‚©‚ç“n‚³‚ê‚½ƒzƒC[ƒ‹‘€ì‚ğ‚±‚Ì•\¦–Ê‚Åˆ—‚·‚é
+    function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean;
+    // Œ»İ•\¦’†ƒtƒŒ[ƒ€‚Ìl‹÷‚ªˆÃ‚¢‚©•Ô‚·
     function CurrentFrameCornersMostlyDark: Boolean;
-    function CurrentFrameSignature(
-      out Signature: TVideoMinerFrameSignature): Boolean;
+    // Œ»İ•\¦’†ƒtƒŒ[ƒ€‚ÌŠÈˆÕ–¼‚ğ•Ô‚·
+    function CurrentFrameSignature(out Signature: TVideoMinerFrameSignature): Boolean;
+    // FBitmap ‚ğ BGRX32 ‚Ì direct ƒfƒR[ƒhæ‚Æ‚µ‚Äg‚¦‚éó‘Ô‚É‚·‚é
     function PrepareBgrx32Frame(Width, Height: Integer; out Buffer: Pointer;
       out BufferStride: Integer): Boolean;
+    // ’Êí‚ÌÄ•`‰æƒ^ƒCƒ~ƒ“ƒO‚ÅŒ»İƒtƒŒ[ƒ€‚ğ•\¦‚·‚é
     procedure Present;
+    // ‚·‚®‚ÉŒ»İƒtƒŒ[ƒ€‚ğ•\¦‚·‚é
     procedure PresentImmediate;
+    // ‰º‘¤ƒV[ƒNƒo[‚ÌŒ»İˆÊ’u‚ğXV‚·‚é
     procedure SetSeekProgress(PositionMs, MaxMs: Integer);
     property BossMode: Boolean read FBossMode write SetBossMode;
     property Bitmap: TBitmap read FBitmap;
@@ -152,12 +213,12 @@ type
     property OnLastFrameClick: TNotifyEvent read FOnLastFrameClick write SetOnLastFrameClick;
     property OnMuteClick: TNotifyEvent read FOnMuteClick write SetOnMuteClick;
     property OnNavigateNextClick: TNotifyEvent read FOnNavigateNextClick write SetOnNavigateNextClick;
-    property OnNavigatePreviousClick: TNotifyEvent read FOnNavigatePreviousClick write SetOnNavigatePreviousClick;
+    property OnNavigatePreviousClick: TNotifyEvent read FOnNavigatePreviousClick
+      write SetOnNavigatePreviousClick;
     property OnPlaybackRateClick: TNotifyEvent read FOnPlaybackRateClick write SetOnPlaybackRateClick;
     property OnPlayPauseClick: TNotifyEvent read FOnPlayPauseClick write SetOnPlayPauseClick;
     property OnSeek: TVideoMinerOverlaySeekEvent read FOnSeek write SetOnSeek;
-    property OnSeekByWheel: TVideoMinerOverlaySeekEvent read FOnSeekByWheel
-      write SetOnSeekByWheel;
+    property OnSeekByWheel: TVideoMinerOverlaySeekEvent read FOnSeekByWheel write SetOnSeekByWheel;
     property OnSkipBackwardClick: TNotifyEvent read FOnSkipBackwardClick write SetOnSkipBackwardClick;
     property OnSkipForwardClick: TNotifyEvent read FOnSkipForwardClick write SetOnSkipForwardClick;
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent read FOnVolumeChange write SetOnVolumeChange;
@@ -174,11 +235,11 @@ uses
   VideoMinerDebugLog;
 
 const
-  VIDEO_SURFACE_MAX_ZOOM = 8.0;
-  VIDEO_SURFACE_MIN_ZOOM = 1.0;
-  VIDEO_SURFACE_DEFAULT_FRAME_STEP_MS = 33;
-  VIDEO_SURFACE_SEEK_WHEEL_STEP_MS = 1000;
-  VIDEO_SURFACE_WHEEL_ZOOM_STEP = 1.20;
+  MAX_ZOOM              = 8.0;  // ƒzƒC[ƒ‹ƒY[ƒ€‚Å‹–‰Â‚·‚éÅ‘å”{—¦
+  MIN_ZOOM              = 1.0;  // ‘S‘Ì•\¦‚Æ‚µ‚Äˆµ‚¤Å¬”{—¦
+  DEFAULT_FRAME_STEP_MS = 33;   // FPS •s–¾‚Ì 1 ƒtƒŒ[ƒ€‘Š“–ƒXƒeƒbƒv ms
+  SEEK_WHEEL_STEP_MS    = 1000; // ’Êí‚ÌƒzƒC[ƒ‹ƒV[ƒN• ms
+  WHEEL_ZOOM_STEP       = 1.20; // ƒzƒC[ƒ‹ 1 ƒmƒbƒ`‚ ‚½‚è‚ÌƒY[ƒ€”{—¦
 
 constructor TVideoMinerVideoSurface.Create(AOwner: TComponent);
 begin
@@ -192,7 +253,7 @@ begin
   FPaintBuffer.PixelFormat := pf32bit;
   FOverlayVisible := False;
   FSeekBarVisible := False;
-  FSeekWheelFrameStepMs := VIDEO_SURFACE_DEFAULT_FRAME_STEP_MS;
+  FSeekWheelFrameStepMs := DEFAULT_FRAME_STEP_MS;
   ResetZoom;
   FPreviousFileButton := TVideoMinerOverlayFileNavButton.Create(fndPrevious);
   FFirstFrameButton := TVideoMinerOverlayEdgeButton.Create(edFirst);
@@ -321,7 +382,7 @@ end;
 
 procedure TVideoMinerVideoSurface.ResetZoom;
 begin
-  FZoomScale := VIDEO_SURFACE_MIN_ZOOM;
+  FZoomScale := MIN_ZOOM;
   if (FBitmap <> nil) and (FBitmap.Width > 0) and (FBitmap.Height > 0) then
   begin
     FZoomCenterX := FBitmap.Width / 2;
@@ -345,9 +406,9 @@ begin
     Exit;
   end;
 
-  FZoomScale := Max(VIDEO_SURFACE_MIN_ZOOM,
-    Min(VIDEO_SURFACE_MAX_ZOOM, FZoomScale));
-  if FZoomScale <= VIDEO_SURFACE_MIN_ZOOM then
+  FZoomScale := Max(MIN_ZOOM,
+    Min(MAX_ZOOM, FZoomScale));
+  if FZoomScale <= MIN_ZOOM then
   begin
     ResetZoom;
     Exit;
@@ -390,7 +451,7 @@ begin
   if (FBitmap.Width <= 0) or (FBitmap.Height <= 0) then
     Exit;
 
-  if FZoomScale <= VIDEO_SURFACE_MIN_ZOOM then
+  if FZoomScale <= MIN_ZOOM then
   begin
     Canvas.StretchDraw(DestRect, FBitmap);
     Exit;
@@ -500,7 +561,7 @@ end;
 
 function TVideoMinerVideoSurface.CanStartPan(const Point: TPoint): Boolean;
 begin
-  Result := (FZoomScale > VIDEO_SURFACE_MIN_ZOOM) and
+  Result := (FZoomScale > MIN_ZOOM) and
     (not FitRect.IsEmpty) and PtInRect(FitRect, Point) and
     not HitSeekBar(Point) and not HitAnyOverlayButton(Point) and
     not HitPreviousFileButton(Point) and not HitNextFileButton(Point);
@@ -822,7 +883,7 @@ begin
       if FSeekBar.CheckEnabled then
         StepMs := FSeekWheelFrameStepMs
       else
-        StepMs := VIDEO_SURFACE_SEEK_WHEEL_STEP_MS;
+        StepMs := SEEK_WHEEL_STEP_MS;
       SeekPositionMs := FSeekBar.WheelPosition(WheelDelta, StepMs);
       if Assigned(FOnSeekByWheel) then
         FOnSeekByWheel(Self, SeekPositionMs);
@@ -837,13 +898,13 @@ begin
     Exit;
 
   if WheelDelta > 0 then
-    NewScale := FZoomScale * VIDEO_SURFACE_WHEEL_ZOOM_STEP
+    NewScale := FZoomScale * WHEEL_ZOOM_STEP
   else
-    NewScale := FZoomScale / VIDEO_SURFACE_WHEEL_ZOOM_STEP;
-  NewScale := Max(VIDEO_SURFACE_MIN_ZOOM,
-    Min(VIDEO_SURFACE_MAX_ZOOM, NewScale));
+    NewScale := FZoomScale / WHEEL_ZOOM_STEP;
+  NewScale := Max(MIN_ZOOM,
+    Min(MAX_ZOOM, NewScale));
 
-  if Abs(NewScale - VIDEO_SURFACE_MIN_ZOOM) < 0.01 then
+  if Abs(NewScale - MIN_ZOOM) < 0.01 then
   begin
     ResetZoom;
     Invalidate;

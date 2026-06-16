@@ -1,10 +1,14 @@
-ï»¿unit FFmpegDecoderResources;
+unit FFmpegDecoderResources;
+
+// FFmpeg ƒfƒR[ƒ_‚ª•Û‚·‚éƒŠƒ\[ƒX‚ğ‚Ü‚Æ‚ß‚Ä‰ğ•ú‚·‚éB
+// ‰ğ•ú‡˜‚Æ context “àƒ|ƒCƒ“ƒ^‚Ì nil –ß‚µ‚ğ‚±‚Ìƒ†ƒjƒbƒg‚ÉW–ñ‚·‚éB
 
 interface
 
 uses
   FFmpegDecoderContext;
 
+// decoder context ‚ª•Û‚·‚é FFmpeg ƒŠƒ\[ƒX‚ğˆÀ‘S‚É‰ğ•ú‚·‚éB
 procedure ReleaseDecoderResources(Context: TFFmpegDecoderContext);
 
 implementation
@@ -12,6 +16,7 @@ implementation
 uses
   FFmpegApi;
 
+// decoder context ‚ª•Û‚·‚é FFmpeg ƒŠƒ\[ƒX‚ğˆÀ‘S‚É‰ğ•ú‚·‚éB
 procedure ReleaseDecoderResources(Context: TFFmpegDecoderContext);
 var
   TypedPacket            : PAVPacket;

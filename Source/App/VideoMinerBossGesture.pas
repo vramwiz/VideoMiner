@@ -1,8 +1,8 @@
-ï»¿unit VideoMinerBossGesture;
+unit VideoMinerBossGesture;
 
-// ãƒœã‚¹ãŒæ¥ãŸãƒ¢ãƒ¼ãƒ‰ã¸å…¥ã‚‹ãŸã‚ã®ãƒžã‚¦ã‚¹ã‚¸ã‚§ã‚¹ãƒãƒ£ãƒ¼æ¤œå‡ºã‚’æ‹…å½“ã™ã‚‹
-// é€šå¸¸ã®ãƒ“ãƒ¥ãƒ¼ã‚¢æ“ä½œã¨è¡çªã—ã«ãã„ã€ŒçŸ­æ™‚é–“ã®å¾€å¾©ç§»å‹•ã€ã ã‘ã‚’æ‹¾ã†ã€‚
-// å®Ÿéš›ã®ãƒ¢ãƒ¼ãƒ‰åˆ‡æ›¿ã‚„æç”»ã¯ App å´ã«ä»»ã›ã€ã“ã®ãƒ¦ãƒ‹ãƒƒãƒˆã¯çŠ¶æ…‹åˆ¤å®šã ã‘ã‚’æŒã¤ã€‚
+// ƒ{ƒX‚ª—ˆ‚½ƒ‚[ƒh‚Ö“ü‚é‚½‚ß‚Ìƒ}ƒEƒXƒWƒFƒXƒ`ƒƒ[ŒŸo‚ð’S“–‚·‚é
+// ’Êí‚Ìƒrƒ…[ƒA‘€ì‚ÆÕ“Ë‚µ‚É‚­‚¢u’ZŽžŠÔ‚Ì‰•œˆÚ“®v‚¾‚¯‚ðE‚¤B
+// ŽÀÛ‚Ìƒ‚[ƒhØ‘Ö‚â•`‰æ‚Í App ‘¤‚É”C‚¹A‚±‚Ìƒ†ƒjƒbƒg‚Íó‘Ô”»’è‚¾‚¯‚ðŽ‚ÂB
 
 interface
 
@@ -10,48 +10,48 @@ uses
   System.Types;
 
 const
-  BOSS_GESTURE_WINDOW_MS = 900;       // reverse   : æ–¹å‘åè»¢åž‹ã‚¸ã‚§ã‚¹ãƒãƒ£ãƒ¼ã®æœ‰åŠ¹æ™‚é–“ ms
-  BOSS_GESTURE_MIN_DISTANCE = 220;    // reverse   : åè»¢å‰å¾Œã§å¿…è¦ãªæœ€å°ç§»å‹•é‡ px
-  BOSS_GESTURE_COOLDOWN_MS = 3000;    // common    : ç™ºå‹•ç›´å¾Œã®å†ç™ºå‹•ç¦æ­¢æ™‚é–“ ms
-  BOSS_GESTURE_AXIS_RATIO = 2.0;      // common    : æ¨ª/ç¸¦ã©ã¡ã‚‰ã®å‹•ãã‹ã‚’æ±ºã‚ã‚‹å„ªå‹¢æ¯”çŽ‡
-  BOSS_GESTURE_NOISE_PIXELS = 40;     // common    : å¾®å°ãªãƒžã‚¦ã‚¹æºã‚Œã‚’ç„¡è¦–ã™ã‚‹è·é›¢ px
-  BOSS_GESTURE_POINT_WINDOW_MS = 300; // point     : A-B-A å¾€å¾©ã‚¸ã‚§ã‚¹ãƒãƒ£ãƒ¼ã®æœ‰åŠ¹æ™‚é–“ ms
-  BOSS_GESTURE_POINT_DISTANCE = 320;  // point     : A ã‹ã‚‰ B åˆ°é”ã¨ã¿ãªã™è·é›¢ px
-  BOSS_GESTURE_RETURN_RADIUS = 26;    // point     : A ä»˜è¿‘ã¸æˆ»ã£ãŸã¨ã¿ãªã™åŠå¾„ px
-  BOSS_GESTURE_STRONG_SEGMENTS = 2;   // reverse   : ç™ºå‹•ã«å¿…è¦ãªå¼·ã„åè»¢å›žæ•°
+  WINDOW_MS       = 900;  // •ûŒü”½“]Œ^ƒWƒFƒXƒ`ƒƒ[‚Ì—LŒøŽžŠÔ ms
+  MIN_DISTANCE    = 220;  // ”½“]‘OŒã‚Å•K—v‚ÈÅ¬ˆÚ“®—Ê px
+  COOLDOWN_MS     = 3000; // ”­“®’¼Œã‚ÌÄ”­“®‹ÖŽ~ŽžŠÔ ms
+  AXIS_RATIO      = 2.0;  // ‰¡/c‚Ç‚¿‚ç‚Ì“®‚«‚©‚ðŒˆ‚ß‚é—D¨”ä—¦
+  NOISE_PIXELS    = 40;   // ”÷¬‚Èƒ}ƒEƒX—h‚ê‚ð–³Ž‹‚·‚é‹——£ px
+  POINT_WINDOW_MS = 300;  // A-B-A ‰•œƒWƒFƒXƒ`ƒƒ[‚Ì—LŒøŽžŠÔ ms
+  POINT_DISTANCE  = 320;  // A ‚©‚ç B “ž’B‚Æ‚Ý‚È‚·‹——£ px
+  RETURN_RADIUS   = 26;   // A •t‹ß‚Ö–ß‚Á‚½‚Æ‚Ý‚È‚·”¼Œa px
+  STRONG_SEGMENTS = 2;    // ”­“®‚É•K—v‚È‹­‚¢”½“]‰ñ”
 
 type
   TVideoMinerBossGestureAxis = (bgaNone, bgaHorizontal, bgaVertical);
 
   TVideoMinerBossGestureDetector = class
   private
-    FActiveAxis: TVideoMinerBossGestureAxis; // reverse : ç¾åœ¨è¿½è·¡ä¸­ã®ç§»å‹•è»¸
-    FAnchorPoint: TPoint;                    // point   : A-B-A åˆ¤å®šã®åŸºæº–ç‚¹ A
-    FAnchorTick: UInt64;                     // point   : åŸºæº–ç‚¹ A ã‚’è¨˜éŒ²ã—ãŸæ™‚åˆ»
-    FFarPointReached: Boolean;               // point   : A ã‹ã‚‰ååˆ†é›¢ã‚ŒãŸ B ã«åˆ°é”æ¸ˆã¿ã‹
-    FDirection: Integer;                     // reverse : ç¾åœ¨ã®è»¸æ–¹å‘ã€‚-1 ã¾ãŸã¯ 1
-    FHasLastPoint: Boolean;                  // common  : å‰å›žåº§æ¨™ãŒæœ‰åŠ¹ã‹
-    FLastPoint: TPoint;                      // common  : å·®åˆ†è¨ˆç®—ç”¨ã®å‰å›žåº§æ¨™
-    FLastTick: UInt64;                       // common  : å‰å›žåº§æ¨™ã®æ™‚åˆ»
-    FLastTriggerTick: UInt64;                // common  : æœ€å¾Œã«ç™ºå‹•ã—ãŸæ™‚åˆ»
-    FSegmentDistance: Integer;               // reverse : ç¾åœ¨æ–¹å‘ã¸ç©ã¿ä¸Šã’ãŸç§»å‹•è·é›¢
-    FStartTick: UInt64;                      // reverse : æ–¹å‘åè»¢åž‹åˆ¤å®šã®é–‹å§‹æ™‚åˆ»
-    FStrongSegmentCount: Integer;            // reverse : æœ€å°è·é›¢ã‚’æº€ãŸã—ã¦åè»¢ã—ãŸå›žæ•°
-    // A ã‹ã‚‰ç¾åœ¨åº§æ¨™ã¾ã§ã®è·é›¢ã‚’è¿”ã™
+    FActiveAxis         : TVideoMinerBossGestureAxis; // Œ»Ý’ÇÕ’†‚ÌˆÚ“®Ž²
+    FAnchorPoint        : TPoint;                     // A-B-A ”»’è‚ÌŠî€“_ A
+    FAnchorTick         : UInt64;                     // Šî€“_ A ‚ð‹L˜^‚µ‚½Žž
+    FFarPointReached    : Boolean;                    // A ‚©‚ç\•ª—£‚ê‚½ B ‚É“ž’BÏ‚Ý‚©
+    FDirection          : Integer;                    // Œ»Ý‚ÌŽ²•ûŒüB-1 ‚Ü‚½‚Í 1
+    FHasLastPoint       : Boolean;                    // ‘O‰ñÀ•W‚ª—LŒø‚©
+    FLastPoint          : TPoint;                     // ·•ªŒvŽZ—p‚Ì‘O‰ñÀ•W
+    FLastTick           : UInt64;                     // ‘O‰ñÀ•W‚ÌŽž
+    FLastTriggerTick    : UInt64;                     // ÅŒã‚É”­“®‚µ‚½Žž
+    FSegmentDistance    : Integer;                    // Œ»Ý•ûŒü‚ÖÏ‚Ýã‚°‚½ˆÚ“®‹——£
+    FStartTick          : UInt64;                     // •ûŒü”½“]Œ^”»’è‚ÌŠJŽnŽž
+    FStrongSegmentCount : Integer;                    // Å¬‹——£‚ð–ž‚½‚µ‚Ä”½“]‚µ‚½‰ñ”
+    // A ‚©‚çŒ»ÝÀ•W‚Ü‚Å‚Ì‹——£‚ð•Ô‚·
     function DistanceFromAnchor(const Point: TPoint): Double;
-    // ç™ºå‹•æ™‚åˆ»ã‚’è¨˜éŒ²ã—ã€æ¬¡ã®ã‚¸ã‚§ã‚¹ãƒãƒ£ãƒ¼åˆ¤å®šçŠ¶æ…‹ã¸æˆ»ã™
+    // ”­“®Žž‚ð‹L˜^‚µAŽŸ‚ÌƒWƒFƒXƒ`ƒƒ[”»’èó‘Ô‚Ö–ß‚·
     procedure MarkTriggered(Tick: UInt64);
-    // é€²è¡Œä¸­ã®ã‚¸ã‚§ã‚¹ãƒãƒ£ãƒ¼åˆ¤å®šçŠ¶æ…‹ã‚’åˆæœŸåŒ–ã™ã‚‹
+    // is’†‚ÌƒWƒFƒXƒ`ƒƒ[”»’èó‘Ô‚ð‰Šú‰»‚·‚é
     procedure ResetGesture;
-    // æ–¹å‘åè»¢åž‹ã‚¸ã‚§ã‚¹ãƒãƒ£ãƒ¼ã®æ–°ã—ã„åŒºé–“ã‚’é–‹å§‹ã™ã‚‹
+    // •ûŒü”½“]Œ^ƒWƒFƒXƒ`ƒƒ[‚ÌV‚µ‚¢‹æŠÔ‚ðŠJŽn‚·‚é
     procedure StartGesture(Axis: TVideoMinerBossGestureAxis; Direction,
       Distance: Integer; Tick: UInt64);
-    // A ã‹ã‚‰ B ã¸é›¢ã‚Œã¦ A ä»˜è¿‘ã¸æˆ»ã‚‹å¾€å¾©ã‚¸ã‚§ã‚¹ãƒãƒ£ãƒ¼ã‚’åˆ¤å®šã™ã‚‹
+    // A ‚©‚ç B ‚Ö—£‚ê‚Ä A •t‹ß‚Ö–ß‚é‰•œƒWƒFƒXƒ`ƒƒ[‚ð”»’è‚·‚é
     function UpdatePointReturnGesture(const Point: TPoint; Tick: UInt64): Boolean;
   public
-    // åº§æ¨™å±¥æ­´ã‚’ç ´æ£„ã—ã€æ¬¡ã® MouseMove ã‚’æ–°ã—ã„åŸºæº–ç‚¹ã¨ã—ã¦æ‰±ã†
+    // À•W—š—ð‚ð”jŠü‚µAŽŸ‚Ì MouseMove ‚ðV‚µ‚¢Šî€“_‚Æ‚µ‚Äˆµ‚¤
     procedure Reset;
-    // ãƒžã‚¦ã‚¹ç§»å‹•ã‚’å–ã‚Šè¾¼ã¿ã€ãƒœã‚¹ãŒæ¥ãŸãƒ¢ãƒ¼ãƒ‰ã¸å…¥ã‚‹ã¹ãã‚¿ã‚¤ãƒŸãƒ³ã‚°ã§ True ã‚’è¿”ã™
+    // ƒ}ƒEƒXˆÚ“®‚ðŽæ‚èž‚ÝAƒ{ƒX‚ª—ˆ‚½ƒ‚[ƒh‚Ö“ü‚é‚×‚«ƒ^ƒCƒ~ƒ“ƒO‚Å True ‚ð•Ô‚·
     function MouseMove(const Point: TPoint; Enabled: Boolean): Boolean;
   end;
 
@@ -108,7 +108,7 @@ begin
   Result := False;
 
   if (FAnchorTick = 0) or
-     (Tick - FAnchorTick > BOSS_GESTURE_POINT_WINDOW_MS) then
+     (Tick - FAnchorTick > POINT_WINDOW_MS) then
   begin
     FAnchorPoint := Point;
     FAnchorTick := Tick;
@@ -119,12 +119,12 @@ begin
   Distance := DistanceFromAnchor(Point);
   if not FFarPointReached then
   begin
-    if Distance >= BOSS_GESTURE_POINT_DISTANCE then
+    if Distance >= POINT_DISTANCE then
       FFarPointReached := True;
     Exit;
   end;
 
-  if Distance <= BOSS_GESTURE_RETURN_RADIUS then
+  if Distance <= RETURN_RADIUS then
   begin
     Result := True;
     MarkTriggered(Tick);
@@ -154,7 +154,7 @@ begin
   end;
 
   if (FLastTriggerTick > 0) and
-     (Tick - FLastTriggerTick < BOSS_GESTURE_COOLDOWN_MS) then
+     (Tick - FLastTriggerTick < COOLDOWN_MS) then
   begin
     FLastPoint := Point;
     FHasLastPoint := True;
@@ -184,19 +184,19 @@ begin
   Dy := Point.Y - FLastPoint.Y;
   AbsDx := Abs(Dx);
   AbsDy := Abs(Dy);
-  if AbsDx + AbsDy < BOSS_GESTURE_NOISE_PIXELS then
+  if AbsDx + AbsDy < NOISE_PIXELS then
     Exit;
 
   Axis := bgaNone;
   Direction := 0;
   Distance := 0;
-  if AbsDx >= Round(AbsDy * BOSS_GESTURE_AXIS_RATIO) then
+  if AbsDx >= Round(AbsDy * AXIS_RATIO) then
   begin
     Axis := bgaHorizontal;
     Direction := IfThen(Dx > 0, 1, -1);
     Distance := AbsDx;
   end
-  else if AbsDy >= Round(AbsDx * BOSS_GESTURE_AXIS_RATIO) then
+  else if AbsDy >= Round(AbsDx * AXIS_RATIO) then
   begin
     Axis := bgaVertical;
     Direction := IfThen(Dy > 0, 1, -1);
@@ -216,7 +216,7 @@ begin
   end;
 
   if (FActiveAxis = bgaNone) or
-     (Tick - FStartTick > BOSS_GESTURE_WINDOW_MS) or
+     (Tick - FStartTick > WINDOW_MS) or
      (Axis <> FActiveAxis) then
   begin
     StartGesture(Axis, Direction, Distance, Tick);
@@ -227,7 +227,7 @@ begin
     Inc(FSegmentDistance, Distance)
   else
   begin
-    if FSegmentDistance < BOSS_GESTURE_MIN_DISTANCE then
+    if FSegmentDistance < MIN_DISTANCE then
     begin
       StartGesture(Axis, Direction, Distance, Tick);
       Exit;
@@ -238,9 +238,9 @@ begin
     FSegmentDistance := Distance;
   end;
 
-  if (FStrongSegmentCount >= BOSS_GESTURE_STRONG_SEGMENTS) and
-     (FSegmentDistance >= BOSS_GESTURE_MIN_DISTANCE) and
-     (Tick - FStartTick <= BOSS_GESTURE_WINDOW_MS) then
+  if (FStrongSegmentCount >= STRONG_SEGMENTS) and
+     (FSegmentDistance >= MIN_DISTANCE) and
+     (Tick - FStartTick <= WINDOW_MS) then
   begin
     Result := True;
     MarkTriggered(Tick);

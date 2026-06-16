@@ -1,24 +1,24 @@
 unit FFmpegStreamInfo;
 
-// FFmpegã®å…¥åŠ›ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã‹ã‚‰ã‚¹ãƒˆãƒªãƒ¼ãƒ æƒ…å ±ã‚’èª­ã¿å–ã‚‹è£œåŠ©ãƒ¦ãƒ‹ãƒƒãƒˆã€‚
-// ãƒ‡ã‚³ãƒ¼ãƒ€æœ¬ä½“ã¸æ¸¡ã™TVideoInfoã«éŸ³å£°ã‚¹ãƒˆãƒªãƒ¼ãƒ ã®åŸºæœ¬æƒ…å ±ã‚’åæ˜ ã™ã‚‹ã€‚
+// FFmpeg ‚Ì“ü—ÍƒRƒ“ƒeƒLƒXƒg‚©‚çƒXƒgƒŠ[ƒ€î•ñ‚ğ“Ç‚İæ‚é•â•ƒ†ƒjƒbƒgB
+// ƒfƒR[ƒ_–{‘Ì‚Ö“n‚· TVideoInfo ‚ÉA‰¹ºƒXƒgƒŠ[ƒ€‚ÌŠî–{î•ñ‚ğ”½‰f‚·‚éB
 
 interface
 
 uses
   FFmpegApi, FFmpegDecoderTypes;
 
-// å…¥åŠ›ãƒ•ã‚¡ã‚¤ãƒ«å†…ã®éŸ³å£°ã‚¹ãƒˆãƒªãƒ¼ãƒ æƒ…å ±ã‚’TVideoInfoã¸èª­ã¿è¾¼ã‚€ã€‚
+// “ü—Íƒtƒ@ƒCƒ‹“à‚Ì‰¹ºƒXƒgƒŠ[ƒ€î•ñ‚ğ TVideoInfo ‚Ö“Ç‚İ‚ŞB
 procedure ReadAudioInfo(FormatContext: PAVFormatContext; var Info: TVideoInfo);
 
 implementation
 
-// å…¥åŠ›ãƒ•ã‚¡ã‚¤ãƒ«å†…ã®éŸ³å£°ã‚¹ãƒˆãƒªãƒ¼ãƒ æƒ…å ±ã‚’TVideoInfoã¸èª­ã¿è¾¼ã‚€ã€‚
+// “ü—Íƒtƒ@ƒCƒ‹“à‚Ì‰¹ºƒXƒgƒŠ[ƒ€î•ñ‚ğ TVideoInfo ‚Ö“Ç‚İ‚ŞB
 procedure ReadAudioInfo(FormatContext: PAVFormatContext; var Info: TVideoInfo);
 var
-  StreamIndex: Integer; // FFmpegãŒé¸ã‚“ã æœ€é©ãªéŸ³å£°ã‚¹ãƒˆãƒªãƒ¼ãƒ ç•ªå·
-  Stream: PAVStream; // å¯¾è±¡ã®éŸ³å£°ã‚¹ãƒˆãƒªãƒ¼ãƒ 
-  CodecPar: PAVCodecParameters; // éŸ³å£°ã‚¹ãƒˆãƒªãƒ¼ãƒ ã®ã‚³ãƒ¼ãƒ‡ãƒƒã‚¯æƒ…å ±
+  StreamIndex : Integer;             // FFmpeg ‚ª‘I‚ñ‚¾Å“K‚È‰¹ºƒXƒgƒŠ[ƒ€”Ô†
+  Stream      : PAVStream;           // ‘ÎÛ‚Ì‰¹ºƒXƒgƒŠ[ƒ€
+  CodecPar    : PAVCodecParameters;  // ‰¹ºƒXƒgƒŠ[ƒ€‚ÌƒR[ƒfƒbƒNî•ñ
 begin
   StreamIndex := TFFmpegApi.av_find_best_stream(FormatContext, AVMEDIA_TYPE_AUDIO, -1, -1, nil, 0);
   if StreamIndex < 0 then

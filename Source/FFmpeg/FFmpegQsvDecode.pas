@@ -1,4 +1,7 @@
-ï»¿unit FFmpegQsvDecode;
+unit FFmpegQsvDecode;
+
+// Intel QSV ƒfƒR[ƒh‚É•K—v‚È•â•ˆ—‚ğ‚Ü‚Æ‚ß‚éB
+// codec id ‚©‚ç QSV decoder –¼‚ğ‘I‚ÑA•K—v‚Èê‡‚Í HW frame ‚ğ CPU frame ‚Ö“]‘—‚·‚éB
 
 interface
 
@@ -6,25 +9,25 @@ uses
   FFmpegApi;
 
 const
-  AV_CODEC_ID_MPEG2VIDEO = 2;   // MPEG-2 videoã®FFmpeg codec id
-  AV_CODEC_ID_MJPEG      = 7;   // MJPEGã®FFmpeg codec id
-  AV_CODEC_ID_H264       = 27;  // H.264ã®FFmpeg codec id
-  AV_CODEC_ID_VP8        = 139; // VP8ã®FFmpeg codec id
-  AV_CODEC_ID_VP9        = 167; // VP9ã®FFmpeg codec id
-  AV_CODEC_ID_HEVC       = 173; // HEVC/H.265ã®FFmpeg codec id
-  AV_CODEC_ID_AV1        = 225; // AV1ã®FFmpeg codec id
+  AV_CODEC_ID_MPEG2VIDEO = 2;   // MPEG-2 video ‚Ì FFmpeg codec id
+  AV_CODEC_ID_MJPEG      = 7;   // MJPEG ‚Ì FFmpeg codec id
+  AV_CODEC_ID_H264       = 27;  // H.264 ‚Ì FFmpeg codec id
+  AV_CODEC_ID_VP8        = 139; // VP8 ‚Ì FFmpeg codec id
+  AV_CODEC_ID_VP9        = 167; // VP9 ‚Ì FFmpeg codec id
+  AV_CODEC_ID_HEVC       = 173; // HEVC/H.265 ‚Ì FFmpeg codec id
+  AV_CODEC_ID_AV1        = 225; // AV1 ‚Ì FFmpeg codec id
 
-// codec idã‹ã‚‰å¯¾å¿œã™ã‚‹QSV decoderåã‚’è¿”ã™ã€‚
+// codec id ‚©‚ç‘Î‰‚·‚é QSV decoder –¼‚ğ•Ô‚·B
 function QsvDecoderNameForCodecId(CodecId: Integer): AnsiString;
-// QSVç”¨ã®HW device contextã‚’ä½œæˆã™ã‚‹ã€‚
+// QSV —p‚Ì HW device context ‚ğì¬‚·‚éB
 function CreateQsvDevice(out DeviceContext: PAVBufferRef; out ErrorMessage: string): Boolean;
-// QSV HW frameã®å ´åˆã ã‘CPUå´ãƒ•ãƒ¬ãƒ¼ãƒ ã¸è»¢é€ã™ã‚‹ã€‚
+// QSV HW frame ‚Ìê‡‚¾‚¯ CPU ‘¤ƒtƒŒ[ƒ€‚Ö“]‘—‚·‚éB
 function TransferFrameToCpuIfNeeded(SourceFrame, TransferFrame: PAVFrame;
   out CpuFrame: PAVFrame; out DidTransfer: Boolean; out ErrorMessage: string): Boolean;
 
 implementation
 
-// codec idã‹ã‚‰å¯¾å¿œã™ã‚‹QSV decoderåã‚’è¿”ã™ã€‚
+// codec id ‚©‚ç‘Î‰‚·‚é QSV decoder –¼‚ğ•Ô‚·B
 function QsvDecoderNameForCodecId(CodecId: Integer): AnsiString;
 begin
   case CodecId of
@@ -47,10 +50,10 @@ begin
   end;
 end;
 
-// QSVç”¨ã®HW device contextã‚’ä½œæˆã™ã‚‹ã€‚
+// QSV —p‚Ì HW device context ‚ğì¬‚·‚éB
 function CreateQsvDevice(out DeviceContext: PAVBufferRef; out ErrorMessage: string): Boolean;
 var
-  Ret: Integer;
+  Ret : Integer; // FFmpeg API ‚Ì–ß‚è’l
 begin
   DeviceContext := nil;
   ErrorMessage := '';
@@ -60,11 +63,11 @@ begin
     ErrorMessage := TFFmpegApi.ErrorText(Ret);
 end;
 
-// QSV HW frameã®å ´åˆã ã‘CPUå´ãƒ•ãƒ¬ãƒ¼ãƒ ã¸è»¢é€ã™ã‚‹ã€‚
+// QSV HW frame ‚Ìê‡‚¾‚¯ CPU ‘¤ƒtƒŒ[ƒ€‚Ö“]‘—‚·‚éB
 function TransferFrameToCpuIfNeeded(SourceFrame, TransferFrame: PAVFrame;
   out CpuFrame: PAVFrame; out DidTransfer: Boolean; out ErrorMessage: string): Boolean;
 var
-  Ret: Integer;
+  Ret : Integer; // FFmpeg API ‚Ì–ß‚è’l
 begin
   CpuFrame := SourceFrame;
   DidTransfer := False;

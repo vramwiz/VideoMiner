@@ -1,5 +1,8 @@
 unit VideoMinerVideoView;
 
+// メインフォームや controller から動画表示サーフェスを扱うための薄い窓口。
+// フレームデコード先の準備、サーフェスへの表示、overlay 状態とイベントの中継を担当する。
+
 interface
 
 uses
@@ -10,65 +13,110 @@ uses
 type
   TVideoMinerVideoView = class
   private
-    FDecodeScratch: TBitmap;
-    FSurface: TVideoMinerVideoSurface;
+    FDecodeScratch : TBitmap;                 // 表示せずに次フレームを確認するための作業用 Bitmap
+    FSurface       : TVideoMinerVideoSurface; // 実際の動画表示と overlay 描画を持つサーフェス
+    // フォーム側で親子関係やフォーカス対象として扱うサーフェスを返す
     function GetSurfaceControl: TWinControl;
+    // Bitmap を BGRX32 デコード先として使える状態にする
     function PrepareBitmapFrameBuffer(Bitmap: TBitmap; Width, Height: Integer;
       out Buffer: Pointer; out BufferStride: Integer): Boolean;
+    // 表示サーフェスを BGRX32 デコード先として使える状態にする
     function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
       out BufferStride: Integer; out ErrorMessage: string): Boolean;
+    // ボスが来たモードの表示状態をサーフェスへ渡す
     procedure SetBossMode(Value: Boolean);
+    // 次動画へ移動できるかを overlay 表示へ渡す
     procedure SetCanNavigateNext(Value: Boolean);
+    // 前動画へ移動できるかを overlay 表示へ渡す
     procedure SetCanNavigatePrevious(Value: Boolean);
+    // Check 操作の有効状態を overlay 表示へ渡す
     procedure SetCheckEnabled(Value: Boolean);
+    // 表示用チャプター位置を overlay 表示へ渡す
     procedure SetChapters(const Value: TVideoMinerOverlayChapters);
+    // 終端到達時動作の表示文字列を overlay 表示へ渡す
     procedure SetEndActionText(const Value: string);
+    // 全画面状態をサーフェスへ渡す
     procedure SetFullScreen(Value: Boolean);
+    // 終端到達時動作ボタンのクリック先を設定する
     procedure SetOnEndActionClick(Value: TNotifyEvent);
+    // 先頭フレームボタンのクリック先を設定する
     procedure SetOnFirstFrameClick(Value: TNotifyEvent);
+    // 全画面ボタンのクリック先を設定する
     procedure SetOnFullScreenClick(Value: TNotifyEvent);
+    // 末尾フレームボタンのクリック先を設定する
     procedure SetOnLastFrameClick(Value: TNotifyEvent);
+    // ミュート状態を overlay 表示へ渡す
     procedure SetMuted(Value: Boolean);
+    // ボスが来たモード解除ボタンのクリック先を設定する
     procedure SetOnBossExitClick(Value: TNotifyEvent);
+    // ボスが来たモード発動ジェスチャーの通知先を設定する
     procedure SetOnBossGesture(Value: TNotifyEvent);
+    // チャプター追加ボタンのクリック先を設定する
     procedure SetOnAddChapterClick(Value: TNotifyEvent);
+    // Check ボタンのクリック先を設定する
     procedure SetOnCheckClick(Value: TNotifyEvent);
+    // チャプター削除ボタンのクリック先を設定する
     procedure SetOnDeleteChapterClick(Value: TNotifyEvent);
+    // ミュートボタンのクリック先を設定する
     procedure SetOnMuteClick(Value: TNotifyEvent);
+    // 次動画ボタンのクリック先を設定する
     procedure SetOnNavigateNextClick(Value: TNotifyEvent);
+    // 前動画ボタンのクリック先を設定する
     procedure SetOnNavigatePreviousClick(Value: TNotifyEvent);
+    // 再生速度ボタンのクリック先を設定する
     procedure SetOnPlaybackRateClick(Value: TNotifyEvent);
+    // 再生/一時停止ボタンのクリック先を設定する
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
+    // シークバー操作の通知先を設定する
     procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
+    // シークバー上ホイール操作の通知先を設定する
     procedure SetOnSeekByWheel(Value: TVideoMinerOverlaySeekEvent);
+    // 10 秒戻しボタンのクリック先を設定する
     procedure SetOnSkipBackwardClick(Value: TNotifyEvent);
+    // 10 秒進みボタンのクリック先を設定する
     procedure SetOnSkipForwardClick(Value: TNotifyEvent);
+    // 音量変更の通知先を設定する
     procedure SetOnVolumeChange(Value: TVideoMinerOverlayVolumeEvent);
+    // 再生中かどうかを overlay 表示へ渡す
     procedure SetPlaybackActive(Value: Boolean);
+    // 再生速度の表示文字列を overlay 表示へ渡す
     procedure SetPlaybackRateText(const Value: string);
+    // Check 中ホイールシークの 1 ステップ幅を設定する
     procedure SetSeekWheelFrameStepMs(Value: Integer);
+    // 音量パーセントを overlay 表示へ渡す
     procedure SetVolumePercent(Value: Integer);
   public
+    // 既存の TImage 配置を引き継いで専用サーフェスへ差し替える
     constructor Create(Image: TImage);
+    // サーフェスと scratch frame を解放する
     destructor Destroy; override;
+    // 表示フレームと scratch frame を空にする
     procedure Clear;
+    // 指定位置のフレームをデコードし、必要なら表示へ反映する
     function ShowFrameAt(Decoder: TFFmpegDecoder; PositionMs: Integer;
       out ErrorMessage: string; PresentFrame: Boolean = True;
       FastSeek: Boolean = False): Boolean;
+    // 次フレームを読み、必要なら表示用 BGRX32 へ変換する
     function DecodeNextFrame(Decoder: TFFmpegDecoder; ConvertFrame: Boolean;
       out PositionMs: Integer; out ErrorMessage: string): Boolean;
+    // 次フレームを画面には出さず scratch frame へデコードする
     function DecodeNextFrameToScratch(Decoder: TFFmpegDecoder;
       out PositionMs: Integer; out ErrorMessage: string): Boolean;
+    // 現在表示中フレームの四隅が暗いか返す
     function CurrentFrameCornersMostlyDark: Boolean;
-    function CurrentFrameSignature(
-      out Signature: TVideoMinerFrameSignature): Boolean;
-    function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer;
-      MousePos: TPoint): Boolean;
-    function ShowNextFrame(Decoder: TFFmpegDecoder; out PositionMs: Integer;
-      out ErrorMessage: string): Boolean;
+    // 現在表示中フレームの簡易署名を返す
+    function CurrentFrameSignature(out Signature: TVideoMinerFrameSignature): Boolean;
+    // サーフェス上のホイール操作をズーム/シークとして処理する
+    function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer;MousePos: TPoint): Boolean;
+    // 次フレームを読み込んで表示する
+    function ShowNextFrame(Decoder: TFFmpegDecoder; out PositionMs: Integer; out ErrorMessage: string): Boolean;
+    // scratch frame にあるフレームを現在表示へ反映する
     function PresentScratchFrame(out ErrorMessage: string): Boolean;
+    // サーフェスの現在 Bitmap を通常の描画タイミングで表示する
     procedure Present(Bitmap: TBitmap);
+    // サーフェスの現在 Bitmap を即時表示する
     procedure PresentImmediate(Bitmap: TBitmap);
+    // overlay のシーク進捗を更新する
     procedure SetSeekProgress(PositionMs, MaxMs: Integer);
     property BossMode: Boolean write SetBossMode;
     property CanNavigateNext: Boolean write SetCanNavigateNext;

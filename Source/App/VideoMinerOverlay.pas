@@ -1,5 +1,8 @@
 unit VideoMinerOverlay;
 
+// 動画サーフェス上に重ねる VideoMiner 専用 overlay GUI を定義する。
+// 中央操作ボタン、左右ファイル移動、下側シーク/音量/チェック操作バーの描画と入力を担当する。
+
 interface
 
 uses
@@ -7,17 +10,23 @@ uses
   Vcl.Graphics;
 
 type
+  // 先頭/末尾へ移動する中央端ボタンの向き
   TVideoMinerOverlayEdgeDirection = (edFirst, edLast);
+  // フォルダ内の前後ファイルへ移動する端ボタンの向き
   TVideoMinerOverlayFileNavDirection = (fndPrevious, fndNext);
+  // シークバー上へ表示するチャプターマーカーの重要度
   TVideoMinerOverlayChapterSeverity = (csGreen, csYellow, csRed);
+  // チャプターマーカーがどのチェックで作られたかを示す分類
   TVideoMinerOverlayChapterSource = (chsAutoCheck, chsAutoCheckAudio,
     chsAutoCheckChannel, chsAutoCheckFrameDiff, chsAutoCheckVolumeJump,
     chsAutoCheckClipping, chsUser);
+
   TVideoMinerOverlayChapter = record
-    PositionMs: Integer;
-    Severity: TVideoMinerOverlayChapterSeverity;
-    Source: TVideoMinerOverlayChapterSource;
+    PositionMs : Integer;                            // チャプター位置 ms
+    Severity   : TVideoMinerOverlayChapterSeverity;  // シークバー上の色分け
+    Source     : TVideoMinerOverlayChapterSource;    // チャプターの発生元
   end;
+
   TVideoMinerOverlayChapters = TArray<TVideoMinerOverlayChapter>;
   TVideoMinerOverlaySeekEvent = procedure(Sender: TObject; PositionMs: Integer) of object;
   TVideoMinerOverlaySkipDirection = (sdBackward, sdForward);
@@ -25,21 +34,30 @@ type
 
   TVideoMinerOverlayControl = class abstract
   private
-    FBounds: TRect;
-    FEnabled: Boolean;
-    FVisible: Boolean;
+    FBounds  : TRect;   // 現在の描画/ヒットテスト領域
+    FEnabled : Boolean; // 入力を受け付けるか
+    FVisible : Boolean; // 描画対象か
   protected
+    // PreviewRect に対する自分の表示領域を計算する
     function CalculateBounds(const PreviewRect: TRect): TRect; virtual; abstract;
+    // 実際の部品描画を派生クラスへ任せる
     procedure PaintControl(Canvas: TCanvas); virtual; abstract;
     property Bounds: TRect read FBounds;
   public
     constructor Create; virtual;
+    // PreviewRect の変化に合わせて Bounds を更新する
     procedure UpdateLayout(const PreviewRect: TRect); virtual;
+    // Visible の場合だけ部品を描画する
     procedure Paint(Canvas: TCanvas); virtual;
+    // Enabled を見て Bounds 内かを判定する
     function BoundsHitTest(const Point: TPoint): Boolean; virtual;
+    // Visible/Enabled を含めた通常ヒットテストを行う
     function HitTest(const Point: TPoint): Boolean; virtual;
+    // 押下開始を受け付けるか返す
     function MouseDown(const Point: TPoint): Boolean; virtual;
+    // hover 更新が必要か返す
     function MouseMove(const Point: TPoint): Boolean; virtual;
+    // 押下終了を受け付けるか返す
     function MouseUp(const Point: TPoint): Boolean; virtual;
     property BoundsRect: TRect read FBounds;
     property Enabled: Boolean read FEnabled write FEnabled;
@@ -48,11 +66,13 @@ type
 
   TVideoMinerOverlayButton = class abstract(TVideoMinerOverlayControl)
   private
-    FHovered: Boolean;
-    FOnClick: TNotifyEvent;
-    FPressed: Boolean;
+    FHovered : Boolean;      // マウスがボタン上にあるか
+    FOnClick : TNotifyEvent; // クリック成立時の通知先
+    FPressed : Boolean;      // 押下中か
   protected
+    // 中央ボタン共通の半透明背景を描く
     procedure DrawCenterButtonBackground(Canvas: TCanvas);
+    // 押下と解放が同じボタン上で成立したときの通知を行う
     procedure DoClick; virtual;
     property Hovered: Boolean read FHovered;
     property Pressed: Boolean read FPressed;
@@ -65,10 +85,12 @@ type
 
   TVideoMinerOverlayPlayPauseButton = class(TVideoMinerOverlayButton)
   private
-    FIsPlaying: Boolean;
-    procedure DrawAlphaPolygon(Canvas: TCanvas; const Points: array of TPoint;
-      Alpha: Byte);
+    FIsPlaying : Boolean; // 再生中なら一時停止アイコン、停止中なら再生アイコンを描く
+    // 半透明の三角形アイコンを描く
+    procedure DrawAlphaPolygon(Canvas: TCanvas; const Points: array of TPoint; Alpha: Byte);
+    // 半透明の矩形アイコンを描く
     procedure DrawAlphaRect(Canvas: TCanvas; const Rect: TRect; Alpha: Byte);
+    // hover/pressed 状態からアイコンの濃さを決める
     function IconAlpha: Byte;
   protected
     function CalculateBounds(const PreviewRect: TRect): TRect; override;
@@ -79,11 +101,13 @@ type
 
   TVideoMinerOverlaySkipButton = class(TVideoMinerOverlayButton)
   private
-    FDirection: TVideoMinerOverlaySkipDirection;
+    FDirection : TVideoMinerOverlaySkipDirection; // 10 秒戻し/進みの向き
+    // 半透明の曲線矢印を描く
     procedure DrawAlphaPolyline(Canvas: TCanvas; const Points: array of TPoint;
       PenWidth: Integer; Alpha: Byte);
-    procedure DrawAlphaPolygon(Canvas: TCanvas; const Points: array of TPoint;
-      Alpha: Byte);
+    // 半透明の矢印先端を描く
+    procedure DrawAlphaPolygon(Canvas: TCanvas; const Points: array of TPoint; Alpha: Byte);
+    // hover/pressed 状態からアイコンの濃さを決める
     function IconAlpha: Byte;
   protected
     function CalculateBounds(const PreviewRect: TRect): TRect; override;
@@ -95,10 +119,12 @@ type
 
   TVideoMinerOverlayEdgeButton = class(TVideoMinerOverlayButton)
   private
-    FDirection: TVideoMinerOverlayEdgeDirection;
-    procedure DrawAlphaPolygon(Canvas: TCanvas; const Points: array of TPoint;
-      Alpha: Byte);
+    FDirection : TVideoMinerOverlayEdgeDirection; // 先頭/末尾のどちらへ移動するか
+    // 半透明の三角形アイコンを描く
+    procedure DrawAlphaPolygon(Canvas: TCanvas; const Points: array of TPoint; Alpha: Byte);
+    // 半透明の縦線アイコンを描く
     procedure DrawAlphaRect(Canvas: TCanvas; const DrawRect: TRect; Alpha: Byte);
+    // hover/pressed 状態からアイコンの濃さを決める
     function IconAlpha: Byte;
   protected
     function CalculateBounds(const PreviewRect: TRect): TRect; override;
@@ -110,11 +136,13 @@ type
 
   TVideoMinerOverlayFileNavButton = class(TVideoMinerOverlayButton)
   private
-    FDirection: TVideoMinerOverlayFileNavDirection;
-    procedure DrawAlphaRect(Canvas: TCanvas; const DrawRect: TRect;
-      Alpha: Byte);
+    FDirection : TVideoMinerOverlayFileNavDirection; // 前後どちらのファイルへ移動するか
+    // 端ボタンの薄い帯背景を描く
+    procedure DrawAlphaRect(Canvas: TCanvas; const DrawRect: TRect; Alpha: Byte);
+    // 端ボタンの矢印を描く
     procedure DrawAlphaPolyline(Canvas: TCanvas; const Points: array of TPoint;
       PenWidth: Integer; Alpha: Byte);
+    // hover/pressed 状態からアイコンの濃さを決める
     function IconAlpha: Byte;
   protected
     function CalculateBounds(const PreviewRect: TRect): TRect; override;
@@ -126,56 +154,57 @@ type
 
   TVideoMinerOverlaySeekBar = class(TVideoMinerOverlayControl)
   private
-    FDragPositionMs: Integer;
-    FDragging: Boolean;
-    FAddChapterButtonHovered: Boolean;
-    FAddChapterButtonPressed: Boolean;
-    FChapters: TVideoMinerOverlayChapters;
-    FCheckButtonHovered: Boolean;
-    FCheckButtonPressed: Boolean;
-    FCheckEnabled: Boolean;
-    FDeleteChapterButtonHovered: Boolean;
-    FDeleteChapterButtonPressed: Boolean;
-    FEndActionButtonHovered: Boolean;
-    FEndActionButtonPressed: Boolean;
-    FEndActionText: string;
-    FFullScreen: Boolean;
-    FFullScreenButtonHovered: Boolean;
-    FFullScreenButtonPressed: Boolean;
-    FHovered: Boolean;
-    FFrameStepMs: Integer;
-    FMaxMs: Integer;
-    FMuted: Boolean;
-    FMuteButtonHovered: Boolean;
-    FMuteButtonPressed: Boolean;
-    FOnAddChapterClick: TNotifyEvent;
-    FOnCheckClick: TNotifyEvent;
-    FOnDeleteChapterClick: TNotifyEvent;
-    FOnEndActionClick: TNotifyEvent;
-    FOnFullScreenClick: TNotifyEvent;
-    FOnMuteClick: TNotifyEvent;
-    FOnPlaybackRateClick: TNotifyEvent;
-    FOnSeek: TVideoMinerOverlaySeekEvent;
-    FOnVolumeChange: TVideoMinerOverlayVolumeEvent;
-    FPlaybackRateButtonHovered: Boolean;
-    FPlaybackRateButtonPressed: Boolean;
-    FPlaybackRateText: string;
-    FPositionMs: Integer;
-    FVolumeDragging: Boolean;
-    FVolumeHovered: Boolean;
-    FVolumePercent: Integer;
-    procedure DrawAlphaEllipse(Canvas: TCanvas; const DrawRect: TRect;
-      Alpha: Byte);
-    procedure DrawAlphaPanel(Canvas: TCanvas; const DrawRect: TRect;
-      Radius: Integer; Alpha: Byte);
+    FDragPositionMs             : Integer;                     // ドラッグ中に指しているシーク位置 ms
+    FDragging                   : Boolean;                     // シークバーをドラッグ中か
+    FAddChapterButtonHovered    : Boolean;                     // 追加ボタン上にマウスがあるか
+    FAddChapterButtonPressed    : Boolean;                     // 追加ボタンを押下中か
+    FChapters                   : TVideoMinerOverlayChapters;  // シークバー上に描くチャプター群
+    FCheckButtonHovered         : Boolean;                     // Check ボタン上にマウスがあるか
+    FCheckButtonPressed         : Boolean;                     // Check ボタンを押下中か
+    FCheckEnabled               : Boolean;                     // Check モード中か
+    FDeleteChapterButtonHovered : Boolean;                     // 削除ボタン上にマウスがあるか
+    FDeleteChapterButtonPressed : Boolean;                     // 削除ボタンを押下中か
+    FEndActionButtonHovered     : Boolean;                     // 終端動作ボタン上にマウスがあるか
+    FEndActionButtonPressed     : Boolean;                     // 終端動作ボタンを押下中か
+    FEndActionText              : string;                      // 終端動作ボタンに表示する文字列
+    FFullScreen                 : Boolean;                     // 全画面表示中か
+    FFullScreenButtonHovered    : Boolean;                     // 全画面ボタン上にマウスがあるか
+    FFullScreenButtonPressed    : Boolean;                     // 全画面ボタンを押下中か
+    FHovered                    : Boolean;                     // シークバー全体にマウスがあるか
+    FFrameStepMs                : Integer;                     // Check 中の 1 フレーム相当 ms
+    FMaxMs                      : Integer;                     // 動画長 ms
+    FMuted                      : Boolean;                     // ミュート状態か
+    FMuteButtonHovered          : Boolean;                     // ミュートボタン上にマウスがあるか
+    FMuteButtonPressed          : Boolean;                     // ミュートボタンを押下中か
+    FOnAddChapterClick          : TNotifyEvent;                // チャプター追加通知先
+    FOnCheckClick               : TNotifyEvent;                // Check ボタン通知先
+    FOnDeleteChapterClick       : TNotifyEvent;                // チャプター削除通知先
+    FOnEndActionClick           : TNotifyEvent;                // 終端動作ボタン通知先
+    FOnFullScreenClick          : TNotifyEvent;                // 全画面ボタン通知先
+    FOnMuteClick                : TNotifyEvent;                // ミュートボタン通知先
+    FOnPlaybackRateClick        : TNotifyEvent;                // 再生速度ボタン通知先
+    FOnSeek                     : TVideoMinerOverlaySeekEvent; // シーク操作通知先
+    FOnVolumeChange             : TVideoMinerOverlayVolumeEvent;   // 音量変更通知先
+    FPlaybackRateButtonHovered  : Boolean;                     // 再生速度ボタン上にマウスがあるか
+    FPlaybackRateButtonPressed  : Boolean;                     // 再生速度ボタンを押下中か
+    FPlaybackRateText           : string;                      // 再生速度ボタンに表示する文字列
+    FPositionMs                 : Integer;                     // 通常表示中の現在位置 ms
+    FVolumeDragging             : Boolean;                     // 音量バーをドラッグ中か
+    FVolumeHovered              : Boolean;                     // 音量バー上にマウスがあるか
+    FVolumePercent              : Integer;                     // 音量パーセント
+    // 半透明の円を描く
+    procedure DrawAlphaEllipse(Canvas: TCanvas; const DrawRect: TRect; Alpha: Byte);
+    // 下側パネルの半透明背景を描く
+    procedure DrawAlphaPanel(Canvas: TCanvas; const DrawRect: TRect; Radius: Integer; Alpha: Byte);
+    // 半透明の線アイコンを描く
     procedure DrawAlphaPolyline(Canvas: TCanvas; const Points: array of TPoint;
       PenWidth: Integer; Alpha: Byte);
-    procedure DrawAlphaRoundRect(Canvas: TCanvas; const DrawRect: TRect;
-      Radius: Integer; Alpha: Byte);
-    procedure DrawFullScreenIcon(Canvas: TCanvas; const DrawRect: TRect;
-      Alpha: Byte);
-    procedure DrawMuteIcon(Canvas: TCanvas; const DrawRect: TRect;
-      Alpha: Byte);
+    // 半透明の角丸矩形を描く
+    procedure DrawAlphaRoundRect(Canvas: TCanvas; const DrawRect: TRect; Radius: Integer; Alpha: Byte);
+    // 全画面/解除アイコンを描く
+    procedure DrawFullScreenIcon(Canvas: TCanvas; const DrawRect: TRect; Alpha: Byte);
+    // ミュート/音量アイコンを描く
+    procedure DrawMuteIcon(Canvas: TCanvas; const DrawRect: TRect; Alpha: Byte);
     function AddChapterButtonHitTest(const Point: TPoint): Boolean;
     function AddChapterButtonRect: TRect;
     function ChapterColor(Severity: TVideoMinerOverlayChapterSeverity): TColor;
@@ -240,7 +269,6 @@ type
     property PlaybackRateText: string read FPlaybackRateText write SetPlaybackRateText;
     property VolumePercent: Integer read FVolumePercent write SetVolumePercent;
   end;
-
 implementation
 
 type
@@ -738,7 +766,7 @@ end;
 
 procedure TVideoMinerOverlaySkipButton.PaintControl(Canvas: TCanvas);
 const
-  ARC_POINT_COUNT = 24;
+  ARC_POINT_COUNT = 24; // 10 秒スキップ用の曲線矢印を構成する点数
 var
   Alpha: Byte;
   Angle: Double;

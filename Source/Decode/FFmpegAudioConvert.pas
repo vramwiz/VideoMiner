@@ -1,14 +1,14 @@
 unit FFmpegAudioConvert;
 
-// FFmpegã®éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’PCMå½¢å¼ã¸å¤‰æ›ã™ã‚‹è£œåŠ©ãƒ¦ãƒ‹ãƒƒãƒˆã€‚
-// swr_convertã®å‘¼ã³å‡ºã—ã¨å‡ºåŠ›ãƒãƒƒãƒ•ã‚¡ã‚µã‚¤ã‚ºèª¿æ•´ã‚’ã“ã“ã«é›†ç´„ã™ã‚‹ã€‚
+// FFmpeg ‚Ì‰¹ºƒtƒŒ[ƒ€‚ğ PCM o—Í—p‚ÌŒÅ’èŒ`®‚Ö•ÏŠ·‚·‚éB
+// swr_convert ‚ÌŒÄ‚Ño‚µ‚Æo—Íƒoƒbƒtƒ@ƒTƒCƒY’²®‚ğ‚±‚Ìƒ†ƒjƒbƒg‚ÖW–ñ‚·‚éB
 
 interface
 
 uses
   System.SysUtils, FFmpegApi;
 
-// AVFrameã®éŸ³å£°ã‚µãƒ³ãƒ—ãƒ«ã‚’PCM16 stereo 48kHzã¸å¤‰æ›ã™ã‚‹ã€‚
+// AVFrame ‚Ì‰¹ºƒTƒ“ƒvƒ‹‚ğ PCM16 stereo 48kHz ‚Ö•ÏŠ·‚·‚éB
 function ConvertAudioFrameToPcm16Stereo48k(AudioFrame: PAVFrame; SwrContext: PSwrContext;
   SourceSampleRate: Integer; out Pcm: TBytes; out SampleCount: Integer): Boolean;
 
@@ -17,12 +17,12 @@ implementation
 uses
   System.Math;
 
-// AVFrameã®éŸ³å£°ã‚µãƒ³ãƒ—ãƒ«ã‚’PCM16 stereo 48kHzã¸å¤‰æ›ã™ã‚‹ã€‚
+// AVFrame ‚Ì‰¹ºƒTƒ“ƒvƒ‹‚ğ PCM16 stereo 48kHz ‚Ö•ÏŠ·‚·‚éB
 function ConvertAudioFrameToPcm16Stereo48k(AudioFrame: PAVFrame; SwrContext: PSwrContext;
   SourceSampleRate: Integer; out Pcm: TBytes; out SampleCount: Integer): Boolean;
 var
-  OutData: array[0..0] of PByte; // swr_convertã¸æ¸¡ã™å‡ºåŠ›ãƒãƒƒãƒ•ã‚¡ãƒã‚¤ãƒ³ã‚¿
-  OutSamples: Integer; // å¤‰æ›å¾Œã«å¿…è¦ã«ãªã‚‹æœ€å¤§ã‚µãƒ³ãƒ—ãƒ«æ•°
+  OutData    : array[0..0] of PByte; // swr_convert ‚Ö“n‚·o—Íƒoƒbƒtƒ@ƒ|ƒCƒ“ƒ^
+  OutSamples : Integer;              // •ÏŠ·Œã‚É•K—v‚É‚È‚éÅ‘åƒTƒ“ƒvƒ‹”
 begin
   Result := False;
   Pcm := nil;

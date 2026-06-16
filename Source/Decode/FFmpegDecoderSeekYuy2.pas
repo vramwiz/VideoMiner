@@ -1,10 +1,14 @@
-ï»¿unit FFmpegDecoderSeekYuy2;
+unit FFmpegDecoderSeekYuy2;
+
+// w’è‚ÖƒV[ƒN‚µA“®‰æƒtƒŒ[ƒ€‚ğ YUY2 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
+// QSV “]‘—‚ğŠÜ‚ŞŒ`®•Ê‚Ì”CˆÓˆÊ’uæ“¾ˆ—‚Æ‚µ‚Ä BGRX32 Œn‚©‚ç•ª—£‚·‚éB
 
 interface
 
 uses
   FFmpegDecoderContext;
 
+// w’è‚Ì“®‰æƒtƒŒ[ƒ€‚ğ YUY2 ƒoƒbƒtƒ@‚Öæ“¾‚·‚éB
 function DecodeFrameToYuy2(
   Context: TFFmpegDecoderContext;
   PositionMs: Integer;
@@ -19,6 +23,7 @@ uses
   System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo;
 
 
+// w’è‚Ì“®‰æƒtƒŒ[ƒ€‚ğ YUY2 ƒoƒbƒtƒ@‚Öæ“¾‚·‚éB
 function DecodeFrameToYuy2(
   Context: TFFmpegDecoderContext;
   PositionMs: Integer;

@@ -1,4 +1,7 @@
-ï»¿unit FFmpegDecoderTypes;
+unit FFmpegDecoderTypes;
+
+// FFmpeg ƒfƒR[ƒ_‘w‚Å‹¤—L‚·‚éŠî–{Œ^‚ğ’è‹`‚·‚éB
+// UI ‚â‹ï‘Ì“I‚È“Ç‚İæ‚èˆ—‚É‚ÍˆË‘¶‚³‚¹‚¸A“®‰æ/‰¹ºî•ñ‚Æ waveOut ƒoƒbƒtƒ@‚Ìó‚¯“n‚µ‚ÉW’†‚·‚éB
 
 interface
 
@@ -8,29 +11,29 @@ uses
 type
   PAudioWaveBuffer = ^TAudioWaveBuffer;
   TAudioWaveBuffer = record
-    Header: TWaveHdr;
-    Data: Pointer;
-    Size: Integer;
+    Header : TWaveHdr; // waveOut ‚É“n‚·ƒoƒbƒtƒ@ƒwƒbƒ_
+    Data   : Pointer;  // PCM ƒf[ƒ^‚ğ•Û‚·‚éƒƒ‚ƒŠ
+    Size   : Integer;  // Data ‚ÌƒoƒCƒg”
   end;
 
   TAudioInfo = record
-    Present: Boolean;
-    StreamIndex: Integer;
-    SampleRate: Integer;
-    Channels: Integer;
-    SampleFormat: Integer;
-    SampleFormatName: string;
-    DurationSec: Double;
-    OpenError: string;
+    Present          : Boolean; // “ü—Íƒtƒ@ƒCƒ‹‚É‰¹ºƒXƒgƒŠ[ƒ€‚ª‚ ‚é‚©
+    StreamIndex      : Integer; // FFmpeg ‚ª‘I‘ğ‚µ‚½‰¹ºƒXƒgƒŠ[ƒ€”Ô†
+    SampleRate       : Integer; // “ü—Í‰¹º‚ÌƒTƒ“ƒvƒ‹ƒŒ[ƒg Hz
+    Channels         : Integer; // “ü—Í‰¹º‚Ìƒ`ƒƒƒ“ƒlƒ‹”
+    SampleFormat     : Integer; // FFmpeg ‚Ì‰¹ºƒTƒ“ƒvƒ‹Œ`®
+    SampleFormatName : string;  // ’²¸•\¦—p‚ÌƒTƒ“ƒvƒ‹Œ`®–¼
+    DurationSec      : Double;  // ‰¹ºƒXƒgƒŠ[ƒ€‚Ì’·‚³ •b
+    OpenError        : string;  // ‰¹ºƒfƒR[ƒ_‰Šú‰»‚Ì¸”s——R
   end;
 
   TVideoInfo = record
-    Width: Integer;
-    Height: Integer;
-    DurationSec: Double;
-    FpsText: string;
-    Fps: Double;
-    Audio: TAudioInfo;
+    Width       : Integer;    // “®‰æƒtƒŒ[ƒ€‚Ì• px
+    Height      : Integer;    // “®‰æƒtƒŒ[ƒ€‚Ì‚‚³ px
+    DurationSec : Double;     // “®‰æ‘S‘Ì‚Ì’·‚³ •b
+    FpsText     : string;     // UI •\¦—p‚Ì FPS •¶š—ñ
+    Fps         : Double;     // Ä¶§Œä‚Ég‚¤ FPS ’l
+    Audio       : TAudioInfo; // “¯‚¶“ü—Íƒtƒ@ƒCƒ‹‚©‚ç“Ç‚ñ‚¾‰¹ºî•ñ
   end;
 
 implementation

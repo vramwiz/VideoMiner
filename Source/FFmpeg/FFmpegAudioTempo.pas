@@ -1,13 +1,14 @@
 unit FFmpegAudioTempo;
 
-// FFmpeg avfilter ã® atempo ã‚’ä½¿ã„ã€48kHz/stereo/s16 PCM ã‚’ãƒ”ãƒƒãƒä¿æŒå¯„ã‚Šã§æ™‚é–“åœ§ç¸®ã™ã‚‹ã€‚
-// å…¥å‡ºåŠ›ã¯ VideoMiner ã® waveOut çµŒè·¯ã¨åŒã˜ packed s16 stereo ã«å›ºå®šã™ã‚‹ã€‚
+// FFmpeg avfilter ‚Ì atempo ‚ğg‚Á‚Ä PCM ‰¹º‚ÌÄ¶‘¬“x‚ğ•ÏŠ·‚·‚éB
+// “üo—Í‚Í VideoMiner ‚Ì waveOut Œo˜H‚Æ“¯‚¶ PCM16 stereo 48kHz ‚ÉŒÅ’è‚·‚éB
 
 interface
 
 uses
   System.SysUtils;
 
+// PCM16 stereo 48kHz ‚Ì“ü—Í‰¹º‚ğw’è”{—¦‚Ì’·‚³‚Ö•ÏŠ·‚·‚éB
 function TempoPcm16Stereo48k(const InputPcm: TBytes; Rate: Double;
   out OutputPcm: TBytes; out OutputSampleCount: Integer;
   out ErrorMessage: string): Boolean;
@@ -18,15 +19,16 @@ uses
   System.Math, FFmpegApi;
 
 const
-  TEMPO_SAMPLE_RATE = 48000;
-  TEMPO_CHANNELS = 2;
-  TEMPO_BYTES_PER_SAMPLE = SizeOf(SmallInt);
+  TEMPO_SAMPLE_RATE      = 48000;             // atempo graph ‚É“n‚·ŒÅ’èƒTƒ“ƒvƒ‹ƒŒ[ƒg Hz
+  TEMPO_CHANNELS         = 2;                 // atempo graph ‚É“n‚·ŒÅ’èƒ`ƒƒƒ“ƒlƒ‹”
+  TEMPO_BYTES_PER_SAMPLE = SizeOf(SmallInt);  // PCM16 1 ƒTƒ“ƒvƒ‹‚ ‚½‚è‚ÌƒoƒCƒg”
 
+// filter sink ‚©‚çæ‚èo‚µ‚½ƒtƒŒ[ƒ€‚Ì PCM ‚ğo—Íƒoƒbƒtƒ@‚Ö’Ç‰Á‚·‚éB
 procedure AppendFramePcm(Frame: PAVFrame; var OutputPcm: TBytes;
   var OutputSampleCount: Integer);
 var
-  ByteCount: Integer;
-  OldBytes: Integer;
+  ByteCount : Integer; // ’Ç‰Á‚·‚é PCM ƒf[ƒ^‚ÌƒoƒCƒg”
+  OldBytes  : Integer; // ’Ç‰Á‘O‚Ìo—Íƒoƒbƒtƒ@’·
 begin
   if (Frame = nil) or (Frame.data[0] = nil) or (Frame.nb_samples <= 0) then
     Exit;
@@ -38,11 +40,12 @@ begin
   Inc(OutputSampleCount, Frame.nb_samples);
 end;
 
+// “ü—Í PCM ‚ğ FFmpeg filter graph ‚Ö“n‚· AVFrame ‚É‹l‚ß‚éB
 function NewAudioFrame(const Pcm: TBytes; SampleCount: Integer;
   out Frame: PAVFrame; out ErrorMessage: string): Boolean;
 var
-  ByteCount: Integer;
-  Ret: Integer;
+  ByteCount : Integer; // Frame ‚ÖƒRƒs[‚·‚é PCM ƒf[ƒ^‚ÌƒoƒCƒg”
+  Ret       : Integer; // FFmpeg API ‚Ì–ß‚è’l
 begin
   Result := False;
   Frame := nil;
@@ -83,20 +86,21 @@ begin
   Result := True;
 end;
 
+// abuffer -> atempo -> abuffersink ‚Ì‰¹º filter graph ‚ğì¬‚·‚éB
 function CreateTempoGraph(Rate: Double; out Graph: PAVFilterGraph;
   out SourceContext, SinkContext: PAVFilterContext;
   out ErrorMessage: string): Boolean;
 var
-  Args: AnsiString;
-  Ret: Integer;
-  SourceFilter: PAVFilter;
-  SinkFilter: PAVFilter;
-  SinkName: AnsiString;
-  SourceName: AnsiString;
-  TempoContext: PAVFilterContext;
-  TempoFilter: PAVFilter;
-  TempoName: AnsiString;
-  TempoText: AnsiString;
+  Args         : AnsiString;       // abuffer ‚É“n‚·“ü—Í‰¹ºŒ`®
+  Ret          : Integer;          // FFmpeg API ‚Ì–ß‚è’l
+  SourceFilter : PAVFilter;        // abuffer filter ’è‹`
+  SinkFilter   : PAVFilter;        // abuffersink filter ’è‹`
+  SinkName     : AnsiString;       // abuffersink filter –¼
+  SourceName   : AnsiString;       // abuffer filter –¼
+  TempoContext : PAVFilterContext; // atempo filter context
+  TempoFilter  : PAVFilter;        // atempo filter ’è‹`
+  TempoName    : AnsiString;       // atempo filter –¼
+  TempoText    : AnsiString;       // atempo ‚É“n‚·”{—¦•¶š—ñ
 begin
   Result := False;
   Graph := nil;
@@ -175,17 +179,18 @@ begin
   Result := True;
 end;
 
+// PCM16 stereo 48kHz ‚Ì“ü—Í‰¹º‚ğw’è”{—¦‚Ì’·‚³‚Ö•ÏŠ·‚·‚éB
 function TempoPcm16Stereo48k(const InputPcm: TBytes; Rate: Double;
   out OutputPcm: TBytes; out OutputSampleCount: Integer;
   out ErrorMessage: string): Boolean;
 var
-  Graph: PAVFilterGraph;
-  InputFrame: PAVFrame;
-  OutputFrame: PAVFrame;
-  Ret: Integer;
-  SampleCount: Integer;
-  SinkContext: PAVFilterContext;
-  SourceContext: PAVFilterContext;
+  Graph         : PAVFilterGraph;   // atempo •ÏŠ·‚Ég‚¤ filter graph
+  InputFrame    : PAVFrame;         // “ü—Í PCM ‚ğ•ï‚Ş AVFrame
+  OutputFrame   : PAVFrame;         // filter sink ‚©‚çó‚¯æ‚é AVFrame
+  Ret           : Integer;          // FFmpeg API ‚Ì–ß‚è’l
+  SampleCount   : Integer;          // “ü—Í PCM ‚ÌƒTƒ“ƒvƒ‹”
+  SinkContext   : PAVFilterContext; // abuffersink filter context
+  SourceContext : PAVFilterContext; // abuffer filter context
 begin
   Result := False;
   OutputPcm := nil;
@@ -237,7 +242,7 @@ begin
         Exit;
       end;
 
-    OutputFrame := TFFmpegApi.av_frame_alloc();
+      OutputFrame := TFFmpegApi.av_frame_alloc();
       if OutputFrame = nil then
       begin
         ErrorMessage := 'av_frame_alloc output failed.';

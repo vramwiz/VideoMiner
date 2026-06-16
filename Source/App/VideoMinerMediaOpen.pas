@@ -1,5 +1,9 @@
 unit VideoMinerMediaOpen;
 
+// 動画ファイルを開く前後の検証と、前回ファイルの解決を担当する。
+// メインフォームが UI 状態をリセットする前に失敗を判定できるよう、
+// ファイル存在確認、デコーダ open、メディア一覧構築をまとめて扱う。
+
 interface
 
 uses
@@ -8,19 +12,24 @@ uses
 
 type
   TVideoMinerMediaOpenResult = record
-    ErrorMessage: string;
-    FileName: string;
-    Info: TVideoInfo;
+    ErrorMessage : string;     // 失敗時に UI へ表示する理由
+    FileName     : string;     // 実際に開けた動画ファイル
+    Info         : TVideoInfo; // メインデコーダから得た動画情報
   end;
 
+// UI 状態を壊す前に、指定ファイルが開く対象として存在するか確認する
 function ValidateVideoMinerMediaFile(const FileName: string;
   out ErrorMessage: string): Boolean;
 
+// ファイル選択ダイアログで最初に表示するフォルダを決める
 function VideoMinerOpenDialogInitialDir(const CurrentFileName: string): string;
+// 正常に開けたファイルを、次回起動や次回ダイアログの基準として保存する
 procedure RememberVideoMinerMediaFile(const FileName: string);
+// 保存済みの前回ファイルを、現在開ける絶対パスとして解決する
 function ResolveRememberedVideoMinerMediaFile(out FileName: string;
   out ErrorMessage: string): Boolean;
 
+// メイン/プレビューデコーダを開き、同じフォルダの動画一覧を更新する
 function OpenVideoMinerMediaFile(const FileName: string; Decoder,
   PreviewDecoder: TFFmpegDecoder; MediaList: TVideoMinerMediaList;
   out OpenResult: TVideoMinerMediaOpenResult): Boolean;

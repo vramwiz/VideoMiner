@@ -1,48 +1,69 @@
-ï»¿unit VideoMinerSettings;
+unit VideoMinerSettings;
+
+// VideoMiner ‚Ìƒ†[ƒU[İ’è‚ğ INI ƒtƒ@ƒCƒ‹‚Ö•Û‘¶/“Ç‚·‚éB
+// UI ó‘ÔAÄ¶İ’èAè“®ƒ`ƒƒƒvƒ^[ˆÊ’u‚È‚ÇA‹N“®‚ğ‚Ü‚½‚¢‚Å•Û‚·‚é’l‚¾‚¯‚ğˆµ‚¤B
 
 interface
 
 type
+  // è“®ƒ`ƒƒƒvƒ^[ˆÊ’u‚ğ ms ’PˆÊ‚Å•Û‚·‚é”z—ñ
   TVideoMinerChapterPositions = TArray<Integer>;
+  // ƒfƒR[ƒh•û®‚ÌŠó–]’lBDebug ‚Å‚Í auto ‚ğ software ˆµ‚¢‚É‚µ‚Ä’²¸‚µ‚â‚·‚­‚·‚éB
   TVideoDecoderMode = (vdmAuto, vdmQsv, vdmSoftware);
+  // “®‰æI’[‚Ö“’B‚µ‚½‚Æ‚«‚ÌÄ¶“®ì
   TVideoMinerEndAction = (eaStop, eaLoop, eaNext);
 
   TVideoMinerAudioSettings = record
-    Muted: Boolean;
-    VolumePercent: Integer;
+    Muted         : Boolean; // ƒ~ƒ…[ƒgó‘Ô
+    VolumePercent : Integer; // ‰¹—Êƒp[ƒZƒ“ƒg
   end;
 
   TVideoMinerLastMedia = record
-    Available: Boolean;
-    Folder: string;
-    FileName: string;
+    Available : Boolean; // ‘O‰ñƒƒfƒBƒAî•ñ‚ğ•œŒ³‚Ég‚¦‚é‚©
+    Folder    : string;  // ‘O‰ñŠJ‚¢‚½ƒtƒHƒ‹ƒ_
+    FileName  : string;  // ‘O‰ñŠJ‚¢‚½ƒtƒ@ƒCƒ‹
   end;
 
   TVideoMinerWindowBounds = record
-    Available: Boolean;
-    Left: Integer;
-    Top: Integer;
-    Width: Integer;
-    Height: Integer;
+    Available : Boolean; // •Û‘¶Ï‚İÀ•W‚ğ•œŒ³‚Ég‚¦‚é‚©
+    Left      : Integer; // ’Êí•\¦‚Ì¶ˆÊ’u
+    Top       : Integer; // ’Êí•\¦‚ÌãˆÊ’u
+    Width     : Integer; // ’Êí•\¦‚Ì•
+    Height    : Integer; // ’Êí•\¦‚Ì‚‚³
   end;
 
+// Œ»İ‚Ì“®‰æƒfƒR[ƒh•û®‚ğ•Ô‚·
 function GetVideoDecoderMode: TVideoDecoderMode;
+// I’[“’B‚Ì“®ì‚ğ“Ç‚İ‚Ş
 function LoadEndAction: TVideoMinerEndAction;
+// ‰¹—Ê‚Æƒ~ƒ…[ƒgó‘Ô‚ğ“Ç‚İ‚Ş
 function LoadAudioSettings: TVideoMinerAudioSettings;
+// ‘O‰ñŠJ‚¢‚½ƒtƒHƒ‹ƒ_‚Æƒtƒ@ƒCƒ‹‚ğ“Ç‚İ‚Ş
 function LoadLastMedia: TVideoMinerLastMedia;
+// w’èƒtƒ@ƒCƒ‹‚É‘Î‰‚·‚éè“®ƒ`ƒƒƒvƒ^[ˆÊ’u‚ğ“Ç‚İ‚Ş
 function LoadManualChapterPositions(const FileName: string): TVideoMinerChapterPositions;
+// w’èƒtƒ@ƒCƒ‹‚É‘Î‰‚·‚éÄ¶ÄŠJˆÊ’u‚ğ“Ç‚İ‚Ş
 function LoadManualChapterPlaybackPosition(const FileName: string; MaxMs: Integer;
   out PositionMs: Integer): Boolean;
+// ’Êí•\¦‚ÌƒƒCƒ“ƒtƒH[ƒ€ˆÊ’u‚ÆƒTƒCƒY‚ğ“Ç‚İ‚Ş
 function LoadMainFormBounds: TVideoMinerWindowBounds;
+// I’[“’B‚Ì“®ì‚ğ•Û‘¶‚·‚é
 procedure SaveEndAction(Value: TVideoMinerEndAction);
+// ‰¹—Ê‚Æƒ~ƒ…[ƒgó‘Ô‚ğ•Û‘¶‚·‚é
 procedure SaveAudioSettings(const Settings: TVideoMinerAudioSettings);
+// ‘O‰ñŠJ‚¢‚½ƒtƒHƒ‹ƒ_‚Æƒtƒ@ƒCƒ‹‚ğ•Û‘¶‚·‚é
 procedure SaveLastMedia(const Folder, FileName: string);
+// w’èƒtƒ@ƒCƒ‹‚É‘Î‰‚·‚éè“®ƒ`ƒƒƒvƒ^[ˆÊ’u‚ğ•Û‘¶‚·‚é
 procedure SaveManualChapterPositions(const FileName: string;
   const Positions: TVideoMinerChapterPositions);
+// w’èƒtƒ@ƒCƒ‹‚É‘Î‰‚·‚éÄ¶ÄŠJˆÊ’u‚ğ•Û‘¶‚·‚é
 procedure SaveManualChapterPlaybackPosition(const FileName: string;
   PositionMs, MaxMs: Integer);
+// w’èƒtƒ@ƒCƒ‹‚É‘Î‰‚·‚éÄ¶ÄŠJˆÊ’u‚¾‚¯‚ğíœ‚·‚é
 procedure ClearManualChapterPlaybackPosition(const FileName: string);
+// ’Êí•\¦‚ÌƒƒCƒ“ƒtƒH[ƒ€ˆÊ’u‚ÆƒTƒCƒY‚ğ•Û‘¶‚·‚é
 procedure SaveMainFormBounds(const Bounds: TVideoMinerWindowBounds);
+// ƒfƒR[ƒh•û®‚ğ INI •Û‘¶—p‚Ì•¶š—ñ‚Ö•ÏŠ·‚·‚é
 function VideoDecoderModeToText(Mode: TVideoDecoderMode): string;
 
 implementation
@@ -51,31 +72,32 @@ uses
   System.IniFiles, System.Math, System.SysUtils, Winapi.ShlObj, Winapi.Windows;
 
 const
-  SETTINGS_SECTION = 'VideoMiner';
-  SETTINGS_DECODER_MODE = 'VideoDecoderMode';
-  WINDOW_SECTION = 'MainForm';
-  WINDOW_LEFT = 'Left';
-  WINDOW_TOP = 'Top';
-  WINDOW_WIDTH = 'Width';
-  WINDOW_HEIGHT = 'Height';
-  LAST_MEDIA_SECTION = 'LastMedia';
-  LAST_MEDIA_FOLDER = 'Folder';
-  LAST_MEDIA_FILE = 'FileName';
-  PLAYBACK_SECTION = 'Playback';
-  PLAYBACK_END_ACTION = 'EndAction';
-  AUDIO_SECTION = 'Audio';
-  AUDIO_MUTED = 'Muted';
-  AUDIO_VOLUME_PERCENT = 'VolumePercent';
-  MANUAL_CHAPTER_SECTION_PREFIX = 'ManualChapters:';
-  MANUAL_CHAPTER_FILE = 'FileName';
-  MANUAL_CHAPTER_COUNT = 'Count';
-  MANUAL_CHAPTER_POSITION_PREFIX = 'Position';
-  MANUAL_CHAPTER_PLAYBACK_POSITION = 'PlaybackPositionMs';
+  SECTION_SETTINGS       = 'VideoMiner';         // ƒAƒvƒŠ‘S‘Ìİ’è‚Ì INI ƒZƒNƒVƒ‡ƒ“
+  KEY_DECODER_MODE       = 'VideoDecoderMode';   // ƒfƒR[ƒh•û®‚Ì INI ƒL[
+  SECTION_WINDOW         = 'MainForm';           // ƒƒCƒ“ƒtƒH[ƒ€À•W‚Ì INI ƒZƒNƒVƒ‡ƒ“
+  KEY_WINDOW_LEFT        = 'Left';               // ƒEƒBƒ“ƒhƒE¶ˆÊ’u‚Ì INI ƒL[
+  KEY_WINDOW_TOP         = 'Top';                // ƒEƒBƒ“ƒhƒEãˆÊ’u‚Ì INI ƒL[
+  KEY_WINDOW_WIDTH       = 'Width';              // ƒEƒBƒ“ƒhƒE•‚Ì INI ƒL[
+  KEY_WINDOW_HEIGHT      = 'Height';             // ƒEƒBƒ“ƒhƒE‚‚³‚Ì INI ƒL[
+  SECTION_LAST_MEDIA     = 'LastMedia';          // ‘O‰ñƒƒfƒBƒAî•ñ‚Ì INI ƒZƒNƒVƒ‡ƒ“
+  KEY_LAST_FOLDER        = 'Folder';             // ‘O‰ñƒtƒHƒ‹ƒ_‚Ì INI ƒL[
+  KEY_LAST_FILE          = 'FileName';           // ‘O‰ñƒtƒ@ƒCƒ‹‚Ì INI ƒL[
+  SECTION_PLAYBACK       = 'Playback';           // Ä¶İ’è‚Ì INI ƒZƒNƒVƒ‡ƒ“
+  KEY_END_ACTION         = 'EndAction';          // I’[“’B“®ì‚Ì INI ƒL[
+  SECTION_AUDIO          = 'Audio';              // ‰¹ºİ’è‚Ì INI ƒZƒNƒVƒ‡ƒ“
+  KEY_AUDIO_MUTED        = 'Muted';              // ƒ~ƒ…[ƒgó‘Ô‚Ì INI ƒL[
+  KEY_AUDIO_VOLUME       = 'VolumePercent';      // ‰¹—Êƒp[ƒZƒ“ƒg‚Ì INI ƒL[
+  SECTION_CHAPTER_PREFIX = 'ManualChapters:';    // ƒtƒ@ƒCƒ‹•Êƒ`ƒƒƒvƒ^[‚ÌƒZƒNƒVƒ‡ƒ“Ú“ª«
+  KEY_CHAPTER_FILE       = 'FileName';           // ƒ`ƒƒƒvƒ^[‘ÎÛƒtƒ@ƒCƒ‹‚Ì INI ƒL[
+  KEY_CHAPTER_COUNT      = 'Count';              // è“®ƒ`ƒƒƒvƒ^[”‚Ì INI ƒL[
+  KEY_CHAPTER_POS_PREFIX = 'Position';           // è“®ƒ`ƒƒƒvƒ^[ˆÊ’uƒL[‚ÌÚ“ª«
+  KEY_CHAPTER_PLAYBACK   = 'PlaybackPositionMs'; // è“®ƒ`ƒƒƒvƒ^[Ä¶ˆÊ’u‚Ì INI ƒL[
 
 var
-  CurrentVideoDecoderMode: TVideoDecoderMode = vdmAuto;
-  SettingsLoaded: Boolean = False;
+  CurrentVideoDecoderMode : TVideoDecoderMode = vdmAuto; // “Ç‚İ‚İÏ‚İ‚ÌƒfƒR[ƒh•û®
+  SettingsLoaded          : Boolean = False;             // ‰Šúİ’è‚ğ“Ç‚İ‚İÏ‚İ‚©
 
+// INI ƒtƒ@ƒCƒ‹‚Ì•Û‘¶æ‚ğ•Ô‚µA•K—v‚È‚çİ’èƒfƒBƒŒƒNƒgƒŠ‚ğì‚é
 function SettingsFileName: string;
 var
   AppDataPath: array[0..MAX_PATH - 1] of Char;
@@ -91,6 +113,7 @@ begin
   Result := IncludeTrailingPathDelimiter(SettingsDir) + 'VideoMiner.ini';
 end;
 
+// INI ã‚Ì•¶š—ñ‚ğƒfƒR[ƒh•û®‚Ö•ÏŠ·‚·‚é
 function TextToVideoDecoderMode(const Value: string): TVideoDecoderMode;
 begin
   if SameText(Value, 'qsv') then
@@ -113,6 +136,7 @@ begin
   end;
 end;
 
+// INI ã‚Ì•¶š—ñ‚ğI’[“’B‚Ì“®ì‚Ö•ÏŠ·‚·‚é
 function TextToEndAction(const Value: string): TVideoMinerEndAction;
 begin
   if SameText(Value, 'loop') then
@@ -123,6 +147,7 @@ begin
     Result := eaStop;
 end;
 
+// I’[“’B‚Ì“®ì‚ğ INI •Û‘¶—p‚Ì•¶š—ñ‚Ö•ÏŠ·‚·‚é
 function EndActionToText(Value: TVideoMinerEndAction): string;
 begin
   case Value of
@@ -135,11 +160,13 @@ begin
   end;
 end;
 
+// ƒtƒ@ƒCƒ‹‚²‚Æ‚Ìè“®ƒ`ƒƒƒvƒ^[•Û‘¶ƒZƒNƒVƒ‡ƒ“–¼‚ğì‚é
 function ManualChapterSectionName(const FileName: string): string;
 begin
-  Result := MANUAL_CHAPTER_SECTION_PREFIX + ExpandFileName(FileName);
+  Result := SECTION_CHAPTER_PREFIX + ExpandFileName(FileName);
 end;
 
+// ‰‰ñQÆ‚ÉƒAƒvƒŠ‘S‘Ìİ’è‚¾‚¯‚ğƒLƒƒƒbƒVƒ…‚·‚é
 procedure LoadSettings;
 var
   Ini: TIniFile;
@@ -151,7 +178,7 @@ begin
   Ini := TIniFile.Create(SettingsFileName);
   try
     CurrentVideoDecoderMode := TextToVideoDecoderMode(
-      Ini.ReadString(SETTINGS_SECTION, SETTINGS_DECODER_MODE, 'auto'));
+      Ini.ReadString(SECTION_SETTINGS, KEY_DECODER_MODE, 'auto'));
   finally
     Ini.Free;
   end;
@@ -173,8 +200,8 @@ var
 begin
   Ini := TIniFile.Create(SettingsFileName);
   try
-    Result := TextToEndAction(Ini.ReadString(PLAYBACK_SECTION,
-      PLAYBACK_END_ACTION, 'stop'));
+    Result := TextToEndAction(Ini.ReadString(SECTION_PLAYBACK,
+      KEY_END_ACTION, 'stop'));
   finally
     Ini.Free;
   end;
@@ -189,8 +216,8 @@ begin
   Ini := TIniFile.Create(SettingsFileName);
   try
     Result.VolumePercent := Max(0, Min(100,
-      Ini.ReadInteger(AUDIO_SECTION, AUDIO_VOLUME_PERCENT, 100)));
-    Result.Muted := Ini.ReadBool(AUDIO_SECTION, AUDIO_MUTED, False);
+      Ini.ReadInteger(SECTION_AUDIO, KEY_AUDIO_VOLUME, 100)));
+    Result.Muted := Ini.ReadBool(SECTION_AUDIO, KEY_AUDIO_MUTED, False);
   finally
     Ini.Free;
   end;
@@ -204,17 +231,17 @@ begin
   Ini := TIniFile.Create(SettingsFileName);
   try
     Result.Available :=
-      Ini.ValueExists(WINDOW_SECTION, WINDOW_LEFT) and
-      Ini.ValueExists(WINDOW_SECTION, WINDOW_TOP) and
-      Ini.ValueExists(WINDOW_SECTION, WINDOW_WIDTH) and
-      Ini.ValueExists(WINDOW_SECTION, WINDOW_HEIGHT);
+      Ini.ValueExists(SECTION_WINDOW, KEY_WINDOW_LEFT) and
+      Ini.ValueExists(SECTION_WINDOW, KEY_WINDOW_TOP) and
+      Ini.ValueExists(SECTION_WINDOW, KEY_WINDOW_WIDTH) and
+      Ini.ValueExists(SECTION_WINDOW, KEY_WINDOW_HEIGHT);
     if not Result.Available then
       Exit;
 
-    Result.Left := Ini.ReadInteger(WINDOW_SECTION, WINDOW_LEFT, 0);
-    Result.Top := Ini.ReadInteger(WINDOW_SECTION, WINDOW_TOP, 0);
-    Result.Width := Ini.ReadInteger(WINDOW_SECTION, WINDOW_WIDTH, 0);
-    Result.Height := Ini.ReadInteger(WINDOW_SECTION, WINDOW_HEIGHT, 0);
+    Result.Left := Ini.ReadInteger(SECTION_WINDOW, KEY_WINDOW_LEFT, 0);
+    Result.Top := Ini.ReadInteger(SECTION_WINDOW, KEY_WINDOW_TOP, 0);
+    Result.Width := Ini.ReadInteger(SECTION_WINDOW, KEY_WINDOW_WIDTH, 0);
+    Result.Height := Ini.ReadInteger(SECTION_WINDOW, KEY_WINDOW_HEIGHT, 0);
     if (Result.Width < 320) or (Result.Height < 240) then
       Result.Available := False;
   finally
@@ -231,8 +258,8 @@ begin
   Result.FileName := '';
   Ini := TIniFile.Create(SettingsFileName);
   try
-    Result.Folder := Ini.ReadString(LAST_MEDIA_SECTION, LAST_MEDIA_FOLDER, '');
-    Result.FileName := Ini.ReadString(LAST_MEDIA_SECTION, LAST_MEDIA_FILE, '');
+    Result.Folder := Ini.ReadString(SECTION_LAST_MEDIA, KEY_LAST_FOLDER, '');
+    Result.FileName := Ini.ReadString(SECTION_LAST_MEDIA, KEY_LAST_FILE, '');
     Result.Available := (Result.Folder <> '') or (Result.FileName <> '');
   finally
     Ini.Free;
@@ -255,7 +282,7 @@ begin
   Section := ManualChapterSectionName(FileName);
   Ini := TIniFile.Create(SettingsFileName);
   try
-    Count := Ini.ReadInteger(Section, MANUAL_CHAPTER_COUNT, 0);
+    Count := Ini.ReadInteger(Section, KEY_CHAPTER_COUNT, 0);
     if Count <= 0 then
       Exit;
 
@@ -264,7 +291,7 @@ begin
     for I := 0 to High(Result) do
     begin
       PositionMs := Ini.ReadInteger(Section,
-        MANUAL_CHAPTER_POSITION_PREFIX + IntToStr(I), -1);
+        KEY_CHAPTER_POS_PREFIX + IntToStr(I), -1);
       if PositionMs < 0 then
         Continue;
 
@@ -291,10 +318,10 @@ begin
   Section := ManualChapterSectionName(FileName);
   Ini := TIniFile.Create(SettingsFileName);
   try
-    if not Ini.ValueExists(Section, MANUAL_CHAPTER_PLAYBACK_POSITION) then
+    if not Ini.ValueExists(Section, KEY_CHAPTER_PLAYBACK) then
       Exit;
 
-    PositionMs := Ini.ReadInteger(Section, MANUAL_CHAPTER_PLAYBACK_POSITION, 0);
+    PositionMs := Ini.ReadInteger(Section, KEY_CHAPTER_PLAYBACK, 0);
     PositionMs := Max(0, Min(MaxMs, PositionMs));
     Result := True;
   finally
@@ -308,7 +335,7 @@ var
 begin
   Ini := TIniFile.Create(SettingsFileName);
   try
-    Ini.WriteString(PLAYBACK_SECTION, PLAYBACK_END_ACTION,
+    Ini.WriteString(SECTION_PLAYBACK, KEY_END_ACTION,
       EndActionToText(Value));
   finally
     Ini.Free;
@@ -321,9 +348,9 @@ var
 begin
   Ini := TIniFile.Create(SettingsFileName);
   try
-    Ini.WriteInteger(AUDIO_SECTION, AUDIO_VOLUME_PERCENT,
+    Ini.WriteInteger(SECTION_AUDIO, KEY_AUDIO_VOLUME,
       Max(0, Min(100, Settings.VolumePercent)));
-    Ini.WriteBool(AUDIO_SECTION, AUDIO_MUTED, Settings.Muted);
+    Ini.WriteBool(SECTION_AUDIO, KEY_AUDIO_MUTED, Settings.Muted);
   finally
     Ini.Free;
   end;
@@ -338,8 +365,8 @@ begin
 
   Ini := TIniFile.Create(SettingsFileName);
   try
-    Ini.WriteString(LAST_MEDIA_SECTION, LAST_MEDIA_FOLDER, Folder);
-    Ini.WriteString(LAST_MEDIA_SECTION, LAST_MEDIA_FILE, FileName);
+    Ini.WriteString(SECTION_LAST_MEDIA, KEY_LAST_FOLDER, Folder);
+    Ini.WriteString(SECTION_LAST_MEDIA, KEY_LAST_FILE, FileName);
   finally
     Ini.Free;
   end;
@@ -359,10 +386,10 @@ begin
   Ini := TIniFile.Create(SettingsFileName);
   try
     Ini.EraseSection(Section);
-    Ini.WriteString(Section, MANUAL_CHAPTER_FILE, ExpandFileName(FileName));
-    Ini.WriteInteger(Section, MANUAL_CHAPTER_COUNT, Length(Positions));
+    Ini.WriteString(Section, KEY_CHAPTER_FILE, ExpandFileName(FileName));
+    Ini.WriteInteger(Section, KEY_CHAPTER_COUNT, Length(Positions));
     for I := 0 to High(Positions) do
-      Ini.WriteInteger(Section, MANUAL_CHAPTER_POSITION_PREFIX + IntToStr(I),
+      Ini.WriteInteger(Section, KEY_CHAPTER_POS_PREFIX + IntToStr(I),
         Positions[I]);
   finally
     Ini.Free;
@@ -381,8 +408,8 @@ begin
   Section := ManualChapterSectionName(FileName);
   Ini := TIniFile.Create(SettingsFileName);
   try
-    Ini.WriteString(Section, MANUAL_CHAPTER_FILE, ExpandFileName(FileName));
-    Ini.WriteInteger(Section, MANUAL_CHAPTER_PLAYBACK_POSITION,
+    Ini.WriteString(Section, KEY_CHAPTER_FILE, ExpandFileName(FileName));
+    Ini.WriteInteger(Section, KEY_CHAPTER_PLAYBACK,
       Max(0, Min(MaxMs, PositionMs)));
   finally
     Ini.Free;
@@ -400,7 +427,7 @@ begin
   Section := ManualChapterSectionName(FileName);
   Ini := TIniFile.Create(SettingsFileName);
   try
-    Ini.DeleteKey(Section, MANUAL_CHAPTER_PLAYBACK_POSITION);
+    Ini.DeleteKey(Section, KEY_CHAPTER_PLAYBACK);
   finally
     Ini.Free;
   end;
@@ -415,10 +442,10 @@ begin
 
   Ini := TIniFile.Create(SettingsFileName);
   try
-    Ini.WriteInteger(WINDOW_SECTION, WINDOW_LEFT, Bounds.Left);
-    Ini.WriteInteger(WINDOW_SECTION, WINDOW_TOP, Bounds.Top);
-    Ini.WriteInteger(WINDOW_SECTION, WINDOW_WIDTH, Bounds.Width);
-    Ini.WriteInteger(WINDOW_SECTION, WINDOW_HEIGHT, Bounds.Height);
+    Ini.WriteInteger(SECTION_WINDOW, KEY_WINDOW_LEFT, Bounds.Left);
+    Ini.WriteInteger(SECTION_WINDOW, KEY_WINDOW_TOP, Bounds.Top);
+    Ini.WriteInteger(SECTION_WINDOW, KEY_WINDOW_WIDTH, Bounds.Width);
+    Ini.WriteInteger(SECTION_WINDOW, KEY_WINDOW_HEIGHT, Bounds.Height);
   finally
     Ini.Free;
   end;

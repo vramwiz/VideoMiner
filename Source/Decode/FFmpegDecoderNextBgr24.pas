@@ -1,10 +1,14 @@
-ï»¿unit FFmpegDecoderNextBgr24;
+unit FFmpegDecoderNextBgr24;
+
+// Œ»İˆÊ’u‚©‚çŸ‚Ì“®‰æƒtƒŒ[ƒ€‚ğ“Ç‚İABGR24 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
+// Ä¶’†‚Ì‡•ûŒüƒfƒR[ƒh—p‚ÅA”CˆÓƒV[ƒNˆ—‚Í Seek Œnƒ†ƒjƒbƒg‚Ö•ª‚¯‚éB
 
 interface
 
 uses
   FFmpegDecoderContext;
 
+// Ÿ‚Ì“®‰æƒtƒŒ[ƒ€‚ğ“Ç‚İA•K—v‚È‚ç BGR24 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 function DecodeNextFrameToBgr24Optional(
   Context: TFFmpegDecoderContext;
   Buffer: Pointer;
@@ -20,6 +24,7 @@ uses
   System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegStreamInfo;
 
 
+// Ÿ‚Ì“®‰æƒtƒŒ[ƒ€‚ğ“Ç‚İA•K—v‚È‚ç BGR24 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 function DecodeNextFrameToBgr24Optional(
   Context: TFFmpegDecoderContext;
   Buffer: Pointer;

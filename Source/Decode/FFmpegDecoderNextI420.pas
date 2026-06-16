@@ -1,10 +1,14 @@
-ï»¿unit FFmpegDecoderNextI420;
+unit FFmpegDecoderNextI420;
+
+// Œ»İˆÊ’u‚©‚çŸ‚Ì“®‰æƒtƒŒ[ƒ€‚ğ“Ç‚İAI420 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
+// Œ`®•Ê‚Ì‡•ûŒüƒfƒR[ƒhˆ—‚Æ‚µ‚Ä BGRX32 Œn‚©‚ç•ª—£‚·‚éB
 
 interface
 
 uses
   FFmpegDecoderContext;
 
+// Ÿ‚Ì“®‰æƒtƒŒ[ƒ€‚ğ“Ç‚İA•K—v‚È‚ç I420 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 function DecodeNextFrameToI420Optional(
   Context: TFFmpegDecoderContext;
   Buffer: Pointer;
@@ -20,6 +24,7 @@ uses
   System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo;
 
 
+// Ÿ‚Ì“®‰æƒtƒŒ[ƒ€‚ğ“Ç‚İA•K—v‚È‚ç I420 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 function DecodeNextFrameToI420Optional(
   Context: TFFmpegDecoderContext;
   Buffer: Pointer;

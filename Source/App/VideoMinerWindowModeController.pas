@@ -1,5 +1,9 @@
 unit VideoMinerWindowModeController;
 
+// 枠なしメインフォームの表示モードとサイズ記憶を担当する。
+// fullscreen / boss mode / 通常ウィンドウ bounds をこの controller が所有し、
+// メインフォーム側には Windows メッセージや UI イベントの入口だけを残す。
+
 interface
 
 uses
@@ -8,33 +12,46 @@ uses
   VideoMinerVideoView;
 
 type
+  // ウィンドウモード変更時に必要なアプリ側処理を呼び戻す
   TVideoMinerWindowModeAction = procedure of object;
 
   TVideoMinerWindowModeController = class
   private
-    FBossMode: Boolean;
-    FForm: TCustomForm;
-    FFullScreen: Boolean;
-    FMaximizeLabel: TLabel;
-    FNormalWindowBounds: TVideoMinerWindowBounds;
-    FStopPlayback: TVideoMinerWindowModeAction;
-    FTitleBar: TPanel;
-    FVideoView: TVideoMinerVideoView;
+    FBossMode           : Boolean;                       // 偽装画面で動画を隠しているか
+    FForm               : TCustomForm;                   // 表示モードを切り替える対象フォーム
+    FFullScreen         : Boolean;                       // 独自全画面表示中か
+    FMaximizeLabel      : TLabel;                        // 最大化ボタン表示用ラベル
+    FNormalWindowBounds : TVideoMinerWindowBounds;       // 全画面解除時や終了時に使う通常ウィンドウ位置
+    FStopPlayback       : TVideoMinerWindowModeAction;   // boss mode へ入る前に再生を止める処理
+    FTitleBar           : TPanel;                        // 全画面や boss mode で表示を切り替える独自タイトルバー
+    FVideoView          : TVideoMinerVideoView;          // 表示モードを動画サーフェスへ伝える窓口
   public
+    // 操作対象コントロールと、必要なアプリ側 callback を受け取る
     constructor Create(Form: TCustomForm; TitleBar: TPanel;
       MaximizeLabel: TLabel; VideoView: TVideoMinerVideoView;
       StopPlayback: TVideoMinerWindowModeAction);
+    // 保存済みの通常ウィンドウ位置を起動時のフォームへ反映する
     procedure ApplySavedWindowBounds;
+    // 再生を止めて動画面を偽装表示へ切り替える
     procedure EnterBossMode;
+    // 現在の通常ウィンドウ位置を記憶し、対象モニタいっぱいへ広げる
     procedure EnterFullScreen;
+    // 偽装表示を解除し、現在の画面モードに合うタイトルバー状態へ戻す
     procedure ExitBossMode;
+    // 全画面を解除し、記憶していた通常ウィンドウ位置へ戻す
     procedure ExitFullScreen;
+    // フォーム移動時に通常ウィンドウ位置を更新する
     procedure HandleMove;
+    // フォームサイズ変更時にボタン表示、リサイズエッジ、位置記憶を更新する
     procedure HandleSize;
+    // 枠なしフォームの端/角リサイズ用 hit-test を補完する
     procedure HitTestBorderlessResize(const ScreenPoint: TPoint;
       var HitTestResult: LRESULT);
+    // 終了時に保存すべき通常ウィンドウ位置を確定して設定へ書き込む
     procedure SaveWindowBounds;
+    // 独自全画面表示を切り替える
     procedure ToggleFullScreen;
+    // 現在の最大化状態に合わせて独自最大化ボタンの見た目を更新する
     procedure UpdateMaximizeButton;
     property BossMode: Boolean read FBossMode;
     property FullScreen: Boolean read FFullScreen;

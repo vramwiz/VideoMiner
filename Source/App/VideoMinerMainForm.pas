@@ -1,4 +1,7 @@
-ï»¿unit VideoMinerMainForm;
+unit VideoMinerMainForm;
+
+// VideoMiner ‚ÌƒƒCƒ“ƒtƒH[ƒ€BGUI ƒCƒxƒ“ƒg‚ğó‚¯AŠe controller ‚Æ•\¦/‰¹º/İ’è‚ğÚ‘±‚·‚éB
+// Àˆ—‚Íê—pƒ†ƒjƒbƒg‚ÖŠñ‚¹A‚±‚±‚Å‚ÍƒAƒvƒŠ‘S‘Ì‚Ìó‘Ô‹´“n‚µ‚Æ Windows ƒƒbƒZ[ƒWó‚¯Œû‚ğ’S“–‚·‚éB
 
 interface
 
@@ -15,9 +18,10 @@ uses
   VideoMinerVideoView, VideoMinerWindowChrome, VideoMinerWindowModeController;
 
 const
-  WM_VM_OPEN_PENDING = WM_APP + 1;
+  WM_VM_OPEN_PENDING = WM_APP + 1; // ‘¼ƒvƒƒZƒX‚©‚çó‚¯‚½ƒtƒ@ƒCƒ‹‚ğˆÀ‘S‚Èƒ^ƒCƒ~ƒ“ƒO‚ÅŠJ‚­“Æ©ƒƒbƒZ[ƒW
 
 type
+  // ‰Ÿ‚µ‚Á‚Ï‚È‚µˆµ‚¢‚Æ‚µ‚Äˆê“I‚É–³‹‚·‚éƒiƒrƒQ[ƒVƒ‡ƒ“ƒL[W‡
   TVideoMinerKeySet = set of Byte;
 
   TVideoMinerMainForm = class(TForm)
@@ -29,148 +33,221 @@ type
     LabelMaximizeButton: TLabel;
     PanelMinimizeButton: TPanel;
     LabelMinimizeButton: TLabel;
-    ImagePreview: TImage; // ãƒ‡ã‚³ãƒ¼ãƒ‰ã—ãŸãƒ•ãƒ¬ãƒ¼ãƒ ã‚’è¡¨ç¤ºã™ã‚‹ç”»åƒé ˜åŸŸ
-    OpenDialogVideo: TOpenDialog; // èª­ã¿è¾¼ã‚€å‹•ç”»ãƒ•ã‚¡ã‚¤ãƒ«ã‚’é¸æŠã™ã‚‹ãƒ€ã‚¤ã‚¢ãƒ­ã‚°
-    TimerPlayback: TTimer; // å†ç”Ÿä¸­ã«æ¬¡ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’èª­ã‚€ãŸã‚ã®ã‚¿ã‚¤ãƒãƒ¼
-    // ãƒ•ã‚©ãƒ¼ãƒ ç”Ÿæˆæ™‚ã«ãƒ‡ã‚³ãƒ¼ãƒ€ã‚’ç”¨æ„ã™ã‚‹
+    ImagePreview: TImage;          // ê—p“®‰æƒT[ƒtƒFƒX‚Ö·‚µ‘Ö‚¦‚éŒ³‚Ì”z’u—Ìˆæ
+    OpenDialogVideo: TOpenDialog;  // “Ç‚İ‚Ş“®‰æƒtƒ@ƒCƒ‹‚ğ‘I‘ğ‚·‚éƒ_ƒCƒAƒƒO
+    TimerPlayback: TTimer;         // Ä¶’†‚ÉŸƒtƒŒ[ƒ€‚ğ“Ç‚Ş‚½‚ß‚Ìƒ^ƒCƒ}[
+    // ƒtƒH[ƒ€¶¬‚É controller ‚Æ“üo—Í•”•i‚ğÚ‘±‚·‚é
     procedure FormCreate(Sender: TObject);
-    // ãƒ•ã‚©ãƒ¼ãƒ ç ´æ£„æ™‚ã«ãƒ‡ã‚³ãƒ¼ãƒ€ã‚’è§£æ”¾ã™ã‚‹
+    // ƒtƒH[ƒ€”jŠü‚ÉÄ¶ó‘Ô‚ğ•Û‘¶‚µA¶¬‚µ‚½•”•i‚ğ‰ğ•ú‚·‚é
     procedure FormDestroy(Sender: TObject);
-    // å†ç”Ÿ tick å‡¦ç†ã‚’å†ç”Ÿ controller ã¸å§”è­²ã™ã‚‹
+    // Ä¶ tick ˆ—‚ğÄ¶ controller ‚ÖˆÏ÷‚·‚é
     procedure TimerPlaybackTimer(Sender: TObject);
+    // ƒVƒ‡[ƒgƒJƒbƒg‚Æ‘S‰æ–Ê/ƒ{ƒX‚ª—ˆ‚½ƒ‚[ƒh‚ÌƒL[“ü—Í‚ğˆ—‚·‚é
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    // ‰Ÿ‚µ‚Á‚Ï‚È‚µ—}~‘ÎÛ‚ÌƒL[‚ğ‰ğœ‚·‚é
     procedure FormKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
-    procedure TitleBarMouseDown(Sender: TObject; Button: TMouseButton;
-      Shift: TShiftState; X, Y: Integer);
+    // “Æ©ƒ^ƒCƒgƒ‹ƒo[‚Ìƒhƒ‰ƒbƒOˆÚ“®‚ğ Windows ‚Ö“n‚·
+    procedure TitleBarMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    // •Â‚¶‚éƒ{ƒ^ƒ“‚ğˆ—‚·‚é
     procedure CloseButtonClick(Sender: TObject);
+    // •Â‚¶‚éƒ{ƒ^ƒ“ hover F‚ÖØ‚è‘Ö‚¦‚é
     procedure CloseButtonMouseEnter(Sender: TObject);
+    // •Â‚¶‚éƒ{ƒ^ƒ“‚Ì’ÊíF‚Ö–ß‚·
     procedure CloseButtonMouseLeave(Sender: TObject);
+    // Å‘å‰»/’Êí•\¦‚ğØ‚è‘Ö‚¦‚é
     procedure MaximizeButtonClick(Sender: TObject);
+    // Å¬‰»‚·‚é
     procedure MinimizeButtonClick(Sender: TObject);
+    // Å¬‰»/Å‘å‰»ƒ{ƒ^ƒ“ hover F‚ÖØ‚è‘Ö‚¦‚é
     procedure CaptionButtonMouseEnter(Sender: TObject);
+    // Å¬‰»/Å‘å‰»ƒ{ƒ^ƒ“‚Ì’ÊíF‚Ö–ß‚·
     procedure CaptionButtonMouseLeave(Sender: TObject);
   private
-    FDecoder: TFFmpegDecoder; // é–‹ã„ãŸå‹•ç”»ã‚’ä¿æŒã™ã‚‹FFmpegãƒ‡ã‚³ãƒ¼ãƒ€
-    FPreviewDecoder: TFFmpegDecoder;
-    FAudioPlayback: TVideoMinerAudioPlayback;
-    FMediaList: TVideoMinerMediaList;
-    FVideoView: TVideoMinerVideoView;
-    FVideoFile: string; // ç¾åœ¨é–‹ã„ã¦ã„ã‚‹å‹•ç”»ãƒ•ã‚¡ã‚¤ãƒ«å
-    FVideoInfo: TVideoInfo; // ç¾åœ¨é–‹ã„ã¦ã„ã‚‹å‹•ç”»ã®åŸºæœ¬æƒ…å ±
-    FCurrentVideoPositionMs: Integer;
-    FSeekPositionMs: Integer;
-    FSeekMaxMs: Integer;
-    FUpdatingSeek: Boolean; // ã‚³ãƒ¼ãƒ‰ã‹ã‚‰ã®ã‚·ãƒ¼ã‚¯ãƒãƒ¼æ›´æ–°ä¸­ã‹ã©ã†ã‹
-    FSeeking: Boolean;
-    FSeekGuardTargetMs: Integer;
-    FSeekGuardRemaining: Integer;
-    FDropAgent: TDropAgent;
-    FOleInitialized: Boolean;
-    FPendingOpenFiles: TStringList;
-    FProcessingOpenQueue: Boolean;
-    FRestartPlaybackTimer: TTimer;
-    FReloadCurrentFileTimer: TTimer;
-    FFolderWatcher: TFolderWatch;
-    FWatchedFolder: string;
-    FReloadingCurrentFile: Boolean;
-    FPendingReloadHasStamp: Boolean;
-    FPendingReloadLastWriteTime: TDateTime;
-    FPendingReloadSize: Int64;
-    FVideoFileLastWriteTime: TDateTime;
-    FVideoFileSize: Int64;
-    FPlaybackController: TVideoMinerPlaybackController;
-    FCommandController: TVideoMinerCommandController;
-    FWindowModeController: TVideoMinerWindowModeController;
-    FChapterManager: TVideoMinerChapterManager;
-    FLoopSegmentEndMs: Integer;
-    FLoopSegmentStartMs: Integer;
-    FEndAction: TVideoMinerEndAction;
-    FShortcuts: TShortcutAction;
-    FTitleIcon: TImage;
-    FLastInfoUpdateTick: UInt64;
-    FBlockedNavigationKeys: TVideoMinerKeySet;
-    FNavigationInputBlockedUntilTick: UInt64;
+    FDecoder                         : TFFmpegDecoder;                  // Œ»İÄ¶‚Ég‚¤“®‰æƒfƒR[ƒ_
+    FPreviewDecoder                  : TFFmpegDecoder;                  // ƒV[ƒN‚âæ“Ç‚İ•\¦‚Ég‚¤•â•ƒfƒR[ƒ_
+    FAudioPlayback                   : TVideoMinerAudioPlayback;        // ‰¹ºo—Í‚Æ‰¹—Êó‘Ô‚ÌŠÇ—
+    FMediaList                       : TVideoMinerMediaList;            // “¯‚¶ƒtƒHƒ‹ƒ_“à‚Ì“®‰æˆê——
+    FVideoView                       : TVideoMinerVideoView;            // “®‰æ•\¦‚Æ overlay “ü—Í‚Ì‘‹Œû
+    FVideoFile                       : string;                          // Œ»İŠJ‚¢‚Ä‚¢‚é“®‰æƒtƒ@ƒCƒ‹–¼
+    FVideoInfo                       : TVideoInfo;                      // Œ»İŠJ‚¢‚Ä‚¢‚é“®‰æ‚ÌŠî–{î•ñ
+    FCurrentVideoPositionMs          : Integer;                         // ÅŒã‚É•\¦‚Å‚«‚½ƒtƒŒ[ƒ€ˆÊ’u ms
+    FSeekPositionMs                  : Integer;                         // UI ‚ÆÄ¶§Œä‚Å‹¤—L‚·‚éŒ»İˆÊ’u ms
+    FSeekMaxMs                       : Integer;                         // ƒV[ƒN‰Â”\‚ÈÅ‘åˆÊ’u ms
+    FUpdatingSeek                    : Boolean;                         // ƒR[ƒh‚©‚çƒV[ƒNˆÊ’u‚ğXV’†‚©
+    FSeeking                         : Boolean;                         // ƒV[ƒNˆ—’†‚©
+    FSeekGuardTargetMs               : Integer;                         // ƒV[ƒN’¼Œã‚ÉÄ¶ tick ‚ğç‚é‘ÎÛˆÊ’u ms
+    FSeekGuardRemaining              : Integer;                         // ƒV[ƒN guard ‚ğc‚· tick ”
+    FDropAgent                       : TDropAgent;                      // ƒtƒ@ƒCƒ‹ƒhƒƒbƒvó‚¯Œû
+    FOleInitialized                  : Boolean;                         // OLE ‰Šú‰»‚É¬Œ÷‚µ‚Ä‚¢‚é‚©
+    FPendingOpenFiles                : TStringList;                     // WM Œo—R‚ÅŒã‚©‚çŠJ‚­ƒtƒ@ƒCƒ‹ƒLƒ…[
+    FProcessingOpenQueue             : Boolean;                         // ƒtƒ@ƒCƒ‹ƒLƒ…[ˆ—’†‚©
+    FRestartPlaybackTimer            : TTimer;                          // ƒV[ƒNŒã‚ÉÄ¶ÄŠJ‚ğ’x‰„‚³‚¹‚éƒ^ƒCƒ}[
+    FReloadCurrentFileTimer          : TTimer;                          // Œ»İƒtƒ@ƒCƒ‹‚ÌXV‚ğ‚Ü‚Æ‚ß‚ÄÄ“Ç‚·‚éƒ^ƒCƒ}[
+    FFolderWatcher                   : TFolderWatch;                    // Œ»İƒtƒHƒ‹ƒ_‚Ì•ÏXŠÄ‹
+    FWatchedFolder                   : string;                          // ŠÄ‹’†ƒtƒHƒ‹ƒ_
+    FReloadingCurrentFile            : Boolean;                         // Œ»İƒtƒ@ƒCƒ‹‚ÌÄ“Ç’†‚©
+    FPendingReloadHasStamp           : Boolean;                         // Ä“ÇŒó•â‚Ìƒtƒ@ƒCƒ‹ó‘Ô‚ğ•Û‚µ‚Ä‚¢‚é‚©
+    FPendingReloadLastWriteTime      : TDateTime;                       // Ä“ÇŒó•â‚ÌXV“ú
+    FPendingReloadSize               : Int64;                           // Ä“ÇŒó•â‚ÌƒTƒCƒY
+    FVideoFileLastWriteTime          : TDateTime;                       // Œ»İƒtƒ@ƒCƒ‹‚ğŠJ‚¢‚½“_‚ÌXV“ú
+    FVideoFileSize                   : Int64;                           // Œ»İƒtƒ@ƒCƒ‹‚ğŠJ‚¢‚½“_‚ÌƒTƒCƒY
+    FPlaybackController              : TVideoMinerPlaybackController;   // Ä¶/ƒV[ƒN/I’[ˆ—‚Ì§Œä
+    FCommandController               : TVideoMinerCommandController;    // overlay ‚ÆƒVƒ‡[ƒgƒJƒbƒg‚ÌƒRƒ}ƒ“ƒhÚ‘±
+    FWindowModeController            : TVideoMinerWindowModeController; // ‘S‰æ–Ê/˜g‚È‚µ/ƒ{ƒX‚ª—ˆ‚½ƒ‚[ƒh‚Ì§Œä
+    FChapterManager                  : TVideoMinerChapterManager;       // è“®/©“®ƒ`ƒƒƒvƒ^[‚Æƒ`ƒFƒbƒNó‘Ô‚ÌŠÇ—
+    FLoopSegmentEndMs                : Integer;                         // ƒ‹[ƒvÄ¶‹æŠÔ‚ÌI’[ ms
+    FLoopSegmentStartMs              : Integer;                         // ƒ‹[ƒvÄ¶‹æŠÔ‚ÌŠJn ms
+    FEndAction                       : TVideoMinerEndAction;            // “®‰æI’[“’B‚Ì“®ì
+    FShortcuts                       : TShortcutAction;                 // ƒL[ƒ{[ƒhƒVƒ‡[ƒgƒJƒbƒg“o˜^æ
+    FTitleIcon                       : TImage;                          // “Æ©ƒ^ƒCƒgƒ‹ƒo[¶’[‚ÌƒAƒCƒRƒ“
+    FLastInfoUpdateTick              : UInt64;                          // î•ñ•\¦‚ğÅŒã‚ÉXV‚µ‚½ tick
+    FBlockedNavigationKeys           : TVideoMinerKeySet;               // ‰Ÿ‚µ‚Á‚Ï‚È‚µ—}~’†‚ÌƒiƒrƒQ[ƒVƒ‡ƒ“ƒL[
+    FNavigationInputBlockedUntilTick : UInt64;                          // ƒiƒrƒQ[ƒVƒ‡ƒ““ü—Í‚ğ–³‹‚·‚éI—¹ tick
+    // “Æ©ƒ^ƒCƒgƒ‹ƒo[¶’[‚ÌƒAƒvƒŠƒAƒCƒRƒ“‚ğì‚é
     procedure InitializeTitleIcon;
+    // ƒ^ƒCƒgƒ‹ƒo[‚Ìƒ{ƒ^ƒ“”wŒiF‚ğØ‚è‘Ö‚¦‚é
     procedure SetCaptionButtonColor(Sender: TObject; Color: TColor);
+    // Œ»İˆÊ’u‚Éè“®ƒ`ƒƒƒvƒ^[‚ğ’Ç‰Á‚·‚é
     procedure AddChapterOverlayClick(Sender: TObject);
-    procedure MaybeAutoCheckAudio(Sender: TObject; StartSample: Int64;
-      const Pcm: TBytes);
+    // ‰¹º PCM ‚©‚ç©“®ƒ`ƒFƒbƒN—pƒ`ƒƒƒvƒ^[‚ğXV‚·‚é
+    procedure MaybeAutoCheckAudio(Sender: TObject; StartSample: Int64; const Pcm: TBytes);
+    // •\¦’†ƒtƒŒ[ƒ€‚©‚ç©“®ƒ`ƒFƒbƒN—pƒ`ƒƒƒvƒ^[‚ğXV‚·‚é
     procedure MaybeAutoCheckFrame(PositionMs: Integer);
+    // Check ƒ‚[ƒh‚ğØ‚è‘Ö‚¦‚é
     procedure CheckOverlayClick(Sender: TObject);
+    // Œ»İˆÊ’u•t‹ß‚Ìè“®ƒ`ƒƒƒvƒ^[‚ğíœ‚·‚é
     procedure DeleteChapterOverlayClick(Sender: TObject);
+    // “®‰æI’[‚Ì“®ì‚ğ‡‚ÉØ‚è‘Ö‚¦‚é
     procedure CycleEndAction;
+    // Ä¶‘¬“x‚ğ‡‚ÉØ‚è‘Ö‚¦‚é
     procedure CyclePlaybackRate;
+    // overlay ‚ÌI’[“®ìƒ{ƒ^ƒ“‚©‚çØ‚è‘Ö‚¦‚ğÀs‚·‚é
     procedure EndActionOverlayClick(Sender: TObject);
+    // ‘S‰æ–Ê•\¦‚ğØ‚è‘Ö‚¦‚é
     procedure ToggleFullScreen;
+    // manager ‚Ìƒ`ƒƒƒvƒ^[î•ñ‚ğ overlay —p•\¦‚Ö”½‰f‚·‚é
     procedure RefreshChapterOverlay;
+    // I’[“®ìƒ{ƒ^ƒ“‚Ì•\¦‚ğXV‚·‚é
     procedure UpdateEndActionButton;
+    // Ä¶‘¬“xƒ{ƒ^ƒ“‚Ì•\¦‚ğXV‚·‚é
     procedure UpdatePlaybackRateButton;
+    // Å‘å‰»ƒ{ƒ^ƒ“‚Ì•\¦‚ğŒ»İó‘Ô‚É‡‚í‚¹‚é
     procedure UpdateMaximizeButton;
+    // w’èƒtƒ@ƒCƒ‹‚ğŠJ‚«A•K—v‚È‚ç©“®Ä¶‚·‚é
     function LoadVideoFile(const FileName: string; AutoPlay: Boolean;
       RestoreLoopPosition: Boolean = True): Boolean;
+    // ƒhƒƒbƒv‚³‚ê‚½æ“ªƒtƒ@ƒCƒ‹‚ğŠJ‚­
     procedure DropFiles(Sender: TObject; Control: TWinControl; const FileNames: TArray<string>);
+    // ‘OŒãƒtƒ@ƒCƒ‹ˆÚ“®ƒ{ƒ^ƒ“‚Ì—LŒøó‘Ô‚ğXV‚·‚é
     procedure UpdateNavigationButtons;
+    // Œ»İ‰Ÿ‚³‚ê‚Ä‚¢‚éƒiƒrƒQ[ƒVƒ‡ƒ“ƒL[‚ğˆê“I‚ÉƒuƒƒbƒN‚·‚é
     procedure BlockPressedNavigationKeys;
+    // ƒƒbƒZ[ƒWƒLƒ…[‚Éc‚Á‚½ƒiƒrƒQ[ƒVƒ‡ƒ“ƒL[“ü—Í‚ğÌ‚Ä‚é
     procedure ClearBufferedNavigationKeyMessages;
+    // ƒtƒHƒ‹ƒ_“à“®‰æˆê——‚ğ‘OŒã‚ÖˆÚ“®‚·‚é
     procedure NavigateBy(Delta: Integer);
+    // I’[‚Ì next “®ì—p‚ÉŸ“®‰æ‚ÖˆÚ“®‚·‚é
     procedure NavigateNextPlaybackFile;
+    // ‘OŒãƒ`ƒƒƒvƒ^[‚ÖˆÚ“®‚·‚é
     procedure NavigateChapterBy(Delta: Integer);
+    // ƒtƒ@ƒCƒ‹‘I‘ğƒ_ƒCƒAƒƒO‚©‚ç“®‰æ‚ğŠJ‚­
     procedure OpenFromDialog;
+    // w’èƒtƒ@ƒCƒ‹‚Ìè“®ƒ`ƒƒƒvƒ^[‚ÆÄŠJˆÊ’u‚ğ“Ç‚İ‚Ş
     procedure LoadManualChapterState(const FileName: string);
+    // Œ»İƒtƒ@ƒCƒ‹‚Ìè“®ƒ`ƒƒƒvƒ^[‚ğ•Û‘¶‚·‚é
     procedure SaveManualChapterState;
+    // ƒ‹[ƒvÄ¶—p‚ÌÄŠJˆÊ’u‚ğ•Û‘¶‚·‚é
     procedure SaveLoopPlaybackPosition;
+    // •Û‘¶Ï‚İ‚Ìƒ‹[ƒvÄ¶ˆÊ’u‚ğ•œŒ³‚·‚é
     function TryRestoreLoopPlaybackPosition: Boolean;
+    // ‰¹—Ê‚Æƒ~ƒ…[ƒgó‘Ô‚ğ•Û‘¶‚·‚é
     procedure SaveAudioPlaybackSettings;
+    // Œ»İˆÊ’u‚©‚çÄ¶‚·‚é
     procedure PlayFromCurrentPosition;
+    // Ä¶‚ğ’â~‚·‚é
     procedure StopPlayback;
+    // Œ»İˆÊ’u‚ğŠî€‚Éƒ‹[ƒvÄ¶‹æŠÔ‚ğ\¬‚·‚é
     procedure ConfigureLoopSegment(PositionMs: Integer);
-    // å½è£…ç”»é¢ã® Return ãƒœã‚¿ãƒ³ã‹ã‚‰ãƒœã‚¹ãŒæ¥ãŸãƒ¢ãƒ¼ãƒ‰ã‚’è§£é™¤ã™ã‚‹
+    // ‹U‘•‰æ–Ê‚Ì Return ƒ{ƒ^ƒ“‚©‚çƒ{ƒX‚ª—ˆ‚½ƒ‚[ƒh‚ğ‰ğœ‚·‚é
     procedure BossExitClick(Sender: TObject);
-    // ãƒã‚¦ã‚¹å¾€å¾©ã‚¸ã‚§ã‚¹ãƒãƒ£ãƒ¼æˆç«‹æ™‚ã«ãƒœã‚¹ãŒæ¥ãŸãƒ¢ãƒ¼ãƒ‰ã¸å…¥ã‚‹
+    // ƒ}ƒEƒX‰•œƒWƒFƒXƒ`ƒƒ[¬—§‚Éƒ{ƒX‚ª—ˆ‚½ƒ‚[ƒh‚Ö“ü‚é
     procedure BossGesture(Sender: TObject);
+    // Ä¶’†‚Ü‚½‚ÍÄ¶ÄŠJ‘Ò‚¿‚©•Ô‚·
     function PlaybackActiveOrPending: Boolean;
+    // controller ‚Æ UI ó‘Ô‚©‚çŒ»İÄ¶ˆÊ’u‚ğ•Ô‚·
     function CurrentPlaybackPositionMs: Integer;
+    // “Æ©ƒ^ƒCƒgƒ‹ƒo[‚Ö•¶š—ñ‚ğ”½‰f‚·‚é
     procedure SetTitleBarText(const Text: string);
+    // ƒtƒH[ƒ€ caption ‚Æƒ^ƒCƒgƒ‹ƒo[‚ğó‘Ô•\¦‚Æ‚µ‚ÄXV‚·‚é
     procedure SetStatusCaption(const Text: string);
+    // Ä¶’†‚Éi’»‚Æî•ñ•\¦‚ğXV‚·‚é
     procedure UpdatePlaybackProgress(PositionMs: Integer);
+    // Ä¶ tick ‚©‚çw’èˆÊ’u‚ÖƒV[ƒN‚·‚é
     procedure SeekPlaybackTickToMs(PositionMs: Integer);
+    // w’èˆÊ’u‚ÖƒV[ƒN‚µA•K—v‚È‚çÄ¶ó‘Ô‚ğ•œŒ³‚·‚é
     procedure SeekToMs(PositionMs: Integer; ResumeIfPlaying: Boolean = True);
+    // Œ»İˆÊ’u‚©‚ç‘Š‘ÎˆÚ“®‚·‚é
     procedure SeekByMs(DeltaMs: Integer);
+    // æ“ªƒtƒŒ[ƒ€‚ÖˆÚ“®‚·‚é
     procedure SeekToFirstFrame;
+    // ––”öƒtƒŒ[ƒ€‚ÖˆÚ“®‚·‚é
     procedure SeekToLastFrame;
+    // ÅIƒtƒŒ[ƒ€•\¦—p‚ÌˆÀ‘S‚ÈƒV[ƒNˆÊ’u‚ğ•Ô‚·
     function LastFrameSeekPositionMs: Integer;
+    // ƒ‹[ƒv–ß‚èˆÊ’u‚ğ•Ô‚·
     function LoopStartPositionMs: Integer;
+    // w’èˆÊ’u‚©‚çÄ¶‚ğŠJn‚·‚é
     procedure StartPlaybackAtMs(PositionMs: Integer; FrameAlreadyShown: Boolean = False);
+    // ƒV[ƒNŒã‚Ì’x‰„Ä¶ÄŠJ‚ğˆ—‚·‚é
     procedure RestartPlaybackTimer(Sender: TObject);
+    // I’[“’B‚Ì’â~/ƒ‹[ƒv/Ÿ“®‰æ“®ì‚ğˆ—‚·‚é
     procedure FinishPlaybackAtEnd;
+    // •ÊƒvƒƒZƒX‚©‚ç“n‚³‚ê‚½ƒtƒ@ƒCƒ‹‚ğŒã‚ÅŠJ‚­ƒLƒ…[‚ÖÏ‚Ş
     procedure QueueOpenAndPlayFile(const FileName: string);
+    // •Û—¯’†‚Ì open ƒLƒ…[‚ğ‡‚Éˆ—‚·‚é
     procedure ProcessOpenQueue;
+    // Œ»İƒtƒ@ƒCƒ‹‚Ì‚ ‚éƒtƒHƒ‹ƒ_ŠÄ‹‚ğ\¬‚·‚é
     procedure ConfigureCurrentFileWatch;
+    // w’èƒŠƒXƒg‚ÉŒ»İƒtƒ@ƒCƒ‹‚ªŠÜ‚Ü‚ê‚é‚©•Ô‚·
     function CurrentFileInList(const FileNames: TStringList): Boolean;
+    // Œ»İƒtƒ@ƒCƒ‹‚ğ“Ç‚İæ‚èƒI[ƒvƒ“‚Å‚«‚é‚©•Ô‚·
     function CurrentFileCanBeRead: Boolean;
-    function ReadCurrentFileStamp(out LastWriteTime: TDateTime;
-      out Size: Int64): Boolean;
+    // Œ»İƒtƒ@ƒCƒ‹‚ÌXV“ú‚ÆƒTƒCƒY‚ğ“Ç‚Ş
+    function ReadCurrentFileStamp(out LastWriteTime: TDateTime; out Size: Int64): Boolean;
+    // Œ»İƒtƒ@ƒCƒ‹‚ÌÄ“Ç‚ğ’x‰„Às‚É‚·‚é
     procedure ScheduleCurrentFileReload;
+    // XV‚ª—‚¿’…‚¢‚½‚çŒ»İƒtƒ@ƒCƒ‹‚ğŠJ‚«’¼‚·
     procedure ReloadCurrentFileTimer(Sender: TObject);
+    // ƒtƒHƒ‹ƒ_ŠÄ‹ƒCƒxƒ“ƒg‚©‚çŒ»İƒtƒ@ƒCƒ‹‚Ì•ÏX‚¾‚¯‚ğE‚¤
     procedure FolderWatchFileChange(Sender: TObject; const AddFiles: TStringList;
       const DelFiles: TStringList; const UpdateFiles: TStringList);
+    // Œ»İƒtƒ@ƒCƒ‹‚ÌXV“ú‚ÆƒTƒCƒY‚ğ‹L˜^‚·‚é
     procedure UpdateCurrentFileStamp;
+    // •ÊƒvƒƒZƒX‚©‚ç“n‚³‚ê‚½ƒtƒ@ƒCƒ‹–¼‚ğó‚¯æ‚é
     procedure WMCopyData(var Message: TWMCopyData); message WM_COPYDATA;
+    // ’Êí•\¦‚ÌˆÚ“®‚ğ window controller ‚Ö’Ê’m‚·‚é
     procedure WMMove(var Message: TWMMove); message WM_MOVE;
+    // ˜g‚È‚µƒtƒH[ƒ€‚ÌƒŠƒTƒCƒY hit test ‚ğ window controller ‚ÖˆÏ÷‚·‚é
     procedure WMNCHitTest(var Message: TWMNCHitTest); message WM_NCHITTEST;
+    // ˜g‚È‚µƒtƒH[ƒ€‚Ì”ñƒNƒ‰ƒCƒAƒ“ƒg—Ìˆæ‚ğ’²®‚·‚é
     procedure WMNCCalcSize(var Message: TMessage); message WM_NCCALCSIZE;
+    // •Û—¯’†‚Ì open ƒLƒ…[ˆ—‚ğÀs‚·‚é
     procedure WMOpenPending(var Message: TMessage); message WM_VM_OPEN_PENDING;
+    // ’Êí•\¦‚ÌƒTƒCƒY•ÏX‚ğ window controller ‚Ö’Ê’m‚·‚é
     procedure WMSize(var Message: TWMSize); message WM_SIZE;
-    // æŒ‡å®šãƒŸãƒªç§’ä½ç½®ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’è¡¨ç¤ºã™ã‚‹
+    // w’èƒ~ƒŠ•bˆÊ’u‚ÌƒtƒŒ[ƒ€‚ğ•\¦‚·‚é
     function ShowFrameAtMs(const PositionMs: Integer): Boolean;
-    // å‹•ç”»æƒ…å ±ãƒ©ãƒ™ãƒ«ã‚’æ›´æ–°ã™ã‚‹
+    // “®‰æî•ñƒ‰ƒxƒ‹‚ğXV‚·‚é
     procedure UpdateInfoLabel;
   protected
+    // ˜g‚È‚µƒtƒH[ƒ€—p‚Ìì¬ƒpƒ‰ƒ[ƒ^‚ğİ’è‚·‚é
     procedure CreateParams(var Params: TCreateParams); override;
-    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
-      MousePos: TPoint): Boolean; override;
+    // “®‰æƒT[ƒtƒFƒX‚ÌƒzƒC[ƒ‹‘€ì‚ğ—Dæ‚µ‚Äˆ—‚·‚é
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean; override;
   public
+    // w’èƒtƒ@ƒCƒ‹‚ğŠJ‚¢‚ÄÄ¶‚·‚é
     function OpenAndPlayFile(const FileName: string): Boolean;
+    // İ’è‚Éc‚Á‚Ä‚¢‚é‘O‰ñƒtƒ@ƒCƒ‹‚ğŠJ‚­
     function OpenRememberedFile: Boolean;
   end;
 
@@ -180,19 +257,19 @@ var
 implementation
 
 const
-  COPYDATA_OPEN_FILE = $564D0001;
-  UI_INFO_UPDATE_INTERVAL_MS = 250;
-  SEEK_RESTART_DELAY_MS = 15;
-  CURRENT_FILE_RELOAD_SETTLE_MS = 1500;
-  NAVIGATION_INPUT_BLOCK_MS = 300;
-  TITLE_BAR_COLOR = $00171617;
-  CLOSE_BUTTON_HOVER_COLOR = $00232323;
-  CAPTION_BUTTON_HOVER_COLOR = $00232323;
-  SLOW_OPEN_LOG_MS = 200;
+  COPYDATA_OPEN_FILE            = $564D0001; // •ÊƒvƒƒZƒX‚©‚çƒtƒ@ƒCƒ‹–¼‚ğó‚¯æ‚é COPYDATA í•Ê
+  UI_INFO_UPDATE_INTERVAL_MS    = 250;       // Ä¶’†‚Ìî•ñ•\¦‚ğXV‚·‚éÅ’ZŠÔŠu ms
+  SEEK_RESTART_DELAY_MS         = 15;        // ƒV[ƒNŒã‚ÉÄ¶ÄŠJ‚ğ’x‰„‚³‚¹‚éŠÔ ms
+  CURRENT_FILE_RELOAD_SETTLE_MS = 1500;      // ƒtƒ@ƒCƒ‹XV‚ª—‚¿’…‚­‚Ü‚ÅÄ“Ç‚ğ‘Ò‚ÂŠÔ ms
+  NAVIGATION_INPUT_BLOCK_MS     = 300;       // ‘OŒã“®‰æˆÚ“®’¼Œã‚Éc—¯ƒL[“ü—Í‚ğ–³‹‚·‚éŠÔ ms
+  TITLE_BAR_COLOR               = $00171617; // “Æ©ƒ^ƒCƒgƒ‹ƒo[‚Ì’Êí”wŒiF
+  CLOSE_BUTTON_HOVER_COLOR      = $00232323; // •Â‚¶‚éƒ{ƒ^ƒ“ hover ‚Ì”wŒiF
+  CAPTION_BUTTON_HOVER_COLOR    = $00232323; // Å¬‰»/Å‘å‰»ƒ{ƒ^ƒ“ hover ‚Ì”wŒiF
+  SLOW_OPEN_LOG_MS              = 200;       // open ˆ—‚ğ slow log ‚Öo‚·Šî€ŠÔ ms
 
 {$R *.dfm}
 
-// ãƒ•ã‚©ãƒ¼ãƒ ç”Ÿæˆæ™‚ã«ãƒ‡ã‚³ãƒ¼ãƒ€ã‚’ç”¨æ„ã™ã‚‹
+// ƒtƒH[ƒ€¶¬‚ÉƒfƒR[ƒ_‚ğ—pˆÓ‚·‚é
 procedure TVideoMinerMainForm.FormCreate(Sender: TObject);
 var
   AudioSettings: TVideoMinerAudioSettings;
@@ -286,7 +363,7 @@ begin
   SetStatusCaption('No video loaded');
 end;
 
-// ãƒ•ã‚©ãƒ¼ãƒ ç ´æ£„æ™‚ã«ãƒ‡ã‚³ãƒ¼ãƒ€ã‚’è§£æ”¾ã™ã‚‹
+// ƒtƒH[ƒ€”jŠü‚ÉƒfƒR[ƒ_‚ğ‰ğ•ú‚·‚é
 procedure TVideoMinerMainForm.FormDestroy(Sender: TObject);
 begin
   SaveManualChapterState;
@@ -365,7 +442,7 @@ begin
     Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
 end;
 
-// æŒ‡å®šãƒŸãƒªç§’ä½ç½®ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’è¡¨ç¤ºã™ã‚‹
+// w’èƒ~ƒŠ•bˆÊ’u‚ÌƒtƒŒ[ƒ€‚ğ•\¦‚·‚é
 function TVideoMinerMainForm.ShowFrameAtMs(const PositionMs: Integer): Boolean;
 var
   ErrorMessage: string;
@@ -622,7 +699,7 @@ begin
     FWindowModeController.UpdateMaximizeButton;
 end;
 
-// å‹•ç”»æƒ…å ±ãƒ©ãƒ™ãƒ«ã‚’æ›´æ–°ã™ã‚‹
+// “®‰æî•ñƒ‰ƒxƒ‹‚ğXV‚·‚é
 procedure TVideoMinerMainForm.UpdateInfoLabel;
 var
   AudioPositionMs: Integer;
@@ -984,7 +1061,7 @@ begin
   FWindowModeController.ExitBossMode;
 end;
 
-// å†ç”Ÿã‚’åœæ­¢ã™ã‚‹
+// Ä¶‚ğ’â~‚·‚é
 procedure TVideoMinerMainForm.StopPlayback;
 begin
   if FPlaybackController <> nil then
@@ -992,7 +1069,7 @@ begin
   UpdateInfoLabel;
 end;
 
-// å†ç”Ÿ tick å‡¦ç†ã‚’å†ç”Ÿ controller ã¸å§”è­²ã™ã‚‹
+// Ä¶ tick ˆ—‚ğÄ¶ controller ‚ÖˆÏ÷‚·‚é
 procedure TVideoMinerMainForm.TimerPlaybackTimer(Sender: TObject);
 begin
   FPlaybackController.Tick(FDecoder, FVideoFile, FEndAction, FSeeking,

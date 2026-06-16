@@ -1,10 +1,14 @@
-ï»¿unit FFmpegDecoderNextBgrx32;
+unit FFmpegDecoderNextBgrx32;
+
+// Œ»İˆÊ’u‚©‚çŸ‚Ì“®‰æƒtƒŒ[ƒ€‚ğ“Ç‚İABGRX32 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
+// VideoMiner ‚Ì’Êí•\¦‚Ég‚¤‡•ûŒüƒfƒR[ƒh‚Ì’†Sˆ—‚ğ’S“–‚·‚éB
 
 interface
 
 uses
   FFmpegDecoderContext;
 
+// Ÿ‚Ì“®‰æƒtƒŒ[ƒ€‚ğ“Ç‚İA•K—v‚È‚ç BGRX32 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 function DecodeNextFrameToBgrx32Optional(
   Context: TFFmpegDecoderContext;
   Buffer: Pointer;
@@ -20,6 +24,7 @@ uses
   System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo;
 
 
+// Ÿ‚Ì“®‰æƒtƒŒ[ƒ€‚ğ“Ç‚İA•K—v‚È‚ç BGRX32 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 function DecodeNextFrameToBgrx32Optional(
   Context: TFFmpegDecoderContext;
   Buffer: Pointer;

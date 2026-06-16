@@ -1,5 +1,8 @@
 unit VideoMinerMediaList;
 
+// 開いた動画と同じフォルダを作業単位として扱うメディア一覧を管理する。
+// ファイル収集、作成日時順の並び替え、前後ファイルへの移動可否だけを担当する。
+
 interface
 
 uses
@@ -8,17 +11,22 @@ uses
 type
   TVideoMinerMediaList = class
   private
-    FFiles: TArray<string>;
-    FCurrentIndex: Integer;
+    FFiles        : TArray<string>; // 現在のフォルダ内で移動対象になる動画ファイル一覧
+    FCurrentIndex : Integer;        // 一覧内で現在開いているファイル位置
     class function IsMediaFile(const FileName: string): Boolean; static;
     function GetCount: Integer;
     function GetCurrentFile: string;
   public
     constructor Create;
+    // 一覧と現在位置を未構築状態へ戻す
     procedure Clear;
+    // 指定ファイルのフォルダから動画一覧を作り、指定ファイルを現在位置にする
     procedure BuildForFile(const FileName: string);
+    // 一覧外なら空文字を返し、一覧内なら指定位置のファイル名を返す
     function FileAt(Index: Integer): string;
+    // 現在位置から Delta 分だけ移動できるか返す
     function CanNavigate(Delta: Integer): Boolean;
+    // 現在位置から Delta 分だけ移動した先のファイル名を返す
     function NavigateFile(Delta: Integer): string;
     property Count: Integer read GetCount;
     property CurrentIndex: Integer read FCurrentIndex;
@@ -30,9 +38,10 @@ implementation
 type
   TMediaFileSortInfo = class
   public
-    SortTime: TDateTime;
+    SortTime: TDateTime; // 作成日時順ソートに使う時刻
   end;
 
+// 作成日時が古い順に並べ、同時刻ならファイル名順で安定させる
 function CompareMediaFilesByTime(List: TStringList; Index1, Index2: Integer): Integer;
 var
   Info1: TMediaFileSortInfo;
@@ -49,6 +58,7 @@ begin
     Result := CompareText(ExtractFileName(List[Index1]), ExtractFileName(List[Index2]));
 end;
 
+// 作成日時を取得できないファイルでは 0 を返して呼び出し側で代替時刻を使わせる
 function GetFileCreationTime(const FileName: string): TDateTime;
 begin
   try
@@ -70,6 +80,7 @@ begin
   FCurrentIndex := -1;
 end;
 
+// 対象拡張子だけをフォルダ内ナビゲーションへ含める
 class function TVideoMinerMediaList.IsMediaFile(const FileName: string): Boolean;
 var
   Ext: string;
@@ -82,6 +93,7 @@ begin
     (Ext = '.ts') or (Ext = '.m2ts');
 end;
 
+// フォルダ内の対象ファイルを収集し、作成日時の古い順で保持する
 procedure TVideoMinerMediaList.BuildForFile(const FileName: string);
 var
   Folder: string;
@@ -138,11 +150,13 @@ begin
   end;
 end;
 
+// 現在構築済みのファイル数を返す
 function TVideoMinerMediaList.GetCount: Integer;
 begin
   Result := Length(FFiles);
 end;
 
+// 現在位置が無効な場合は空文字を返す
 function TVideoMinerMediaList.GetCurrentFile: string;
 begin
   Result := FileAt(FCurrentIndex);

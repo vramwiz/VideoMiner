@@ -1,4 +1,7 @@
-ï»¿unit FFmpegDecoderAudioPlayback;
+unit FFmpegDecoderAudioPlayback;
+
+// waveOut ‚ğg‚Á‚½’áƒŒƒxƒ‹‰¹ºo—Í‚ğˆµ‚¤B
+// PCM ƒoƒbƒtƒ@‚Ì“Š“üAÄ¶Ï‚İˆÊ’u‚Ìæ“¾A‰¹—Ê”½‰fAI—¹‚Ì‰ğ•ú‚ğ’S“–‚·‚éB
 
 interface
 
@@ -6,6 +9,7 @@ uses
   Winapi.Windows, Winapi.MMSystem, System.Generics.Collections, System.SysUtils,
   FFmpegApi, FFmpegDecoderContext, FFmpegDecoderTypes;
 
+// waveOut ‚ğŠJ‚«APCM ƒLƒ…[‚ğó‚¯‚ç‚ê‚é‰¹ºo—Íó‘Ô‚ÖˆÚs‚·‚éB
 function StartAudioPlayback(
   Context: TFFmpegDecoderContext;
   var WaveOut: HWAVEOUT;
@@ -14,12 +18,14 @@ function StartAudioPlayback(
   out ErrorMessage: string
 ): Boolean;
 
+// Ä¶’†‚Ì waveOut ‚Æ–¢Š®—¹ PCM ƒoƒbƒtƒ@‚ğ‚·‚×‚Ä’â~E‰ğ•ú‚·‚éB
 procedure StopAudioPlayback(
   var WaveOut: HWAVEOUT;
   var AudioPlaybackActive: Boolean;
   AudioBuffers: TList<PAudioWaveBuffer>
 );
 
+// PCM16 stereo 48kHz ‚Ìƒf[ƒ^‚ğ waveOut ƒLƒ…[‚Ö“Š“ü‚·‚éB
 function QueueAudioPcm16Stereo48k(
   WaveOut: HWAVEOUT;
   AudioPlaybackActive: Boolean;
@@ -28,15 +34,19 @@ function QueueAudioPcm16Stereo48k(
   out ErrorMessage: string
 ): Boolean;
 
+// waveOut ‚Ì¶‰Eƒ`ƒƒƒ“ƒlƒ‹‰¹—Ê‚ğ“¯‚¶’l‚ÅXV‚·‚éB
 procedure SetAudioOutputVolume(WaveOut: HWAVEOUT; VolumePercent: Integer);
 
+// waveOut ‚Ö“Š“üÏ‚İ‚ÅA‚Ü‚¾Š®—¹‚µ‚Ä‚¢‚È‚¢ PCM ƒTƒ“ƒvƒ‹”‚ğ•Ô‚·B
 function QueuedAudioSampleCount(WaveOut: HWAVEOUT;
   AudioBuffers: TList<PAudioWaveBuffer>): Integer;
 
+// waveOut ‚ªÄ¶Ï‚İ‚Æ‚µ‚Ä•ñ‚·‚é PCM ƒTƒ“ƒvƒ‹ˆÊ’u‚ğ•Ô‚·B
 function PlayedAudioSampleCount(WaveOut: HWAVEOUT): Integer;
 
 implementation
 
+// waveOut ‚Ì¶‰Eƒ`ƒƒƒ“ƒlƒ‹‰¹—Ê‚ğ“¯‚¶’l‚ÅXV‚·‚éB
 procedure SetAudioOutputVolume(WaveOut: HWAVEOUT; VolumePercent: Integer);
 var
   Volume: DWORD;
@@ -55,6 +65,7 @@ begin
   waveOutSetVolume(WaveOut, Volume);
 end;
 
+// waveOut ‚ªÄ¶Š®—¹‚µ‚½ PCM ƒoƒbƒtƒ@‚¾‚¯‚ğ‰ñû‚·‚éB
 procedure CleanupDoneBuffers(WaveOut: HWAVEOUT; AudioBuffers: TList<PAudioWaveBuffer>);
 var
   I: Integer;
@@ -79,6 +90,7 @@ begin
   end;
 end;
 
+// waveOut ‚Ö“Š“üÏ‚İ‚ÅA‚Ü‚¾Š®—¹‚µ‚Ä‚¢‚È‚¢ PCM ƒTƒ“ƒvƒ‹”‚ğ•Ô‚·B
 function QueuedAudioSampleCount(WaveOut: HWAVEOUT;
   AudioBuffers: TList<PAudioWaveBuffer>): Integer;
 var
@@ -95,6 +107,7 @@ begin
       Inc(Result, Buffer.Size div (AUDIO_OUTPUT_CHANNELS * SizeOf(SmallInt)));
 end;
 
+// waveOut ‚ªÄ¶Ï‚İ‚Æ‚µ‚Ä•ñ‚·‚é PCM ƒTƒ“ƒvƒ‹ˆÊ’u‚ğ•Ô‚·B
 function PlayedAudioSampleCount(WaveOut: HWAVEOUT): Integer;
 var
   Time: TMMTime;
@@ -114,6 +127,7 @@ begin
     Result := Time.cb div (AUDIO_OUTPUT_CHANNELS * SizeOf(SmallInt));
 end;
 
+// waveOut ‚ğŠJ‚«APCM ƒLƒ…[‚ğó‚¯‚ç‚ê‚é‰¹ºo—Íó‘Ô‚ÖˆÚs‚·‚éB
 function StartAudioPlayback(
   Context: TFFmpegDecoderContext;
   var WaveOut: HWAVEOUT;
@@ -167,6 +181,7 @@ begin
   Result := True;
 end;
 
+// PCM16 stereo 48kHz ‚Ìƒf[ƒ^‚ğ waveOut ƒLƒ…[‚Ö“Š“ü‚·‚éB
 function QueueAudioPcm16Stereo48k(
   WaveOut: HWAVEOUT;
   AudioPlaybackActive: Boolean;
@@ -240,6 +255,7 @@ begin
   end;
 end;
 
+// Ä¶’†‚Ì waveOut ‚Æ–¢Š®—¹ PCM ƒoƒbƒtƒ@‚ğ‚·‚×‚Ä’â~E‰ğ•ú‚·‚éB
 procedure StopAudioPlayback(
   var WaveOut: HWAVEOUT;
   var AudioPlaybackActive: Boolean;

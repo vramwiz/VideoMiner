@@ -1,10 +1,14 @@
-ï»¿unit FFmpegDecoderNextYc48;
+unit FFmpegDecoderNextYc48;
+
+// Œ»İˆÊ’u‚©‚çŸ‚Ì“®‰æƒtƒŒ[ƒ€‚ğ“Ç‚İAYC48 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
+// Œ`®•Ê‚Ì‡•ûŒüƒfƒR[ƒhˆ—‚Æ‚µ‚Ä BGRX32 Œn‚©‚ç•ª—£‚·‚éB
 
 interface
 
 uses
   FFmpegDecoderContext;
 
+// Ÿ‚Ì“®‰æƒtƒŒ[ƒ€‚ğ“Ç‚İA•K—v‚È‚ç YC48 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 function DecodeNextFrameToYc48Optional(
   Context: TFFmpegDecoderContext;
   Buffer: Pointer;
@@ -20,6 +24,7 @@ uses
   System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegStreamInfo;
 
 
+// Ÿ‚Ì“®‰æƒtƒŒ[ƒ€‚ğ“Ç‚İA•K—v‚È‚ç YC48 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 function DecodeNextFrameToYc48Optional(
   Context: TFFmpegDecoderContext;
   Buffer: Pointer;

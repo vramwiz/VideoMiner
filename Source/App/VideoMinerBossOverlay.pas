@@ -1,4 +1,4 @@
-unit VideoMinerBossOverlay;
+﻿unit VideoMinerBossOverlay;
 
 // ボスが来たモード中に動画を隠すための偽装画面描画を担当する
 // 実在するエディタ画面ではなく、仕事中に見える程度の静的な VSCode 風表示だけを描く。
@@ -9,6 +9,7 @@ interface
 uses
   System.Types, Vcl.Graphics;
 
+// 動画面全体へ偽装画面を描き、解除ボタンの矩形を返す
 procedure DrawVideoMinerBossOverlay(Canvas: TCanvas; const Bounds: TRect;
   out ExitButtonRect: TRect);
 
@@ -19,26 +20,26 @@ uses
 
 type
   TBossCodePattern = record
-    TabName: string;              // view   : 上部タブに表示するファイル名
-    HeaderText: string;           // view   : 右上に置くビルド/実行状態風テキスト
-    StartLine: Integer;           // editor : ダミーコードの開始行番号
-    Lines: array[0..15] of string; // editor : エディタ本文として描く固定行
-    StatusText: string;           // status : 下側ステータスバーの左側テキスト
+    TabName    : string;                 // 上部タブに表示するファイル名
+    HeaderText : string;                 // 右上に置くビルド/実行状態風テキスト
+    StartLine  : Integer;                // ダミーコードの開始行番号
+    Lines      : array[0..15] of string; // エディタ本文として描く固定行
+    StatusText : string;                 // 下側ステータスバーの左側テキスト
   end;
 
 const
-  BOSS_COLOR_ACTIVITY = $0023221F;      // palette : 左端アクティビティバー
-  BOSS_COLOR_SIDEBAR = $002A2926;       // palette : ファイルツリー背景
-  BOSS_COLOR_EDITOR = $001F1E1B;        // palette : エディタ背景
-  BOSS_COLOR_TAB = $002C2B28;           // palette : 選択タブ/選択行背景
-  BOSS_COLOR_STATUS = $00A5642A;        // palette : ステータスバー背景
-  BOSS_COLOR_TEXT = $00D6D0C4;          // palette : 通常文字
-  BOSS_COLOR_DIM_TEXT = $009A9388;      // palette : 補助文字
-  BOSS_COLOR_LINE_NO = $007A746B;       // palette : 行番号
-  BOSS_COLOR_BUTTON = $00413B34;        // palette : Return ボタン背景
-  BOSS_COLOR_BUTTON_BORDER = $00665D52; // palette : Return ボタン枠線
+  COLOR_ACTIVITY      = $0023221F; // 左端アクティビティバー
+  COLOR_SIDEBAR       = $002A2926; // ファイルツリー背景
+  COLOR_EDITOR        = $001F1E1B; // エディタ背景
+  COLOR_TAB           = $002C2B28; // 選択タブ/選択行背景
+  COLOR_STATUS        = $00A5642A; // ステータスバー背景
+  COLOR_TEXT          = $00D6D0C4; // 通常文字
+  COLOR_DIM_TEXT      = $009A9388; // 補助文字
+  COLOR_LINE_NO       = $007A746B; // 行番号
+  COLOR_BUTTON        = $00413B34; // Return ボタン背景
+  COLOR_BUTTON_BORDER = $00665D52; // Return ボタン枠線
 
-  BOSS_PATTERNS: array[0..3] of TBossCodePattern = (
+  PATTERNS: array[0..3] of TBossCodePattern = ( // 偽装表示で切り替える固定エディタ画面パターン
     (
       TabName: 'VideoMinerOverlay.pas';
       HeaderText: 'Debug  Win64  VideoMiner';
@@ -188,15 +189,15 @@ var
 begin
   LineRect := LineBounds;
   ClipText(Canvas, Rect(LineRect.Left, LineRect.Top, LineRect.Left + 44,
-    LineRect.Bottom), Format('%3d', [LineNo]), BOSS_COLOR_LINE_NO, 9);
+    LineRect.Bottom), Format('%3d', [LineNo]), COLOR_LINE_NO, 9);
   ClipText(Canvas, Rect(LineRect.Left + 50, LineRect.Top, LineRect.Right,
-    LineRect.Bottom), Value, BOSS_COLOR_TEXT, 9);
+    LineRect.Bottom), Value, COLOR_TEXT, 9);
 end;
 
 // 発動タイミングごとに固定パターンの見え方を少し変える
 function PatternIndex: Integer;
 begin
-  Result := Integer((GetTickCount64 div 577) mod UInt64(Length(BOSS_PATTERNS)));
+  Result := Integer((GetTickCount64 div 577) mod UInt64(Length(PATTERNS)));
 end;
 
 // 左側のファイルツリー風表示を描く
@@ -206,36 +207,36 @@ var
   Y: Integer;
 begin
   Text(Canvas, SidebarRect.Left + 14, SidebarRect.Top + 14, 'EXPLORER',
-    BOSS_COLOR_DIM_TEXT, 8, True);
+    COLOR_DIM_TEXT, 8, True);
   Text(Canvas, SidebarRect.Left + 14, SidebarRect.Top + 42, 'VideoMiner',
-    BOSS_COLOR_TEXT, 9, True);
+    COLOR_TEXT, 9, True);
 
   Y := SidebarRect.Top + 70;
   Row := Rect(SidebarRect.Left + 16, Y, SidebarRect.Right - 10, Y + 18);
-  ClipText(Canvas, Row, 'Source', BOSS_COLOR_TEXT, 9);
+  ClipText(Canvas, Row, 'Source', COLOR_TEXT, 9);
   Inc(Y, 20);
   Row := Rect(SidebarRect.Left + 30, Y, SidebarRect.Right - 10, Y + 18);
-  ClipText(Canvas, Row, 'App', BOSS_COLOR_TEXT, 9);
+  ClipText(Canvas, Row, 'App', COLOR_TEXT, 9);
   Inc(Y, 20);
   Row := Rect(SidebarRect.Left + 44, Y, SidebarRect.Right - 10, Y + 18);
-  ClipText(Canvas, Row, 'VideoMinerMainForm.pas', BOSS_COLOR_DIM_TEXT, 8);
+  ClipText(Canvas, Row, 'VideoMinerMainForm.pas', COLOR_DIM_TEXT, 8);
   Inc(Y, 19);
   Row := Rect(SidebarRect.Left + 44, Y, SidebarRect.Right - 10, Y + 18);
   Fill(Canvas, Rect(SidebarRect.Left, Y - 1, SidebarRect.Right, Y + 19),
-    BOSS_COLOR_TAB);
-  ClipText(Canvas, Row, 'VideoMinerOverlay.pas', BOSS_COLOR_TEXT, 8);
+    COLOR_TAB);
+  ClipText(Canvas, Row, 'VideoMinerOverlay.pas', COLOR_TEXT, 8);
   Inc(Y, 19);
   Row := Rect(SidebarRect.Left + 44, Y, SidebarRect.Right - 10, Y + 18);
-  ClipText(Canvas, Row, 'VideoMinerSettings.pas', BOSS_COLOR_DIM_TEXT, 8);
+  ClipText(Canvas, Row, 'VideoMinerSettings.pas', COLOR_DIM_TEXT, 8);
   Inc(Y, 28);
   Row := Rect(SidebarRect.Left + 30, Y, SidebarRect.Right - 10, Y + 18);
-  ClipText(Canvas, Row, 'Decode', BOSS_COLOR_DIM_TEXT, 9);
+  ClipText(Canvas, Row, 'Decode', COLOR_DIM_TEXT, 9);
   Inc(Y, 20);
   Row := Rect(SidebarRect.Left + 44, Y, SidebarRect.Right - 10, Y + 18);
-  ClipText(Canvas, Row, 'FFmpegDecoder.pas', BOSS_COLOR_DIM_TEXT, 8);
+  ClipText(Canvas, Row, 'FFmpegDecoder.pas', COLOR_DIM_TEXT, 8);
   Inc(Y, 28);
   Row := Rect(SidebarRect.Left + 16, Y, SidebarRect.Right - 10, Y + 18);
-  ClipText(Canvas, Row, 'note.md', BOSS_COLOR_DIM_TEXT, 9);
+  ClipText(Canvas, Row, 'note.md', COLOR_DIM_TEXT, 9);
 end;
 
 procedure DrawVideoMinerBossOverlay(Canvas: TCanvas; const Bounds: TRect;
@@ -256,8 +257,8 @@ begin
   if Bounds.IsEmpty then
     Exit;
 
-  Pattern := BOSS_PATTERNS[PatternIndex];
-  Fill(Canvas, Bounds, BOSS_COLOR_EDITOR);
+  Pattern := PATTERNS[PatternIndex];
+  Fill(Canvas, Bounds, COLOR_EDITOR);
 
   ActivityRect := Rect(Bounds.Left, Bounds.Top, Bounds.Left + 48,
     Bounds.Bottom);
@@ -275,29 +276,29 @@ begin
   EditorRect := Rect(SidebarRect.Right, TabRect.Bottom, Bounds.Right,
     StatusRect.Top);
 
-  Fill(Canvas, ActivityRect, BOSS_COLOR_ACTIVITY);
-  Fill(Canvas, SidebarRect, BOSS_COLOR_SIDEBAR);
-  Fill(Canvas, TopBarRect, BOSS_COLOR_EDITOR);
-  Fill(Canvas, TabRect, BOSS_COLOR_TAB);
+  Fill(Canvas, ActivityRect, COLOR_ACTIVITY);
+  Fill(Canvas, SidebarRect, COLOR_SIDEBAR);
+  Fill(Canvas, TopBarRect, COLOR_EDITOR);
+  Fill(Canvas, TabRect, COLOR_TAB);
   Fill(Canvas, Rect(TabRect.Right, TabRect.Top, Bounds.Right, TabRect.Bottom),
-    BOSS_COLOR_EDITOR);
-  Fill(Canvas, EditorRect, BOSS_COLOR_EDITOR);
-  Fill(Canvas, StatusRect, BOSS_COLOR_STATUS);
+    COLOR_EDITOR);
+  Fill(Canvas, EditorRect, COLOR_EDITOR);
+  Fill(Canvas, StatusRect, COLOR_STATUS);
 
   Text(Canvas, ActivityRect.Left + 17, ActivityRect.Top + 16, 'E',
-    BOSS_COLOR_TEXT, 13, True);
+    COLOR_TEXT, 13, True);
   Text(Canvas, ActivityRect.Left + 17, ActivityRect.Top + 56, 'S',
-    BOSS_COLOR_DIM_TEXT, 13, True);
+    COLOR_DIM_TEXT, 13, True);
   Text(Canvas, ActivityRect.Left + 17, ActivityRect.Top + 96, 'G',
-    BOSS_COLOR_DIM_TEXT, 13, True);
+    COLOR_DIM_TEXT, 13, True);
 
   DrawExplorer(Canvas, SidebarRect);
 
   ClipText(Canvas, Rect(TabRect.Left + 14, TabRect.Top, TabRect.Right - 10,
-    TabRect.Bottom), Pattern.TabName, BOSS_COLOR_TEXT, 10);
+    TabRect.Bottom), Pattern.TabName, COLOR_TEXT, 10);
   ClipText(Canvas, Rect(TopBarRect.Right - 260, TopBarRect.Top,
     TopBarRect.Right - 14, TopBarRect.Bottom), Pattern.HeaderText,
-    BOSS_COLOR_DIM_TEXT, 10);
+    COLOR_DIM_TEXT, 10);
 
   CodeLineRect := Rect(EditorRect.Left + 24, EditorRect.Top + 18,
     EditorRect.Right - 22, EditorRect.Top + 36);
@@ -319,15 +320,15 @@ begin
 
   ExitButtonRect := Rect(Bounds.Right - 102, StatusRect.Top + 4,
     Bounds.Right - 12, StatusRect.Bottom - 4);
-  Canvas.Brush.Color := BOSS_COLOR_BUTTON;
+  Canvas.Brush.Color := COLOR_BUTTON;
   Canvas.Brush.Style := bsSolid;
   Canvas.Pen.Style := psSolid;
-  Canvas.Pen.Color := BOSS_COLOR_BUTTON_BORDER;
+  Canvas.Pen.Color := COLOR_BUTTON_BORDER;
   Canvas.RoundRect(ExitButtonRect.Left, ExitButtonRect.Top,
     ExitButtonRect.Right, ExitButtonRect.Bottom, 6, 6);
   ClipText(Canvas, Rect(ExitButtonRect.Left + 12, ExitButtonRect.Top,
     ExitButtonRect.Right - 12, ExitButtonRect.Bottom), 'Return',
-    BOSS_COLOR_TEXT, 9);
+    COLOR_TEXT, 9);
 
   ClipText(Canvas, Rect(StatusRect.Left + 10, StatusRect.Top,
     ExitButtonRect.Left - 12, StatusRect.Bottom), Pattern.StatusText,

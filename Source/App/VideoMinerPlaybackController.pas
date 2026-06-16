@@ -1,5 +1,9 @@
 unit VideoMinerPlaybackController;
 
+// 動画再生の開始、停止、seek、tick、音声同期、終端処理を担当する。
+// メインフォームから再生中の状態管理を分離し、デコーダ、音声再生、
+// 動画ビュー、チャプター管理をつないで 1 tick ごとの再生制御を進める。
+
 interface
 
 uses
@@ -8,70 +12,96 @@ uses
   VideoMinerVideoView;
 
 type
+  // 再生終端に到達した時に caller が行う処理
   TVideoMinerPlaybackEndResult = (perStop, perLoop, perNext);
+  // 1 フレーム読み取りの結果
   TVideoMinerPlaybackDecodeResult = (pdrFrame, pdrEndOfStream, pdrError);
+  // 音声より遅れた動画フレームの補正結果
   TVideoMinerLaggingVideoResult = (lvrNoAction, lvrDropped, lvrSyncedToAudio,
     lvrError);
+  // seek guard が初期フレームをどう扱ったか
   TVideoMinerSeekGuardResult = (sgrNotGuarded, sgrAccepted, sgrContinue,
     sgrSyncedToTarget, sgrGuardError, sgrPresentError);
+  // 引数なしで main form 側の処理を呼び戻す callback
   TVideoMinerPlaybackNotifyProc = procedure of object;
+  // 再生位置 ms を main form 側へ渡す callback
   TVideoMinerPlaybackPositionProc = procedure(PositionMs: Integer) of object;
+  // 再生状態表示文字列を main form 側へ渡す callback
   TVideoMinerPlaybackStatusProc = procedure(const Text: string) of object;
+  // 指定位置のフレーム表示を main form 側へ依頼する callback
   TVideoMinerPlaybackFrameFunc = function(const PositionMs: Integer): Boolean of object;
+  // 指定位置からの再生開始を main form 側へ依頼する callback
   TVideoMinerPlaybackStartProc = procedure(PositionMs: Integer;
     FrameAlreadyShown: Boolean) of object;
 
   TVideoMinerPlaybackController = class
   private
-    FAudioPlayback: TVideoMinerAudioPlayback;
-    FPlaybackRate: Double;
-    FRestartFastSeek: Boolean;
-    FRestartFrameAlreadyShown: Boolean;
-    FRestartPending: Boolean;
-    FRestartPositionMs: Integer;
-    FRestartTimer: TTimer;
-    FRateClock: TStopwatch;
-    FRateClockActive: Boolean;
-    FRateClockBaseMs: Integer;
-    FVideoView: TVideoMinerVideoView;
-    FPlaybackTimer: TTimer;
-    FPreviewDecoder: TFFmpegDecoder;
+    FAudioPlayback            : TVideoMinerAudioPlayback; // 音声開始/停止と音声位置取得を行う再生ラッパ
+    FPlaybackRate             : Double;                   // 現在の再生速度倍率
+    FRestartFastSeek          : Boolean;                  // 再開予約時に軽い seek として扱うか
+    FRestartFrameAlreadyShown : Boolean;                  // 再開位置のフレームがすでに表示済みか
+    FRestartPending           : Boolean;                  // seek 後の再生再開予約があるか
+    FRestartPositionMs        : Integer;                  // 再開予約された再生位置 ms
+    FRestartTimer             : TTimer;                   // seek 後の遅延再開を発火する timer
+    FRateClock                : TStopwatch;               // 倍速再生時の映像位置を進める単調時計
+    FRateClockActive          : Boolean;                  // 倍速用単調時計が有効か
+    FRateClockBaseMs          : Integer;                  // 倍速用単調時計の開始位置 ms
+    FVideoView                : TVideoMinerVideoView;     // 表示更新と scratch frame 表示を行う動画ビュー
+    FPlaybackTimer            : TTimer;                   // 再生 tick を発火する timer
+    FPreviewDecoder           : TFFmpegDecoder;           // seek preview 用に使うデコーダ
   public
+    // timer、音声再生、動画ビュー、preview decoder を受け取る
     constructor Create(PlaybackTimer, RestartTimer: TTimer;
       AudioPlayback: TVideoMinerAudioPlayback; VideoView: TVideoMinerVideoView;
       PreviewDecoder: TFFmpegDecoder);
+    // 再生中、または seek 後の再開待ちかを返す
     function ActiveOrPending: Boolean;
+    // seek 後の再開予約を破棄する
     procedure ClearRestart;
+    // 再開予約を取り出し、取り出した予約をクリアする
     function ConsumeRestart(out PositionMs: Integer;
       out FrameAlreadyShown: Boolean; out FastSeek: Boolean): Boolean;
+    // UI 表示や保存に使う現在再生位置を決める
     function CurrentPositionMs(UsePlaybackPosition: Boolean;
       SeekPositionMs, CurrentVideoPositionMs, SeekMaxMs: Integer): Integer;
+    // 次の動画フレームを読み、終端やエラーを結果で返す
     function DecodeNextFrame(Decoder: TFFmpegDecoder; UseScratchFrame: Boolean;
       var ConvertFrame: Boolean; out PositionMs: Integer;
       out ErrorMessage: string): TVideoMinerPlaybackDecodeResult;
+    // seek 直後に古いフレームが返る場合の初期破棄と補正を行う
     function HandleSeekGuard(Decoder: TFFmpegDecoder; const VideoFile: string;
       DebugLogEnabled: Boolean; SeekGuardTargetMs: Integer;
       var SeekGuardRemaining: Integer; var PositionMs: Integer;
       var CurrentVideoPositionMs: Integer; var ConvertFrame: Boolean;
       out ErrorMessage: string): TVideoMinerSeekGuardResult;
+    // 音声より遅れた動画をフレーム破棄または音声位置 seek で補正する
     function HandleLaggingVideo(Decoder: TFFmpegDecoder; SeekMaxMs,
       AudioPositionMs, DropElapsedMs: Integer; var DropCount: Integer;
       var CurrentVideoPositionMs: Integer; var PositionMs: Integer;
       var ConvertFrame: Boolean; out ErrorMessage: string):
       TVideoMinerLaggingVideoResult;
+    // scratch decode で現在位置より戻ったフレームを破棄すべきか判定する
     function ShouldDropBackwardScratchFrame(const VideoFile: string;
       DebugLogEnabled: Boolean; CurrentVideoPositionMs, PositionMs: Integer):
       Boolean;
+    // scratch buffer に読んだフレームを動画ビューへ表示する
     function PresentScratchFrame(var ConvertFrame: Boolean;
       out ErrorMessage: string): Boolean;
+    // 音声位置と動画位置の差分 ms を返す
     function PlaybackLagMs(AudioPositionMs, PositionMs: Integer): Integer;
+    // 音声再生ラッパから見た現在の再生位置 ms を返す
     function PlaybackPositionMs: Integer;
+    // 倍速用単調時計から現在の再生位置 ms を求める
     function RateClockPositionMs(SeekMaxMs: Integer): Integer;
+    // 終了時動作を overlay 表示用の文字列へ変換する
     function EndActionText(EndAction: TVideoMinerEndAction): string;
+    // 終了時動作を次の設定値へ進める
     function NextEndAction(EndAction: TVideoMinerEndAction):
       TVideoMinerEndAction;
+    // 終端到達時に stop / loop / next のどれを行うか決める
     function FinishResult(EndAction: TVideoMinerEndAction;
       CanNavigateNext: Boolean): TVideoMinerPlaybackEndResult;
+    // 終端到達時の停止、ループ再開、次ファイル移動を実行する
     procedure FinishAtEnd(EndAction: TVideoMinerEndAction;
       CanNavigateNext: Boolean; LoopStartMs, SeekMaxMs: Integer;
       var SeekPositionMs: Integer; var UpdatingSeek: Boolean;
@@ -79,27 +109,36 @@ type
       StartPlaybackAtMs: TVideoMinerPlaybackStartProc;
       NavigateNext: TVideoMinerPlaybackNotifyProc;
       UpdateInfo: TVideoMinerPlaybackNotifyProc);
+    // 現在位置とチャプター状態からループ区間を更新する
     procedure ConfigureLoopSegment(EndAction: TVideoMinerEndAction;
       ChapterManager: TVideoMinerChapterManager; PositionMs, SeekMaxMs,
       LastFrameSeekPositionMs: Integer; var LoopSegmentStartMs,
       LoopSegmentEndMs: Integer);
+    // 再生 tick の主要な所要時間と同期状態を debug log へ出力する
     procedure LogPlaybackTick(const VideoFile: string; AudioPositionMs,
       PositionMs, LagMs, DropCount: Integer; DidSeekToAudio: Boolean;
       PumpMs, DecodeMs, SyncMs, TotalMs: Double; TimerInterval: Integer);
+    // tick 前に再生可能状態、音声 pump、音声位置を準備する
     function PrepareTick(IsSeeking, HasVideo: Boolean; SeekMaxMs: Integer;
       out AudioPositionMs: Integer; out ErrorMessage: string): Boolean;
+    // tick 後にシークバーへ反映する位置を求める
     function SeekPositionForTick(PositionMs, AudioPositionMs,
       SeekMaxMs: Integer): Integer;
+    // seek 後に指定位置から再生を再開する予約を入れる
     procedure ScheduleRestart(PositionMs: Integer; FrameAlreadyShown: Boolean = True;
       FastSeek: Boolean = False);
+    // 再生速度を設定し、倍速用単調時計の状態を更新する
     procedure SetPlaybackRate(Value: Double);
+    // 現在のループ区間終端に到達したか判定し、戻り先を返す
     function ShouldRestartLoop(EndAction: TVideoMinerEndAction;
       LoopSegmentStartMs, LoopSegmentEndMs, CurrentVideoPositionMs: Integer;
       out TargetMs: Integer): Boolean;
+    // デコーダと音声再生を指定位置から開始する
     function StartAtMs(Decoder: TFFmpegDecoder; const VideoFile: string;
       const VideoInfo: TVideoInfo; SeekMaxMs, PositionMs: Integer;
       FrameAlreadyShown: Boolean; FastSeek: Boolean; out TargetMs: Integer;
       out ErrorMessage: string): Boolean;
+    // 再生開始時の位置、音声、ループ区間、seek guard、表示状態をまとめて更新する
     procedure StartPlaybackAtMs(Decoder: TFFmpegDecoder; const VideoFile: string;
       const VideoInfo: TVideoInfo; EndAction: TVideoMinerEndAction;
       ChapterManager: TVideoMinerChapterManager; SeekMaxMs, PositionMs,
@@ -108,16 +147,20 @@ type
       var CurrentVideoPositionMs, SeekPositionMs, LoopSegmentStartMs,
       LoopSegmentEndMs, SeekGuardTargetMs, SeekGuardRemaining: Integer;
       SetStatus: TVideoMinerPlaybackStatusProc);
+    // 動画を音声位置へ追従させるため、必要な位置のフレームを表示する
     function SyncVideoToAudio(Decoder: TFFmpegDecoder; SeekMaxMs: Integer;
       var PositionMs: Integer; out ErrorMessage: string): Boolean;
+    // 指定位置付近のフレーム表示を試し、失敗時は近い位置へ fallback する
     function ShowFrameNearMs(PositionMs, SeekMaxMs: Integer;
       out ShownPositionMs: Integer; out ErrorMessage: string): Boolean;
+    // 指定位置へ seek し、必要なら再生再開を予約する
     procedure SeekToMs(const VideoFile: string; PositionMs: Integer;
       ResumeIfPlaying: Boolean; SeekMaxMs: Integer;
       var CurrentVideoPositionMs, SeekPositionMs, SeekGuardTargetMs,
       SeekGuardRemaining: Integer; var UpdatingSeek, Seeking: Boolean;
       SetStatus: TVideoMinerPlaybackStatusProc;
       UpdateInfo: TVideoMinerPlaybackNotifyProc);
+    // 再生中の 1 tick 全体を進め、表示、同期、終端、チェックを処理する
     procedure Tick(Decoder: TFFmpegDecoder; const VideoFile: string;
       EndAction: TVideoMinerEndAction; IsSeeking: Boolean; SeekMaxMs,
       LoopSegmentStartMs, LoopSegmentEndMs: Integer;
@@ -128,8 +171,11 @@ type
       SeekToMs: TVideoMinerPlaybackPositionProc;
       UpdatePlaybackProgress: TVideoMinerPlaybackPositionProc;
       MaybeAutoCheckFrame: TVideoMinerPlaybackPositionProc);
+    // seek のために現在の再生出力を停止する
     procedure StopForSeek;
+    // 終端停止時の timer と表示状態を停止状態へ戻す
     procedure StopAtEnd;
+    // 再生 timer、再開予約、音声出力を停止する
     procedure StopPlayback;
     property PlaybackRate: Double read FPlaybackRate write SetPlaybackRate;
   end;
@@ -140,9 +186,9 @@ uses
   System.Math, System.SysUtils, VideoMinerDebugLog, VideoMinerPlaybackTiming;
 
 const
-  SLOW_PREVIEW_LOG_MS = 120;
-  SLOW_START_LOG_MS = 150;
-  SLOW_TICK_LOG_MS = 80;
+  SLOW_PREVIEW_LOG_MS = 120; // preview frame 表示を slow log に出す閾値 ms
+  SLOW_START_LOG_MS   = 150; // 再生開始処理を slow log に出す閾値 ms
+  SLOW_TICK_LOG_MS    = 80;  // 再生 tick を slow log に出す閾値 ms
 
 constructor TVideoMinerPlaybackController.Create(PlaybackTimer,
   RestartTimer: TTimer; AudioPlayback: TVideoMinerAudioPlayback;

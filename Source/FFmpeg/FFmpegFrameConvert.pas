@@ -1,10 +1,14 @@
-ï»¿unit FFmpegFrameConvert;
+unit FFmpegFrameConvert;
+
+// FFmpeg ‚Ì AVFrame ‚ğ VideoMiner ‚ªˆµ‚¤•\¦—pƒoƒbƒtƒ@‚ÖƒRƒs[/•ÏŠ·‚·‚éB
+// sws context ‚ÌÄ—˜—pABitmap •ÏŠ·ABGR/YUV/YC48 Œ`®‚Ö‚Ìo—Í‚ğ‚±‚±‚ÉW–ñ‚·‚éB
 
 interface
 
 uses
   Vcl.Graphics, FFmpegApi;
 
+// AVFrame ‚ğ‰º‚©‚çã‚Ö•À‚Ô BGRX32 •\¦ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 procedure CopyFrameToBgrx32Buffer(
   Frame: PAVFrame;
   Buffer: Pointer;
@@ -16,6 +20,7 @@ procedure CopyFrameToBgrx32Buffer(
   var CachedDstFormat: Integer
 );
 
+// AVFrame ‚ğ‰º‚©‚çã‚Ö•À‚Ô BGR24 •\¦ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 procedure CopyFrameToBgr24Buffer(
   Frame: PAVFrame;
   Buffer: Pointer;
@@ -27,6 +32,7 @@ procedure CopyFrameToBgr24Buffer(
   var CachedDstFormat: Integer
 );
 
+// AVFrame ‚ğ YUY2 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 procedure CopyFrameToYuy2Buffer(
   Frame: PAVFrame;
   Buffer: Pointer;
@@ -38,6 +44,7 @@ procedure CopyFrameToYuy2Buffer(
   var CachedDstFormat: Integer
 );
 
+// AVFrame ‚ğ I420 planar ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 procedure CopyFrameToI420Buffer(
   Frame: PAVFrame;
   Buffer: Pointer;
@@ -49,6 +56,7 @@ procedure CopyFrameToI420Buffer(
   var CachedDstFormat: Integer
 );
 
+// AVFrame ‚ğ YC48 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 procedure CopyFrameToYc48Buffer(
   Frame: PAVFrame;
   Buffer: Pointer;
@@ -60,7 +68,10 @@ procedure CopyFrameToYc48Buffer(
   var CachedDstFormat: Integer
 );
 
+// AVFrame ‚ğˆê sws context ‚Å Bitmap ‚Ö•ÏŠ·‚·‚éB
 procedure CopyFrameToBitmap(Frame: PAVFrame; Bitmap: TBitmap);
+
+// AVFrame ‚ğÄ—˜—p‰Â”\‚È sws context ‚Å Bitmap ‚Ö•ÏŠ·‚·‚éB
 procedure CopyFrameToBitmapCached(
   Frame: PAVFrame;
   Bitmap: TBitmap;
@@ -76,6 +87,7 @@ implementation
 uses
   System.SysUtils;
 
+// •ÏŠ·Œ³ƒtƒŒ[ƒ€‚Æo—Íƒoƒbƒtƒ@‚ª—LŒø‚©Šm”F‚·‚éB
 procedure EnsureFrameAndBuffer(Frame: PAVFrame; Buffer: Pointer);
 begin
   if (Frame = nil) or (Frame.width <= 0) or (Frame.height <= 0) then
@@ -84,19 +96,22 @@ begin
     raise Exception.Create('Destination buffer is nil.');
 end;
 
+// 4 byte ‹«ŠE‚É‘µ‚¦‚½ BGR24 stride ‚ğ•Ô‚·B
 function Bgr24Stride(Width: Integer): Integer;
 begin
   Result := ((Width * 3 + 3) div 4) * 4;
 end;
 
+// 4:2:0 ‚Ì chroma plane ƒTƒCƒY‚Ég‚¤”¼•ªØ‚èã‚°’l‚ğ•Ô‚·B
 function Chroma420Size(Value: Integer): Integer;
 begin
   Result := (Value + 1) div 2;
 end;
 
+// 1 plane •ª‚ÌƒsƒNƒZƒ‹ƒf[ƒ^‚ğ stride ·‚ğ‹zû‚µ‚È‚ª‚çƒRƒs[‚·‚éB
 procedure CopyPlane(Src, Dst: PByte; SrcStride, DstStride, Width, Height: Integer);
 var
-  Y: Integer;
+  Y : Integer; // ƒRƒs[’†‚Ìs”Ô†
 begin
   if (Src = nil) or (Dst = nil) then
     raise Exception.Create('Frame plane is nil.');
@@ -109,6 +124,7 @@ begin
   end;
 end;
 
+// 8bit Y ¬•ª‚ğ YC48 ‚Ì Y ”ÍˆÍ‚Ö•ÏŠ·‚·‚éB
 function Y8ToYc48Value(Y: Byte): Integer;
 begin
   Result := ((Integer(Y) * 1197) div 64) - 299;
@@ -118,6 +134,7 @@ begin
     Result := 4096;
 end;
 
+// 8bit Cb/Cr ¬•ª‚ğ YC48 ‚Ì Cb/Cr ”ÍˆÍ‚Ö•ÏŠ·‚·‚éB
 function C8ToYc48Value(C: Byte): Integer;
 begin
   Result := ((Integer(C) - 128) * 4681 + 164) div 256;
@@ -127,6 +144,7 @@ begin
     Result := 2048;
 end;
 
+// YUV420 planar ‚ÌŠe plane ‚ğ YC48 packed ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 procedure CopyYuv420ToYc48(
   YPlane, UPlane, VPlane: PByte;
   YStride, UStride, VStride: Integer;
@@ -135,17 +153,17 @@ procedure CopyYuv420ToYc48(
   BufferStride: Integer
 );
 var
-  Row: Integer;
-  Col: Integer;
-  ChromaRow: Integer;
-  ChromaCol: Integer;
-  YSrc: PByte;
-  USrc: PByte;
-  VSrc: PByte;
-  Dst: PSmallInt;
-  Cb: Integer;
-  Cr: Integer;
-  YValue: Integer;
+  Row       : Integer;   // o—Í’†‚Ìs”Ô†
+  Col       : Integer;   // o—Í’†‚Ì—ñ”Ô†
+  ChromaRow : Integer;   // QÆ‚·‚é chroma s”Ô†
+  ChromaCol : Integer;   // QÆ‚·‚é chroma —ñ”Ô†
+  YSrc      : PByte;     // Œ»İs‚Ì Y plane æ“ª
+  USrc      : PByte;     // Œ»İs‚É‘Î‰‚·‚é U plane æ“ª
+  VSrc      : PByte;     // Œ»İs‚É‘Î‰‚·‚é V plane æ“ª
+  Dst       : PSmallInt; // YC48 o—Íæ
+  Cb        : Integer;   // YC48 ‚Ì Cb ’l
+  Cr        : Integer;   // YC48 ‚Ì Cr ’l
+  YValue    : Integer;   // YC48 ‚Ì Y ’l
 begin
   if (YPlane = nil) or (UPlane = nil) or (VPlane = nil) then
     raise Exception.Create('Frame plane is nil.');
@@ -191,6 +209,7 @@ begin
   end;
 end;
 
+// •ÏŠ·ğŒ‚ª•Ï‚í‚Á‚½ê‡‚¾‚¯ sws context ‚ğì‚è’¼‚·B
 procedure EnsureSwsContext(
   Frame: PAVFrame;
   DstFormat: Integer;
@@ -225,6 +244,7 @@ begin
     raise Exception.Create('sws_getContext failed.');
 end;
 
+// AVFrame ‚ğ‰º‚©‚çã‚Ö•À‚Ô BGRX32 •\¦ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 procedure CopyFrameToBgrx32Buffer(
   Frame: PAVFrame;
   Buffer: Pointer;
@@ -236,9 +256,9 @@ procedure CopyFrameToBgrx32Buffer(
   var CachedDstFormat: Integer
 );
 var
-  DstData: array[0..3] of PByte;
-  DstLinesize: array[0..3] of Integer;
-  DstFormat: Integer;
+  DstData     : array[0..3] of PByte;   // sws_scale ‚Ö“n‚·o—Í plane
+  DstLinesize : array[0..3] of Integer; // sws_scale ‚Ö“n‚·o—Í stride
+  DstFormat   : Integer;                // FFmpeg ‚Ìo—ÍƒsƒNƒZƒ‹Œ`®
 begin
   EnsureFrameAndBuffer(Frame, Buffer);
   if BufferStride <= 0 then
@@ -259,6 +279,7 @@ begin
     raise Exception.Create('sws_scale failed.');
 end;
 
+// AVFrame ‚ğ‰º‚©‚çã‚Ö•À‚Ô BGR24 •\¦ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 procedure CopyFrameToBgr24Buffer(
   Frame: PAVFrame;
   Buffer: Pointer;
@@ -270,9 +291,9 @@ procedure CopyFrameToBgr24Buffer(
   var CachedDstFormat: Integer
 );
 var
-  DstData: array[0..3] of PByte;
-  DstLinesize: array[0..3] of Integer;
-  DstFormat: Integer;
+  DstData     : array[0..3] of PByte;   // sws_scale ‚Ö“n‚·o—Í plane
+  DstLinesize : array[0..3] of Integer; // sws_scale ‚Ö“n‚·o—Í stride
+  DstFormat   : Integer;                // FFmpeg ‚Ìo—ÍƒsƒNƒZƒ‹Œ`®
 begin
   EnsureFrameAndBuffer(Frame, Buffer);
   if BufferStride <= 0 then
@@ -293,6 +314,7 @@ begin
     raise Exception.Create('sws_scale failed.');
 end;
 
+// AVFrame ‚ğ YUY2 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 procedure CopyFrameToYuy2Buffer(
   Frame: PAVFrame;
   Buffer: Pointer;
@@ -304,9 +326,9 @@ procedure CopyFrameToYuy2Buffer(
   var CachedDstFormat: Integer
 );
 var
-  DstData: array[0..3] of PByte;
-  DstLinesize: array[0..3] of Integer;
-  DstFormat: Integer;
+  DstData     : array[0..3] of PByte;   // sws_scale ‚Ö“n‚·o—Í plane
+  DstLinesize : array[0..3] of Integer; // sws_scale ‚Ö“n‚·o—Í stride
+  DstFormat   : Integer;                // FFmpeg ‚Ìo—ÍƒsƒNƒZƒ‹Œ`®
 begin
   EnsureFrameAndBuffer(Frame, Buffer);
   if BufferStride <= 0 then
@@ -327,6 +349,7 @@ begin
     raise Exception.Create('sws_scale failed.');
 end;
 
+// AVFrame ‚ğ I420 planar ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 procedure CopyFrameToI420Buffer(
   Frame: PAVFrame;
   Buffer: Pointer;
@@ -338,16 +361,16 @@ procedure CopyFrameToI420Buffer(
   var CachedDstFormat: Integer
 );
 var
-  DstData: array[0..3] of PByte;
-  DstLinesize: array[0..3] of Integer;
-  DstFormat: Integer;
-  ChromaWidth: Integer;
-  ChromaHeight: Integer;
-  YPlaneSize: Integer;
-  UPlaneSize: Integer;
-  YDst: PByte;
-  UDst: PByte;
-  VDst: PByte;
+  DstData      : array[0..3] of PByte;   // sws_scale ‚Ö“n‚·o—Í plane
+  DstLinesize  : array[0..3] of Integer; // sws_scale ‚Ö“n‚·o—Í stride
+  DstFormat    : Integer;                // FFmpeg ‚Ìo—ÍƒsƒNƒZƒ‹Œ`®
+  ChromaWidth  : Integer;                // U/V plane ‚Ì•
+  ChromaHeight : Integer;                // U/V plane ‚Ì‚‚³
+  YPlaneSize   : Integer;                // Y plane ‚ÌƒoƒCƒg”
+  UPlaneSize   : Integer;                // U plane ‚ÌƒoƒCƒg”
+  YDst         : PByte;                  // Y plane ‚Ìo—Íæ
+  UDst         : PByte;                  // U plane ‚Ìo—Íæ
+  VDst         : PByte;                  // V plane ‚Ìo—Íæ
 begin
   EnsureFrameAndBuffer(Frame, Buffer);
   if BufferStride <= 0 then
@@ -392,6 +415,7 @@ begin
     raise Exception.Create('sws_scale failed.');
 end;
 
+// AVFrame ‚ğ YC48 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
 procedure CopyFrameToYc48Buffer(
   Frame: PAVFrame;
   Buffer: Pointer;
@@ -403,14 +427,14 @@ procedure CopyFrameToYc48Buffer(
   var CachedDstFormat: Integer
 );
 var
-  ChromaWidth: Integer;
-  ChromaHeight: Integer;
-  YPlaneSize: Integer;
-  UPlaneSize: Integer;
-  Temp: TBytes;
-  YPlane: PByte;
-  UPlane: PByte;
-  VPlane: PByte;
+  ChromaWidth  : Integer; // U/V plane ‚Ì•
+  ChromaHeight : Integer; // U/V plane ‚Ì‚‚³
+  YPlaneSize   : Integer; // ˆê Y plane ‚ÌƒoƒCƒg”
+  UPlaneSize   : Integer; // ˆê U plane ‚ÌƒoƒCƒg”
+  Temp         : TBytes;  // I420 •ÏŠ·Œ‹‰Ê‚ğó‚¯‚éˆêƒoƒbƒtƒ@
+  YPlane       : PByte;   // ˆê Y plane
+  UPlane       : PByte;   // ˆê U plane
+  VPlane       : PByte;   // ˆê V plane
 begin
   EnsureFrameAndBuffer(Frame, Buffer);
   if BufferStride <= 0 then
@@ -443,12 +467,13 @@ begin
     Frame.width, Frame.height, Buffer, BufferStride);
 end;
 
+// AVFrame ‚ğˆê sws context ‚Å Bitmap ‚Ö•ÏŠ·‚·‚éB
 procedure CopyFrameToBitmap(Frame: PAVFrame; Bitmap: TBitmap);
 var
-  ScaleContext: PSwsContext;
-  DstData: array[0..3] of PByte;
-  DstLinesize: array[0..3] of Integer;
-  Stride: NativeInt;
+  ScaleContext : PSwsContext;            // ‚±‚Ì•ÏŠ·‚¾‚¯‚Åg‚¤ sws context
+  DstData      : array[0..3] of PByte;   // sws_scale ‚Ö“n‚· Bitmap ‘¤ plane
+  DstLinesize  : array[0..3] of Integer; // sws_scale ‚Ö“n‚· Bitmap ‘¤ stride
+  Stride       : NativeInt;              // Bitmap ‚ÌÀ stride
 begin
   if (Frame = nil) or (Frame.width <= 0) or (Frame.height <= 0) then
     raise Exception.Create('Decoded frame has invalid size.');
@@ -479,6 +504,7 @@ begin
   end;
 end;
 
+// AVFrame ‚ğÄ—˜—p‰Â”\‚È sws context ‚Å Bitmap ‚Ö•ÏŠ·‚·‚éB
 procedure CopyFrameToBitmapCached(
   Frame: PAVFrame;
   Bitmap: TBitmap;
@@ -489,10 +515,10 @@ procedure CopyFrameToBitmapCached(
   var CachedDstFormat: Integer
 );
 var
-  DstData: array[0..3] of PByte;
-  DstLinesize: array[0..3] of Integer;
-  Stride: NativeInt;
-  DstFormat: Integer;
+  DstData     : array[0..3] of PByte;   // sws_scale ‚Ö“n‚· Bitmap ‘¤ plane
+  DstLinesize : array[0..3] of Integer; // sws_scale ‚Ö“n‚· Bitmap ‘¤ stride
+  Stride      : NativeInt;              // Bitmap ‚ÌÀ stride
+  DstFormat   : Integer;                // FFmpeg ‚Ìo—ÍƒsƒNƒZƒ‹Œ`®
 begin
   if (Frame = nil) or (Frame.width <= 0) or (Frame.height <= 0) then
     raise Exception.Create('Decoded frame has invalid size.');
