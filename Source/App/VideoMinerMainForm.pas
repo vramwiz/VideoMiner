@@ -18,6 +18,8 @@ const
   WM_VM_OPEN_PENDING = WM_APP + 1;
 
 type
+  TVideoMinerKeySet = set of Byte;
+
   TVideoMinerMainForm = class(TForm)
     PanelTitleBar: TPanel;
     LabelAppTitle: TLabel;
@@ -37,6 +39,7 @@ type
     // 再生 tick 処理を再生 controller へ委譲する
     procedure TimerPlaybackTimer(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure FormKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure TitleBarMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
     procedure CloseButtonClick(Sender: TObject);
@@ -85,6 +88,8 @@ type
     FShortcuts: TShortcutAction;
     FTitleIcon: TImage;
     FLastInfoUpdateTick: UInt64;
+    FBlockedNavigationKeys: TVideoMinerKeySet;
+    FNavigationInputBlockedUntilTick: UInt64;
     procedure InitializeTitleIcon;
     procedure SetCaptionButtonColor(Sender: TObject; Color: TColor);
     procedure AddChapterOverlayClick(Sender: TObject);
@@ -105,6 +110,8 @@ type
       RestoreLoopPosition: Boolean = True): Boolean;
     procedure DropFiles(Sender: TObject; Control: TWinControl; const FileNames: TArray<string>);
     procedure UpdateNavigationButtons;
+    procedure BlockPressedNavigationKeys;
+    procedure ClearBufferedNavigationKeyMessages;
     procedure NavigateBy(Delta: Integer);
     procedure NavigateNextPlaybackFile;
     procedure NavigateChapterBy(Delta: Integer);
@@ -177,6 +184,7 @@ const
   UI_INFO_UPDATE_INTERVAL_MS = 250;
   SEEK_RESTART_DELAY_MS = 15;
   CURRENT_FILE_RELOAD_SETTLE_MS = 1500;
+  NAVIGATION_INPUT_BLOCK_MS = 300;
   TITLE_BAR_COLOR = $00171617;
   CLOSE_BUTTON_HOVER_COLOR = $00232323;
   CAPTION_BUTTON_HOVER_COLOR = $00232323;
@@ -189,6 +197,7 @@ procedure TVideoMinerMainForm.FormCreate(Sender: TObject);
 var
   AudioSettings: TVideoMinerAudioSettings;
 begin
+  OnKeyUp := FormKeyUp;
   ClearVideoMinerDebugLog('form_create');
   PanelTitleBar.Color := TITLE_BAR_COLOR;
   PanelCloseButton.Color := TITLE_BAR_COLOR;
@@ -874,6 +883,7 @@ begin
 
   FVideoInfo := OpenResult.Info;
   FVideoFile := OpenResult.FileName;
+  FVideoView.SeekWheelFrameStepMs := VideoMinerFrameDurationMs(FVideoInfo.Fps);
   ConfigureCurrentFileWatch;
   UpdateCurrentFileStamp;
   Caption := Format('%s (%d/%d)', [ExtractFileName(FVideoFile),
@@ -1009,6 +1019,43 @@ begin
   FVideoView.CanNavigateNext := FMediaList.CanNavigate(1);
 end;
 
+function IsNavigationSwitchKey(Key: Word): Boolean;
+begin
+  Result := (Key = VK_LEFT) or (Key = VK_RIGHT) or
+    (Key = VK_PRIOR) or (Key = VK_NEXT);
+end;
+
+procedure TVideoMinerMainForm.BlockPressedNavigationKeys;
+const
+  NAVIGATION_KEYS: array[0..3] of Word = (VK_LEFT, VK_RIGHT, VK_PRIOR, VK_NEXT);
+var
+  I: Integer;
+  Key: Word;
+begin
+  for I := Low(NAVIGATION_KEYS) to High(NAVIGATION_KEYS) do
+  begin
+    Key := NAVIGATION_KEYS[I];
+    if GetAsyncKeyState(Key) < 0 then
+      Include(FBlockedNavigationKeys, Byte(Key));
+  end;
+end;
+
+procedure TVideoMinerMainForm.ClearBufferedNavigationKeyMessages;
+var
+  Msg: TMsg;
+begin
+  while PeekMessage(Msg, 0, WM_KEYFIRST, WM_KEYLAST, PM_NOREMOVE) do
+  begin
+    if ((Msg.message = WM_KEYDOWN) or (Msg.message = WM_SYSKEYDOWN)) and
+       IsNavigationSwitchKey(Word(Msg.wParam)) then
+    begin
+      PeekMessage(Msg, Msg.hwnd, Msg.message, Msg.message, PM_REMOVE);
+    end
+    else
+      Break;
+  end;
+end;
+
 procedure TVideoMinerMainForm.NavigateBy(Delta: Integer);
 var
   FileName: string;
@@ -1021,6 +1068,9 @@ begin
   end;
 
   LoadVideoFile(FileName, True);
+  FNavigationInputBlockedUntilTick := GetTickCount64 + NAVIGATION_INPUT_BLOCK_MS;
+  BlockPressedNavigationKeys;
+  ClearBufferedNavigationKeyMessages;
 end;
 
 procedure TVideoMinerMainForm.NavigateNextPlaybackFile;
@@ -1145,8 +1195,23 @@ begin
     Exit;
   end;
 
+  if (Shift = []) and IsNavigationSwitchKey(Key) and
+     ((Byte(Key) in FBlockedNavigationKeys) or
+      (GetTickCount64 < FNavigationInputBlockedUntilTick)) then
+  begin
+    Key := 0;
+    Exit;
+  end;
+
   if (FShortcuts <> nil) and FShortcuts.KeyDown(Key, Shift) then
     Exit;
+end;
+
+procedure TVideoMinerMainForm.FormKeyUp(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  if IsNavigationSwitchKey(Key) then
+    Exclude(FBlockedNavigationKeys, Byte(Key));
 end;
 
 procedure TVideoMinerMainForm.QueueOpenAndPlayFile(const FileName: string);

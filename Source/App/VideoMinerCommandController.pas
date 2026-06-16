@@ -48,6 +48,7 @@ type
     procedure PlaybackRateClick(Sender: TObject);
     procedure PlayPauseClick(Sender: TObject);
     procedure Seek(Sender: TObject; PositionMs: Integer);
+    procedure SeekByWheel(Sender: TObject; PositionMs: Integer);
     procedure SeekToFirstFrame;
     procedure SeekToLastFrame;
     procedure ShortcutChapterNext;
@@ -117,6 +118,7 @@ begin
   FVideoView.OnPlaybackRateClick := PlaybackRateClick;
   FVideoView.OnPlayPauseClick := PlayPauseClick;
   FVideoView.OnSeek := Seek;
+  FVideoView.OnSeekByWheel := SeekByWheel;
   FVideoView.OnSkipBackwardClick := SkipBackwardClick;
   FVideoView.OnSkipForwardClick := SkipForwardClick;
   FVideoView.OnVolumeChange := VolumeChange;
@@ -225,6 +227,13 @@ procedure TVideoMinerCommandController.Seek(Sender: TObject;
 begin
   if Assigned(FOnSeekToMs) then
     FOnSeekToMs(PositionMs, True);
+end;
+
+procedure TVideoMinerCommandController.SeekByWheel(Sender: TObject;
+  PositionMs: Integer);
+begin
+  if Assigned(FOnSeekToMs) then
+    FOnSeekToMs(PositionMs, False);
 end;
 
 procedure TVideoMinerCommandController.SeekToFirstFrame;

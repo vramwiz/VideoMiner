@@ -41,9 +41,9 @@ begin
   Info1 := TMediaFileSortInfo(List.Objects[Index1]);
   Info2 := TMediaFileSortInfo(List.Objects[Index2]);
 
-  if Info1.SortTime > Info2.SortTime then
+  if Info1.SortTime < Info2.SortTime then
     Result := -1
-  else if Info1.SortTime < Info2.SortTime then
+  else if Info1.SortTime > Info2.SortTime then
     Result := 1
   else
     Result := CompareText(ExtractFileName(List[Index1]), ExtractFileName(List[Index2]));

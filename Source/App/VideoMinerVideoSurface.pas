@@ -41,6 +41,7 @@ type
     FOnPlaybackRateClick: TNotifyEvent;
     FOnPlayPauseClick: TNotifyEvent;
     FOnSeek: TVideoMinerOverlaySeekEvent;
+    FOnSeekByWheel: TVideoMinerOverlaySeekEvent;
     FOnSkipBackwardClick: TNotifyEvent;
     FOnSkipForwardClick: TNotifyEvent;
     FOnVolumeChange: TVideoMinerOverlayVolumeEvent;
@@ -50,6 +51,7 @@ type
     FPreviewRect: TRect;
     FSeekBar: TVideoMinerOverlaySeekBar;
     FSeekBarVisible: Boolean;
+    FSeekWheelFrameStepMs: Integer;
     FSkipBackwardButton: TVideoMinerOverlaySkipButton;
     FSkipForwardButton: TVideoMinerOverlaySkipButton;
     FZoomCenterX: Double;
@@ -78,6 +80,7 @@ type
     procedure SetChapters(const Value: TVideoMinerOverlayChapters);
     procedure SetEndActionText(const Value: string);
     procedure SetSeekBarVisible(Value: Boolean);
+    procedure SetSeekWheelFrameStepMs(Value: Integer);
     procedure SetFullScreen(Value: Boolean);
     procedure SetOverlayVisible(Value: Boolean);
     procedure SetOnFirstFrameClick(Value: TNotifyEvent);
@@ -96,6 +99,7 @@ type
     procedure SetOnPlaybackRateClick(Value: TNotifyEvent);
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
     procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
+    procedure SetOnSeekByWheel(Value: TVideoMinerOverlaySeekEvent);
     procedure SetOnSkipBackwardClick(Value: TNotifyEvent);
     procedure SetOnSkipForwardClick(Value: TNotifyEvent);
     procedure SetOnVolumeChange(Value: TVideoMinerOverlayVolumeEvent);
@@ -136,6 +140,7 @@ type
     property Chapters: TVideoMinerOverlayChapters write SetChapters;
     property EndActionText: string write SetEndActionText;
     property FullScreen: Boolean write SetFullScreen;
+    property SeekWheelFrameStepMs: Integer write SetSeekWheelFrameStepMs;
     property OnBossExitClick: TNotifyEvent read FOnBossExitClick write SetOnBossExitClick;
     property OnBossGesture: TNotifyEvent read FOnBossGesture write SetOnBossGesture;
     property OnAddChapterClick: TNotifyEvent read FOnAddChapterClick write SetOnAddChapterClick;
@@ -151,6 +156,8 @@ type
     property OnPlaybackRateClick: TNotifyEvent read FOnPlaybackRateClick write SetOnPlaybackRateClick;
     property OnPlayPauseClick: TNotifyEvent read FOnPlayPauseClick write SetOnPlayPauseClick;
     property OnSeek: TVideoMinerOverlaySeekEvent read FOnSeek write SetOnSeek;
+    property OnSeekByWheel: TVideoMinerOverlaySeekEvent read FOnSeekByWheel
+      write SetOnSeekByWheel;
     property OnSkipBackwardClick: TNotifyEvent read FOnSkipBackwardClick write SetOnSkipBackwardClick;
     property OnSkipForwardClick: TNotifyEvent read FOnSkipForwardClick write SetOnSkipForwardClick;
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent read FOnVolumeChange write SetOnVolumeChange;
@@ -169,6 +176,8 @@ uses
 const
   VIDEO_SURFACE_MAX_ZOOM = 8.0;
   VIDEO_SURFACE_MIN_ZOOM = 1.0;
+  VIDEO_SURFACE_DEFAULT_FRAME_STEP_MS = 33;
+  VIDEO_SURFACE_SEEK_WHEEL_STEP_MS = 1000;
   VIDEO_SURFACE_WHEEL_ZOOM_STEP = 1.20;
 
 constructor TVideoMinerVideoSurface.Create(AOwner: TComponent);
@@ -183,6 +192,7 @@ begin
   FPaintBuffer.PixelFormat := pf32bit;
   FOverlayVisible := False;
   FSeekBarVisible := False;
+  FSeekWheelFrameStepMs := VIDEO_SURFACE_DEFAULT_FRAME_STEP_MS;
   ResetZoom;
   FPreviousFileButton := TVideoMinerOverlayFileNavButton.Create(fndPrevious);
   FFirstFrameButton := TVideoMinerOverlayEdgeButton.Create(edFirst);
@@ -192,6 +202,7 @@ begin
   FLastFrameButton := TVideoMinerOverlayEdgeButton.Create(edLast);
   FNextFileButton := TVideoMinerOverlayFileNavButton.Create(fndNext);
   FSeekBar := TVideoMinerOverlaySeekBar.Create;
+  FSeekBar.FrameStepMs := FSeekWheelFrameStepMs;
   FSeekBar.PlaybackRateText := '1.0x';
   FSurfaceClickTimer := TTimer.Create(Self);
   FSurfaceClickTimer.Enabled := False;
@@ -783,6 +794,8 @@ var
   NewSourceWidth: Double;
   RatioX: Double;
   RatioY: Double;
+  SeekPositionMs: Integer;
+  StepMs: Integer;
 begin
   Result := False;
 
@@ -804,7 +817,18 @@ begin
   begin
     FSeekBar.UpdateLayout(DestRect);
     if FSeekBar.BoundsHitTest(LocalPoint) then
+    begin
+      SetSeekBarVisible(True);
+      if FSeekBar.CheckEnabled then
+        StepMs := FSeekWheelFrameStepMs
+      else
+        StepMs := VIDEO_SURFACE_SEEK_WHEEL_STEP_MS;
+      SeekPositionMs := FSeekBar.WheelPosition(WheelDelta, StepMs);
+      if Assigned(FOnSeekByWheel) then
+        FOnSeekByWheel(Self, SeekPositionMs);
+      Result := True;
       Exit;
+    end;
   end;
 
   if not PtInRect(DestRect, LocalPoint) then
@@ -983,6 +1007,13 @@ begin
   end;
 end;
 
+procedure TVideoMinerVideoSurface.SetSeekWheelFrameStepMs(Value: Integer);
+begin
+  FSeekWheelFrameStepMs := Max(1, Value);
+  if FSeekBar <> nil then
+    FSeekBar.FrameStepMs := FSeekWheelFrameStepMs;
+end;
+
 procedure TVideoMinerVideoSurface.SetFullScreen(Value: Boolean);
 begin
   if FSeekBar <> nil then
@@ -1147,6 +1178,12 @@ begin
   FOnSeek := Value;
   if FSeekBar <> nil then
     FSeekBar.OnSeek := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnSeekByWheel(
+  Value: TVideoMinerOverlaySeekEvent);
+begin
+  FOnSeekByWheel := Value;
 end;
 
 procedure TVideoMinerVideoSurface.SetOnVolumeChange(

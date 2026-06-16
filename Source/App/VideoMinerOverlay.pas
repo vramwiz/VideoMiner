@@ -143,6 +143,7 @@ type
     FFullScreenButtonHovered: Boolean;
     FFullScreenButtonPressed: Boolean;
     FHovered: Boolean;
+    FFrameStepMs: Integer;
     FMaxMs: Integer;
     FMuted: Boolean;
     FMuteButtonHovered: Boolean;
@@ -202,6 +203,7 @@ type
     procedure SetCheckEnabled(Value: Boolean);
     procedure SetChapters(const Value: TVideoMinerOverlayChapters);
     procedure SetFullScreen(Value: Boolean);
+    procedure SetFrameStepMs(Value: Integer);
     procedure SetMuted(Value: Boolean);
     procedure SetPlaybackRateText(const Value: string);
     procedure SetVolumePercent(Value: Integer);
@@ -218,11 +220,13 @@ type
     function MouseMove(const Point: TPoint): Boolean; override;
     function MouseUp(const Point: TPoint): Boolean; override;
     procedure SetProgress(PositionMs, MaxMs: Integer);
+    function WheelPosition(WheelDelta, StepMs: Integer): Integer;
     property CheckEnabled: Boolean read FCheckEnabled write SetCheckEnabled;
     property Chapters: TVideoMinerOverlayChapters read FChapters write SetChapters;
     property Dragging: Boolean read FDragging;
     property EndActionText: string read FEndActionText write SetEndActionText;
     property FullScreen: Boolean read FFullScreen write SetFullScreen;
+    property FrameStepMs: Integer read FFrameStepMs write SetFrameStepMs;
     property OnAddChapterClick: TNotifyEvent read FOnAddChapterClick write FOnAddChapterClick;
     property OnCheckClick: TNotifyEvent read FOnCheckClick write FOnCheckClick;
     property OnDeleteChapterClick: TNotifyEvent read FOnDeleteChapterClick write FOnDeleteChapterClick;
@@ -2006,8 +2010,13 @@ begin
     TrackCenterY - KnobRadius, KnobCenterX + KnobRadius,
     TrackCenterY + KnobRadius), 245);
 
-  Text := Format('%s / %s', [FormatTimeMs(DisplayPositionMs),
-    FormatTimeMs(FMaxMs)]);
+  if FCheckEnabled then
+    Text := Format('Frame %d / %d',
+      [DisplayPositionMs div Max(1, FFrameStepMs) + 1,
+       Max(1, FMaxMs div Max(1, FFrameStepMs) + 1)])
+  else
+    Text := Format('%s / %s', [FormatTimeMs(DisplayPositionMs),
+      FormatTimeMs(FMaxMs)]);
   Canvas.Font.Name := 'Segoe UI';
   Canvas.Font.Size := 10;
   Canvas.Font.Style := [];
@@ -2089,6 +2098,29 @@ begin
   Result := Max(0, Min(FMaxMs, Result));
 end;
 
+function TVideoMinerOverlaySeekBar.WheelPosition(WheelDelta,
+  StepMs: Integer): Integer;
+var
+  Steps: Integer;
+begin
+  if (FMaxMs <= 0) or (StepMs <= 0) then
+  begin
+    Result := DisplayPositionMs;
+    Exit;
+  end;
+
+  Steps := WheelDelta div WHEEL_DELTA;
+  if Steps = 0 then
+  begin
+    if WheelDelta > 0 then
+      Steps := 1
+    else
+      Steps := -1;
+  end;
+
+  Result := Max(0, Min(FMaxMs, DisplayPositionMs + Steps * StepMs));
+end;
+
 procedure TVideoMinerOverlaySeekBar.SetProgress(PositionMs, MaxMs: Integer);
 begin
   FMaxMs := Max(0, MaxMs);
@@ -2100,6 +2132,11 @@ end;
 procedure TVideoMinerOverlaySeekBar.SetFullScreen(Value: Boolean);
 begin
   FFullScreen := Value;
+end;
+
+procedure TVideoMinerOverlaySeekBar.SetFrameStepMs(Value: Integer);
+begin
+  FFrameStepMs := Max(1, Value);
 end;
 
 procedure TVideoMinerOverlaySeekBar.SetMuted(Value: Boolean);

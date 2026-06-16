@@ -40,11 +40,13 @@ type
     procedure SetOnPlaybackRateClick(Value: TNotifyEvent);
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
     procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
+    procedure SetOnSeekByWheel(Value: TVideoMinerOverlaySeekEvent);
     procedure SetOnSkipBackwardClick(Value: TNotifyEvent);
     procedure SetOnSkipForwardClick(Value: TNotifyEvent);
     procedure SetOnVolumeChange(Value: TVideoMinerOverlayVolumeEvent);
     procedure SetPlaybackActive(Value: Boolean);
     procedure SetPlaybackRateText(const Value: string);
+    procedure SetSeekWheelFrameStepMs(Value: Integer);
     procedure SetVolumePercent(Value: Integer);
   public
     constructor Create(Image: TImage);
@@ -90,11 +92,13 @@ type
     property OnPlaybackRateClick: TNotifyEvent write SetOnPlaybackRateClick;
     property OnPlayPauseClick: TNotifyEvent write SetOnPlayPauseClick;
     property OnSeek: TVideoMinerOverlaySeekEvent write SetOnSeek;
+    property OnSeekByWheel: TVideoMinerOverlaySeekEvent write SetOnSeekByWheel;
     property OnSkipBackwardClick: TNotifyEvent write SetOnSkipBackwardClick;
     property OnSkipForwardClick: TNotifyEvent write SetOnSkipForwardClick;
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent write SetOnVolumeChange;
     property PlaybackActive: Boolean write SetPlaybackActive;
     property PlaybackRateText: string write SetPlaybackRateText;
+    property SeekWheelFrameStepMs: Integer write SetSeekWheelFrameStepMs;
     property SurfaceControl: TWinControl read GetSurfaceControl;
     property Muted: Boolean write SetMuted;
     property VolumePercent: Integer write SetVolumePercent;
@@ -290,6 +294,13 @@ begin
     FSurface.OnSeek := Value;
 end;
 
+procedure TVideoMinerVideoView.SetOnSeekByWheel(
+  Value: TVideoMinerOverlaySeekEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnSeekByWheel := Value;
+end;
+
 procedure TVideoMinerVideoView.SetOnVolumeChange(
   Value: TVideoMinerOverlayVolumeEvent);
 begin
@@ -380,6 +391,12 @@ procedure TVideoMinerVideoView.SetSeekProgress(PositionMs, MaxMs: Integer);
 begin
   if FSurface <> nil then
     FSurface.SetSeekProgress(PositionMs, MaxMs);
+end;
+
+procedure TVideoMinerVideoView.SetSeekWheelFrameStepMs(Value: Integer);
+begin
+  if FSurface <> nil then
+    FSurface.SeekWheelFrameStepMs := Value;
 end;
 
 procedure TVideoMinerVideoView.SetVolumePercent(Value: Integer);
