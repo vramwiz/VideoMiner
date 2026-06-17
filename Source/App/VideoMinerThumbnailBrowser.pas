@@ -22,6 +22,14 @@ type
     FHoverIndex   : Integer;              // マウスが重なっているタイル位置
     FMediaList    : TVideoMinerMediaList; // 表示対象になる同一フォルダ内の動画一覧
     FOnSelected   : TVideoMinerThumbnailSelectedEvent; // タイル選択の通知先
+    FPreviewBitmap : TBitmap;            // hover プレビュー中に表示する一時画像
+    FPreviewDecoder : TFFmpegDecoder;    // hover 本プレビュー用の一時デコーダ
+    FPreviewFileName : string;           // hover 本プレビューで開いているファイル
+    FPreviewIndex  : Integer;            // hover プレビュー対象の一覧位置
+    FPreviewInfo   : TVideoInfo;         // hover 本プレビュー対象の動画情報
+    FPreviewStarted : Boolean;           // hover 本プレビューの初回 seek が済んだか
+    FPreviewStep   : Integer;            // hover プレビューの更新回数
+    FPreviewTimer  : TTimer;             // hover プレビューを更新するタイマー
     FScrollOffset : Integer;              // タイル一覧の縦スクロール量 px
     FSelectedIndex : Integer;             // キーボード操作で選択中の一覧位置
     FThumbnailFiles  : TArray<string>;    // サムネイル状態が対応するファイル名
@@ -68,8 +76,16 @@ type
     // 指定タイルのサムネイルを生成する
     procedure GenerateThumbnail(Index: Integer;
       const FileName: string);
+    // hover 本プレビュー用の次フレームを生成する
+    function GeneratePreviewFrame(Index: Integer; const FileName: string): Boolean;
+    // hover プレビューを開始待ち状態へ戻す
+    procedure ResetPreview(Index: Integer);
+    // hover プレビューを停止する
+    procedure StopPreview;
     // タイマーでサムネイルを 1 枚ずつ生成する
     procedure ThumbnailTimer(Sender: TObject);
+    // タイマーで hover プレビューを 1 フレーム進める
+    procedure PreviewTimer(Sender: TObject);
     // タイル内にサムネイル画像または生成状態を描く
     procedure DrawThumbnail(Canvas: TCanvas; Index: Integer; const Bounds: TRect);
     // タイル下部に表示するファイル名を描く
@@ -159,6 +175,10 @@ const
   THUMBNAIL_MAX_WIDTH       = 320;       // 生成サムネイルの最大幅 px
   THUMBNAIL_MAX_HEIGHT      = 180;       // 生成サムネイルの最大高さ px
   THUMBNAIL_CACHE_BURST     = 24;        // 1 tick で読み込むキャッシュ済みサムネイル数
+  PREVIEW_START_DELAY_MS    = 0;         // hover 後にプレビュー開始を待つ時間 ms
+  PREVIEW_FRAME_INTERVAL_MS = 40;        // hover 本プレビューの更新間隔 ms
+  PREVIEW_START_PERCENT     = 10;        // hover 本プレビューの開始位置 %
+  HOVER_REAL_PREVIEW_ENABLED = True;     // False にすると入口を塞いでホバープレビューを止める
 
 constructor TVideoMinerThumbnailBrowser.Create(AOwner: TComponent);
 begin
@@ -169,6 +189,9 @@ begin
   Visible := False;
   FCurrentIndex := -1;
   FHoverIndex := -1;
+  FPreviewIndex := -1;
+  FPreviewStarted := False;
+  FPreviewStep := -1;
   FSelectedIndex := -1;
   FZoomButtonHover := 0;
   FTileWidth := LoadThumbnailTileWidth(TILE_WIDTH, TILE_MIN_WIDTH,
@@ -178,10 +201,15 @@ begin
   FThumbnailTimer.Enabled := False;
   FThumbnailTimer.Interval := THUMBNAIL_TIMER_INTERVAL;
   FThumbnailTimer.OnTimer := ThumbnailTimer;
+  FPreviewTimer := TTimer.Create(Self);
+  FPreviewTimer.Enabled := False;
+  FPreviewTimer.Interval := PREVIEW_START_DELAY_MS;
+  FPreviewTimer.OnTimer := PreviewTimer;
 end;
 
 destructor TVideoMinerThumbnailBrowser.Destroy;
 begin
+  StopPreview;
   ClearThumbnails;
   inherited Destroy;
 end;
@@ -218,6 +246,7 @@ procedure TVideoMinerThumbnailBrowser.ClearThumbnails;
 var
   I: Integer;
 begin
+  StopPreview;
   if FThumbnailTimer <> nil then
     FThumbnailTimer.Enabled := False;
 
@@ -383,10 +412,10 @@ begin
       Dest := TBitmap.Create;
       try
         Dest.PixelFormat := pf32bit;
-        Dest.SetSize(ThumbWidth, ThumbHeight);
-        Dest.Canvas.Brush.Color := clBlack;
-        Dest.Canvas.FillRect(Rect(0, 0, ThumbWidth, ThumbHeight));
-        Dest.Canvas.StretchDraw(Rect(0, 0, ThumbWidth, ThumbHeight), Source);
+          Dest.SetSize(ThumbWidth, ThumbHeight);
+          Dest.Canvas.Brush.Color := clBlack;
+          Dest.Canvas.FillRect(Rect(0, 0, ThumbWidth, ThumbHeight));
+          Dest.Canvas.StretchDraw(Rect(0, 0, ThumbWidth, ThumbHeight), Source);
         FThumbnails[Index].Free;
         SaveVideoMinerThumbnailCache(FileName, Dest);
         FThumbnails[Index] := Dest;
@@ -403,6 +432,112 @@ begin
     Source.Free;
   end;
 end;
+
+function TVideoMinerThumbnailBrowser.GeneratePreviewFrame(Index: Integer;
+  const FileName: string): Boolean;
+var
+  Buffer: Pointer;
+  BufferStride: Integer;
+  Decoded: Boolean;
+  Dest: TBitmap;
+  DurationMs: Integer;
+  ErrorMessage: string;
+  PositionMs: Integer;
+  Scale: Double;
+  Source: TBitmap;
+  StartMs: Integer;
+  ThumbHeight: Integer;
+  ThumbWidth: Integer;
+begin
+  Result := False;
+  if (not HOVER_REAL_PREVIEW_ENABLED) or (Index < 0) or (FileName = '') then
+    Exit;
+
+  if (FPreviewDecoder = nil) or (FPreviewFileName <> FileName) then
+  begin
+    FreeAndNil(FPreviewDecoder);
+    FillChar(FPreviewInfo, SizeOf(FPreviewInfo), 0);
+    FPreviewFileName := '';
+    FPreviewStarted := False;
+
+    FPreviewDecoder := TFFmpegDecoder.Create;
+    if not FPreviewDecoder.Open(FileName, FPreviewInfo, ErrorMessage) then
+    begin
+      FreeAndNil(FPreviewDecoder);
+      Exit;
+    end;
+    FPreviewFileName := FileName;
+  end;
+
+  if (FPreviewInfo.Width <= 0) or (FPreviewInfo.Height <= 0) then
+    Exit;
+
+  Source := TBitmap.Create;
+  try
+    try
+      Source.PixelFormat := pf32bit;
+    Source.SetSize(FPreviewInfo.Width, FPreviewInfo.Height);
+      if FPreviewInfo.Height > 1 then
+        BufferStride := Abs(NativeInt(Source.ScanLine[1]) -
+          NativeInt(Source.ScanLine[0]))
+      else
+        BufferStride := FPreviewInfo.Width * 4;
+      Buffer := Source.ScanLine[FPreviewInfo.Height - 1];
+      if (Buffer = nil) or (BufferStride <= 0) then
+        Exit;
+
+      DurationMs := Round(FPreviewInfo.DurationSec * 1000);
+      if DurationMs <= 0 then
+        StartMs := 0
+      else
+        StartMs := Min(DurationMs - 1, Max(0,
+          MulDiv(DurationMs, PREVIEW_START_PERCENT, 100)));
+
+      Decoded := False;
+      if FPreviewStarted then
+      begin
+        Decoded := FPreviewDecoder.DecodeNextFrameToBgrx32(Buffer,
+          BufferStride, PositionMs, ErrorMessage);
+        if not Decoded then
+          FPreviewStarted := False;
+      end;
+
+      if not Decoded then
+      begin
+        Decoded := FPreviewDecoder.DecodeFrameToBgrx32(StartMs, Buffer,
+          BufferStride, ErrorMessage);
+        FPreviewStarted := Decoded;
+      end;
+
+      if not Decoded then
+        Exit;
+
+      Scale := Min(THUMBNAIL_MAX_WIDTH / Source.Width,
+      THUMBNAIL_MAX_HEIGHT / Source.Height);
+      ThumbWidth := Max(1, Round(Source.Width * Scale));
+      ThumbHeight := Max(1, Round(Source.Height * Scale));
+      Dest := TBitmap.Create;
+      try
+        Dest.PixelFormat := pf32bit;
+        Dest.SetSize(ThumbWidth, ThumbHeight);
+        Dest.Canvas.Brush.Color := clBlack;
+        Dest.Canvas.FillRect(Rect(0, 0, ThumbWidth, ThumbHeight));
+        Dest.Canvas.StretchDraw(Rect(0, 0, ThumbWidth, ThumbHeight), Source);
+        FPreviewBitmap.Free;
+        FPreviewBitmap := Dest;
+        Dest := nil;
+        Result := True;
+      finally
+        Dest.Free;
+      end;
+    except
+      Result := False;
+    end;
+  finally
+    Source.Free;
+  end;
+end;
+
 procedure TVideoMinerThumbnailBrowser.ThumbnailTimer(Sender: TObject);
 var
   CacheLoads: Integer;
@@ -442,8 +577,73 @@ begin
     FThumbnailTimer.Enabled := False;
 end;
 
+procedure TVideoMinerThumbnailBrowser.PreviewTimer(Sender: TObject);
+var
+  FileName: string;
+begin
+  if (not Visible) or (FMediaList = nil) or (FPreviewIndex < 0) or
+     (FPreviewIndex <> FHoverIndex) or (FPreviewIndex >= FMediaList.Count) then
+  begin
+    StopPreview;
+    Exit;
+  end;
+
+  Inc(FPreviewStep);
+  FileName := FMediaList.FileAt(FPreviewIndex);
+  if GeneratePreviewFrame(FPreviewIndex, FileName) then
+  begin
+    FPreviewTimer.Interval := PREVIEW_FRAME_INTERVAL_MS;
+    Invalidate;
+  end
+  else
+    StopPreview;
+end;
+
+procedure TVideoMinerThumbnailBrowser.ResetPreview(Index: Integer);
+begin
+  if (FPreviewIndex = Index) and
+     ((FPreviewBitmap <> nil) or
+      ((FPreviewTimer <> nil) and FPreviewTimer.Enabled)) then
+    Exit;
+
+  StopPreview;
+  if Index < 0 then
+    Exit;
+
+  FPreviewIndex := Index;
+  FPreviewStep := -1;
+  if PREVIEW_START_DELAY_MS <= 0 then
+  begin
+    PreviewTimer(FPreviewTimer);
+    if (FPreviewIndex = Index) and (FPreviewTimer <> nil) then
+    begin
+      FPreviewTimer.Interval := PREVIEW_FRAME_INTERVAL_MS;
+      FPreviewTimer.Enabled := True;
+    end;
+  end
+  else if FPreviewTimer <> nil then
+  begin
+    FPreviewTimer.Interval := PREVIEW_START_DELAY_MS;
+    FPreviewTimer.Enabled := True;
+  end;
+end;
+
+procedure TVideoMinerThumbnailBrowser.StopPreview;
+begin
+  if FPreviewTimer <> nil then
+    FPreviewTimer.Enabled := False;
+  FPreviewIndex := -1;
+  FPreviewStarted := False;
+  FPreviewStep := -1;
+  FPreviewFileName := '';
+  FillChar(FPreviewInfo, SizeOf(FPreviewInfo), 0);
+  FreeAndNil(FPreviewDecoder);
+  FreeAndNil(FPreviewBitmap);
+end;
+
 procedure TVideoMinerThumbnailBrowser.Close;
 begin
+  StopPreview;
   Visible := False;
   if FThumbnailTimer <> nil then
     FThumbnailTimer.Enabled := False;
@@ -466,6 +666,22 @@ begin
   if (Index < 0) or (Index >= Length(FThumbnailStates)) then
     Exit;
 
+  if (Index = FHoverIndex) and (Index = FPreviewIndex) and
+     (FPreviewBitmap <> nil) and
+     (FPreviewBitmap.Width > 0) and (FPreviewBitmap.Height > 0) then
+  begin
+    Scale := Min(Bounds.Width / FPreviewBitmap.Width,
+      Bounds.Height / FPreviewBitmap.Height);
+    ThumbWidth := Max(1, Round(FPreviewBitmap.Width * Scale));
+    ThumbHeight := Max(1, Round(FPreviewBitmap.Height * Scale));
+    DestRect := Rect(
+      Bounds.Left + (Bounds.Width - ThumbWidth) div 2,
+      Bounds.Top + (Bounds.Height - ThumbHeight) div 2,
+      Bounds.Left + (Bounds.Width - ThumbWidth) div 2 + ThumbWidth,
+      Bounds.Top + (Bounds.Height - ThumbHeight) div 2 + ThumbHeight);
+    Canvas.StretchDraw(DestRect, FPreviewBitmap);
+    Exit;
+  end;
   case FThumbnailStates[Index] of
     tsReady:
       begin
@@ -762,6 +978,7 @@ begin
   begin
     FHoverIndex := -1;
     FZoomButtonHover := 0;
+    StopPreview;
     Cursor := crDefault;
     Invalidate;
   end;
@@ -773,6 +990,7 @@ begin
   inherited KeyDown(Key, Shift);
   HandleKeyDown(Key, Shift);
 end;
+
 procedure TVideoMinerThumbnailBrowser.MouseMove(Shift: TShiftState; X,
   Y: Integer);
 var
@@ -797,7 +1015,12 @@ begin
     FHoverIndex := NewHoverIndex;
     FZoomButtonHover := NewZoomButtonHover;
     Invalidate;
-  end;
+    Update;
+    ResetPreview(FHoverIndex);
+  end
+  else if (FHoverIndex >= 0) and (FZoomButtonHover = 0) and
+          (FPreviewIndex <> FHoverIndex) then
+    ResetPreview(FHoverIndex);
 end;
 
 procedure TVideoMinerThumbnailBrowser.MouseDown(Button: TMouseButton;
@@ -980,6 +1203,7 @@ end;
 procedure TVideoMinerThumbnailBrowser.SetMediaList(
   MediaList: TVideoMinerMediaList);
 begin
+  StopPreview;
   FMediaList := MediaList;
   if FMediaList <> nil then
     FCurrentIndex := FMediaList.CurrentIndex
