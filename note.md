@@ -300,6 +300,10 @@ function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
 - 2026-06-16 時点では、下側シークバー上のホイール操作で一時停止してシークできる。
   - 通常時は 1 秒単位で移動する。
   - `Check` ON 中は 1 フレーム目安で移動し、シークバー表示を概算の `Frame n / total` に切り替える。
+- 2026-06-17 時点では、alpha 付き動画の確認用に、入力 pixel format 名と alpha 有無をデコーダ情報へ持たせるようにした。
+  - `yuva` / `rgba` / `bgra` / `argb` / `abgr` / `gbrap` / `ya` 系の pixel format を alpha 付きとして扱う。
+  - alpha 付き動画では、表示面で BGRA の alpha を市松模様へ手動合成して表示する。
+  - 動画面左上に `Alpha preview  A min-max  transparent n%` を出し、透明情報が残っているかを自作プレイヤー側で確認できる。
 
 ## 実装済みの主な機能
 

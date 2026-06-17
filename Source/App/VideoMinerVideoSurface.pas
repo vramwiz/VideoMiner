@@ -14,6 +14,11 @@ type
   TVideoMinerVideoSurface = class(TCustomControl)
   private
     FBitmap                 : TBitmap;                           // 現在表示する 32bit 動画フレーム
+    FAlphaCompositeBitmap   : TBitmap;                           // alpha 確認用に市松模様へ合成した表示フレーム
+    FAlphaCompositeDirty    : Boolean;                           // alpha 合成 Bitmap を作り直す必要があるか
+    FAlphaMax               : Byte;                              // 現在フレームの最大 alpha 値
+    FAlphaMin               : Byte;                              // 現在フレームの最小 alpha 値
+    FAlphaPixelCount        : Int64;                             // 現在フレームで alpha が 255 未満のピクセル数
     FBossExitButtonRect     : TRect;                             // 偽装画面の解除ボタン位置
     FBossGestureDetector    : TVideoMinerBossGestureDetector;    // ボスが来たモード発動用のマウスジェスチャー検出器
     FBossMode               : Boolean;                           // 動画を隠して偽装画面を表示中か
@@ -57,6 +62,7 @@ type
     FSeekWheelFrameStepMs   : Integer;                           // Check 中ホイールシークの 1 ステップ幅 ms
     FSkipBackwardButton     : TVideoMinerOverlaySkipButton;      // 10 秒戻しの中央ボタン
     FSkipForwardButton      : TVideoMinerOverlaySkipButton;      // 10 秒進みの中央ボタン
+    FSourceHasAlpha         : Boolean;                           // 現在の動画が alpha を持つ形式か
     FZoomCenterX            : Double;                            // ズーム表示の画像中心 X
     FZoomCenterY            : Double;                            // ズーム表示の画像中心 Y
     FZoomScale              : Double;                            // 現在のズーム倍率
@@ -74,6 +80,10 @@ type
     function HitPreviousFileButton(const Point: TPoint): Boolean;
     // 現在のズーム状態に従って動画フレームを描画する
     procedure DrawFrame(Canvas: TCanvas; const DestRect: TRect);
+    // alpha 確認用の市松模様合成 Bitmap を最新化する
+    procedure EnsureAlphaCompositeBitmap;
+    // alpha 確認状態を動画面左上へ描く
+    procedure DrawAlphaStatus(Canvas: TCanvas; const DestRect: TRect);
     // クライアント領域内に動画全体が収まる描画矩形を返す
     function FitRect: TRect;
     // 中央 overlay ボタン群に当たっているか返す
@@ -152,6 +162,8 @@ type
     procedure SetPlaybackActive(Value: Boolean);
     // 再生速度表示文字列を overlay へ渡す
     procedure SetPlaybackRateText(const Value: string);
+    // 現在の動画が alpha を持つかを表示面へ渡す
+    procedure SetSourceHasAlpha(Value: Boolean);
     // 音量パーセントを overlay へ渡す
     procedure SetVolumePercent(Value: Integer);
     // 単クリックが確定した時点で再生/一時停止を発火する
@@ -224,6 +236,7 @@ type
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent read FOnVolumeChange write SetOnVolumeChange;
     property PlaybackActive: Boolean write SetPlaybackActive;
     property PlaybackRateText: string write SetPlaybackRateText;
+    property SourceHasAlpha: Boolean read FSourceHasAlpha write SetSourceHasAlpha;
     property Muted: Boolean write SetMuted;
     property VolumePercent: Integer write SetVolumePercent;
   end;
@@ -240,6 +253,7 @@ const
   DEFAULT_FRAME_STEP_MS = 33;   // FPS 不明時の 1 フレーム相当ステップ ms
   SEEK_WHEEL_STEP_MS    = 1000; // 通常時のホイールシーク幅 ms
   WHEEL_ZOOM_STEP       = 1.20; // ホイール 1 ノッチあたりのズーム倍率
+  ALPHA_CHECK_SIZE      = 16;   // alpha 確認表示の市松模様 1 マス px
 
 constructor TVideoMinerVideoSurface.Create(AOwner: TComponent);
 begin
@@ -248,6 +262,10 @@ begin
   DoubleBuffered := False;
 
   FBitmap := TBitmap.Create;
+  FAlphaCompositeBitmap := TBitmap.Create;
+  FAlphaCompositeBitmap.PixelFormat := pf32bit;
+  FAlphaCompositeDirty := True;
+  FAlphaMin := 255;
   FBossGestureDetector := TVideoMinerBossGestureDetector.Create;
   FPaintBuffer := TBitmap.Create;
   FPaintBuffer.PixelFormat := pf32bit;
@@ -293,6 +311,7 @@ begin
   FFirstFrameButton.Free;
   FPreviousFileButton.Free;
   FPaintBuffer.Free;
+  FAlphaCompositeBitmap.Free;
   FBitmap.Free;
   inherited Destroy;
 end;
@@ -320,6 +339,11 @@ procedure TVideoMinerVideoSurface.Clear;
 begin
   CancelPendingSurfaceClick;
   FBitmap.SetSize(0, 0);
+  FAlphaCompositeBitmap.SetSize(0, 0);
+  FAlphaCompositeDirty := True;
+  FAlphaMin := 255;
+  FAlphaMax := 0;
+  FAlphaPixelCount := 0;
   FPanning := False;
   FPanMoved := False;
   FOverlayVisible := False;
@@ -366,6 +390,7 @@ begin
     BufferStride := Width * 4;
 
   Buffer := FBitmap.ScanLine[Height - 1];
+  FAlphaCompositeDirty := True;
   Result := (Buffer <> nil) and (BufferStride > 0);
 end;
 
@@ -442,8 +467,117 @@ begin
   Result.Bottom := Result.Top + DrawHeight;
 end;
 
+procedure TVideoMinerVideoSurface.EnsureAlphaCompositeBitmap;
+var
+  Alpha       : Integer; // 元フレームの alpha 値
+  CheckerBlue : Integer; // 市松模様の B 成分
+  CheckerGreen: Integer; // 市松模様の G 成分
+  CheckerRed  : Integer; // 市松模様の R 成分
+  Dst         : PByte;   // 合成先 pixel
+  Src         : PByte;   // 元フレーム pixel
+  SrcBlue     : Integer; // 元フレームの B 成分
+  SrcGreen    : Integer; // 元フレームの G 成分
+  SrcRed      : Integer; // 元フレームの R 成分
+  X           : Integer; // 処理中の X 座標
+  Y           : Integer; // 処理中の Y 座標
+begin
+  if (not FSourceHasAlpha) or (FBitmap.Width <= 0) or (FBitmap.Height <= 0) then
+    Exit;
+
+  if (not FAlphaCompositeDirty) and
+     (FAlphaCompositeBitmap.Width = FBitmap.Width) and
+     (FAlphaCompositeBitmap.Height = FBitmap.Height) then
+    Exit;
+
+  if FAlphaCompositeBitmap.PixelFormat <> pf32bit then
+    FAlphaCompositeBitmap.PixelFormat := pf32bit;
+  if (FAlphaCompositeBitmap.Width <> FBitmap.Width) or
+     (FAlphaCompositeBitmap.Height <> FBitmap.Height) then
+    FAlphaCompositeBitmap.SetSize(FBitmap.Width, FBitmap.Height);
+
+  FAlphaMin := 255;
+  FAlphaMax := 0;
+  FAlphaPixelCount := 0;
+  for Y := 0 to FBitmap.Height - 1 do
+  begin
+    Src := FBitmap.ScanLine[FBitmap.Height - 1 - Y];
+    Dst := FAlphaCompositeBitmap.ScanLine[FAlphaCompositeBitmap.Height - 1 - Y];
+    for X := 0 to FBitmap.Width - 1 do
+    begin
+      SrcBlue := Src^;
+      Inc(Src);
+      SrcGreen := Src^;
+      Inc(Src);
+      SrcRed := Src^;
+      Inc(Src);
+      Alpha := Src^;
+      Inc(Src);
+
+      if Alpha < FAlphaMin then
+        FAlphaMin := Alpha;
+      if Alpha > FAlphaMax then
+        FAlphaMax := Alpha;
+      if Alpha < 255 then
+        Inc(FAlphaPixelCount);
+
+      if (((X div ALPHA_CHECK_SIZE) + (Y div ALPHA_CHECK_SIZE)) and 1) = 0 then
+      begin
+        CheckerRed := 216;
+        CheckerGreen := 216;
+        CheckerBlue := 216;
+      end
+      else
+      begin
+        CheckerRed := 128;
+        CheckerGreen := 128;
+        CheckerBlue := 128;
+      end;
+
+      Dst^ := Byte((SrcBlue * Alpha + CheckerBlue * (255 - Alpha) + 127) div 255);
+      Inc(Dst);
+      Dst^ := Byte((SrcGreen * Alpha + CheckerGreen * (255 - Alpha) + 127) div 255);
+      Inc(Dst);
+      Dst^ := Byte((SrcRed * Alpha + CheckerRed * (255 - Alpha) + 127) div 255);
+      Inc(Dst);
+      Dst^ := 255;
+      Inc(Dst);
+    end;
+  end;
+  FAlphaCompositeDirty := False;
+end;
+
+procedure TVideoMinerVideoSurface.DrawAlphaStatus(Canvas: TCanvas;
+  const DestRect: TRect);
+var
+  Percent : Double; // alpha が 255 未満の pixel 割合
+  Text    : string; // 表示する診断文字列
+  TextRect: TRect;  // 背景付きで描く文字領域
+  TextSize: TSize;  // 診断文字列の表示サイズ
+begin
+  if (not FSourceHasAlpha) or DestRect.IsEmpty then
+    Exit;
+
+  EnsureAlphaCompositeBitmap;
+  Percent := 0;
+  if (FBitmap.Width > 0) and (FBitmap.Height > 0) then
+    Percent := FAlphaPixelCount * 100.0 / (Int64(FBitmap.Width) * FBitmap.Height);
+  Text := Format('Alpha preview  A %d-%d  transparent %.1f%%',
+    [FAlphaMin, FAlphaMax, Percent]);
+
+  Canvas.Font.Name := 'Segoe UI';
+  Canvas.Font.Size := 9;
+  Canvas.Font.Style := [];
+  TextSize := Canvas.TextExtent(Text);
+  TextRect := Rect(DestRect.Left + 10, DestRect.Top + 10,
+    DestRect.Left + 18 + TextSize.cx, DestRect.Top + 16 + TextSize.cy);
+  Canvas.Brush.Color := clBlack;
+  Canvas.Font.Color := clWhite;
+  Canvas.FillRect(TextRect);
+  Canvas.TextOut(TextRect.Left + 4, TextRect.Top + 3, Text);
+end;
 procedure TVideoMinerVideoSurface.DrawFrame(Canvas: TCanvas; const DestRect: TRect);
 var
+  FrameBitmap : TBitmap;
   SourceHeight: Integer;
   SourceRect: TRect;
   SourceWidth: Integer;
@@ -451,9 +585,18 @@ begin
   if (FBitmap.Width <= 0) or (FBitmap.Height <= 0) then
     Exit;
 
+  FrameBitmap := FBitmap;
+  if FSourceHasAlpha then
+  begin
+    EnsureAlphaCompositeBitmap;
+    if (FAlphaCompositeBitmap.Width = FBitmap.Width) and
+       (FAlphaCompositeBitmap.Height = FBitmap.Height) then
+      FrameBitmap := FAlphaCompositeBitmap;
+  end;
+
   if FZoomScale <= MIN_ZOOM then
   begin
-    Canvas.StretchDraw(DestRect, FBitmap);
+    Canvas.StretchDraw(DestRect, FrameBitmap);
     Exit;
   end;
 
@@ -474,7 +617,7 @@ begin
   if SourceRect.Bottom > FBitmap.Height then
     OffsetRect(SourceRect, 0, FBitmap.Height - SourceRect.Bottom);
 
-  Canvas.CopyRect(DestRect, FBitmap.Canvas, SourceRect);
+  Canvas.CopyRect(DestRect, FrameBitmap.Canvas, SourceRect);
 end;
 
 function TVideoMinerVideoSurface.ImagePointFromClient(const Point: TPoint;
@@ -985,6 +1128,7 @@ begin
     DrawCanvas.FillRect(Rect(DestRect.Right, DestRect.Top, ClientWidth, DestRect.Bottom));
 
   DrawFrame(DrawCanvas, DestRect);
+  DrawAlphaStatus(DrawCanvas, DestRect);
   if FPreviousFileButton <> nil then
     FPreviousFileButton.UpdateLayout(ClientRect);
   if FFirstFrameButton <> nil then
@@ -1040,15 +1184,29 @@ end;
 
 procedure TVideoMinerVideoSurface.Present;
 begin
+  FAlphaCompositeDirty := True;
   Invalidate;
 end;
 
 procedure TVideoMinerVideoSurface.PresentImmediate;
 begin
+  FAlphaCompositeDirty := True;
   Invalidate;
   Update;
 end;
 
+procedure TVideoMinerVideoSurface.SetSourceHasAlpha(Value: Boolean);
+begin
+  if FSourceHasAlpha = Value then
+    Exit;
+
+  FSourceHasAlpha := Value;
+  FAlphaCompositeDirty := True;
+  FAlphaMin := 255;
+  FAlphaMax := 0;
+  FAlphaPixelCount := 0;
+  Invalidate;
+end;
 procedure TVideoMinerVideoSurface.SetPlaybackActive(Value: Boolean);
 begin
   if (FPlayPauseButton <> nil) and (FPlayPauseButton.IsPlaying <> Value) then

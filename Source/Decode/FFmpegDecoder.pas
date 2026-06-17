@@ -85,13 +85,13 @@ type
     // 開いているファイルの音声を指定サンプル数までPCM16 stereo 48kHzへ順次デコードする
     function DecodeAudioPcm16Stereo48kUntil(TargetSampleCount: Integer; var Pcm: TBytes; var SampleCount: Integer; out Finished: Boolean; out ErrorMessage: string): Boolean;
     function SeekAudioToMs(PositionMs: Integer; out ErrorMessage: string): Boolean;
-    // ������Y�
+    // �����Y�
     function StartAudioPlayback(out ErrorMessage: string): Boolean;
     function QueueAudioPcm16Stereo48k(const Pcm: TBytes; out ErrorMessage: string): Boolean;
     function QueuedAudioSampleCount: Integer;
     function PlayedAudioSampleCount: Integer;
     procedure SetAudioOutputVolume(VolumePercent: Integer);
-    // ����\bY�
+    // ���\bY�
     procedure StopAudioPlayback;
     // 一時デコーダで動画情報だけを読む
     class function ReadVideoInfo(const FileName: string; out Info: TVideoInfo; out ErrorMessage: string): Boolean; static;
@@ -110,6 +110,20 @@ uses
   FFmpegDecoderSeekI420, FFmpegDecoderSeekYuy2, FFmpegDecoderSeekYc48,
   FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo, VideoMinerSettings;
 
+// pixel format 名から alpha channel/plane を持つ形式か推定する
+function PixelFormatHasAlpha(const PixelFormatText: string): Boolean;
+var
+  LowerName: string;
+begin
+  LowerName := LowerCase(PixelFormatText);
+  Result := (Pos('yuva', LowerName) = 1) or
+    (Pos('rgba', LowerName) = 1) or
+    (Pos('bgra', LowerName) = 1) or
+    (Pos('argb', LowerName) = 1) or
+    (Pos('abgr', LowerName) = 1) or
+    (Pos('gbrap', LowerName) = 1) or
+    (Pos('ya', LowerName) = 1);
+end;
 
 // デコーダインスタンスを初期化する
 constructor TFFmpegDecoder.Create;
@@ -205,7 +219,7 @@ end;
 
 
 
-// ������Y�
+// �����Y�
 function TFFmpegDecoder.StartAudioPlayback(out ErrorMessage: string): Boolean;
 begin
   SyncContextFromFields;
@@ -235,7 +249,7 @@ begin
   FFmpegDecoderAudioPlayback.SetAudioOutputVolume(FWaveOut, VolumePercent);
 end;
 
-// ����\bY�
+// ���\bY�
 procedure TFFmpegDecoder.StopAudioPlayback;
 begin
   FFmpegDecoderAudioPlayback.StopAudioPlayback(FWaveOut, FAudioPlaybackActive,
@@ -467,6 +481,9 @@ begin
       Info.Height := CodecPar.height;
       Info.FpsText := RationalToText(Stream.avg_frame_rate);
       Info.Fps := RationalToDouble(Stream.avg_frame_rate);
+      Info.PixelFormat := CodecPar.format;
+      Info.PixelFormatName := PixelFormatName(CodecPar.format);
+      Info.HasAlpha := PixelFormatHasAlpha(Info.PixelFormatName);
 
       if (Info.Width <= 0) or (Info.Height <= 0) then
       begin

@@ -28,14 +28,16 @@ type
   end;
 
   TVideoInfo = record
-    Width       : Integer;    // 動画フレームの幅 px
-    Height      : Integer;    // 動画フレームの高さ px
-    DurationSec : Double;     // 動画全体の長さ 秒
-    FpsText     : string;     // UI 表示用の FPS 文字列
-    Fps         : Double;     // 再生制御に使う FPS 値
-    Audio       : TAudioInfo; // 同じ入力ファイルから読んだ音声情報
+    Width           : Integer;    // 動画フレームの幅 px
+    Height          : Integer;    // 動画フレームの高さ px
+    DurationSec     : Double;     // 動画全体の長さ 秒
+    FpsText         : string;     // UI 表示用の FPS 文字列
+    Fps             : Double;     // 再生制御に使う FPS 値
+    PixelFormat     : Integer;    // 入力映像ストリームの FFmpeg pixel format
+    PixelFormatName : string;     // 調査表示用の pixel format 名
+    HasAlpha        : Boolean;    // 入力映像が alpha plane/channel を持つか
+    Audio           : TAudioInfo; // 同じ入力ファイルから読んだ音声情報
   end;
-
 implementation
 
 end.

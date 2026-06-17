@@ -703,6 +703,7 @@ end;
 procedure TVideoMinerMainForm.UpdateInfoLabel;
 var
   AudioPositionMs: Integer;
+  AlphaText: string;
   AudioText: string;
   CurrentPositionMs: Integer;
   VideoPositionMs: Integer;
@@ -725,6 +726,13 @@ begin
   else
     AudioText := 'audio: none';
 
+  if FVideoInfo.HasAlpha then
+    AlphaText := Format(' / pix_fmt: %s / alpha', [FVideoInfo.PixelFormatName])
+  else if FVideoInfo.PixelFormatName <> '' then
+    AlphaText := Format(' / pix_fmt: %s', [FVideoInfo.PixelFormatName])
+  else
+    AlphaText := '';
+
   CurrentPositionMs := CurrentPlaybackPositionMs;
   VideoPositionMs := FCurrentVideoPositionMs;
   if VideoPositionMs < 0 then
@@ -739,7 +747,7 @@ begin
     [ExtractFileName(FVideoFile), FMediaList.CurrentIndex + 1, FMediaList.Count,
      CurrentPositionMs / 1000, FSeekMaxMs / 1000,
      VideoPositionMs / 1000, AudioPositionMs / 1000,
-     FVideoInfo.Width, FVideoInfo.Height, FVideoInfo.Fps, AudioText]);
+     FVideoInfo.Width, FVideoInfo.Height, FVideoInfo.Fps, AudioText + AlphaText]);
   SetTitleBarText(Format('%s (%d/%d)', [ExtractFileName(FVideoFile),
     FMediaList.CurrentIndex + 1, FMediaList.Count]));
   FVideoView.SetSeekProgress(CurrentPositionMs, FSeekMaxMs);
@@ -960,6 +968,7 @@ begin
 
   FVideoInfo := OpenResult.Info;
   FVideoFile := OpenResult.FileName;
+  FVideoView.SourceHasAlpha := FVideoInfo.HasAlpha;
   FVideoView.SeekWheelFrameStepMs := VideoMinerFrameDurationMs(FVideoInfo.Fps);
   ConfigureCurrentFileWatch;
   UpdateCurrentFileStamp;

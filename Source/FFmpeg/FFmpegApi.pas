@@ -243,6 +243,7 @@ type
   Tav_strerror = function(errnum: Integer; errbuf: PAnsiChar;
     errbuf_size: NativeUInt): Integer; cdecl;
   Tav_get_sample_fmt_name = function(sample_fmt: Integer): PAnsiChar; cdecl;
+  Tav_get_pix_fmt_name = function(pix_fmt: Integer): PAnsiChar; cdecl;
   Tav_opt_set = function(obj: Pointer; name, val: PAnsiChar;
     search_flags: Integer): Integer; cdecl;
   Tav_hwdevice_ctx_create = function(device_ctx: PPAVBufferRef; dev_type: Integer;
@@ -353,6 +354,7 @@ type
     class var av_frame_make_writable        : Tav_frame_make_writable;        // AVFrameを書き込み可能にする関数
     class var av_strerror                   : Tav_strerror;                   // FFmpegエラーコードを文字列化する関数
     class var av_get_sample_fmt_name        : Tav_get_sample_fmt_name;        // サンプル形式名を取得する関数
+    class var av_get_pix_fmt_name           : Tav_get_pix_fmt_name;           // pixel format 名を取得する関数
     class var av_samples_get_buffer_size    : Tav_samples_get_buffer_size;    // 音声サンプルのバイト数を計算する関数
     class var av_channel_layout_default     : Tav_channel_layout_default;     // 標準チャンネルレイアウトを作る関数
     class var av_channel_layout_copy        : Tav_channel_layout_copy;        // チャンネルレイアウトをコピーする関数
@@ -396,6 +398,8 @@ function StreamTimestampFromMs(Stream: PAVStream; PositionMs: Integer): Int64;
 function StreamTimestampToMs(Stream: PAVStream; Timestamp: Int64): Integer;
 // FFmpeg のサンプル形式番号を表示用文字列に変換する。
 function SampleFormatName(SampleFormat: Integer): string;
+// FFmpeg の pixel format 番号を表示用文字列に変換する。
+function PixelFormatName(PixelFormat: Integer): string;
 
 implementation
 
@@ -457,6 +461,8 @@ begin
   av_strerror := Tav_strerror(LoadProc(FAvUtil, 'av_strerror'));
   av_get_sample_fmt_name := Tav_get_sample_fmt_name(LoadProc(FAvUtil,
     'av_get_sample_fmt_name'));
+  av_get_pix_fmt_name := Tav_get_pix_fmt_name(LoadProc(FAvUtil,
+    'av_get_pix_fmt_name'));
   av_frame_alloc := Tav_frame_alloc(LoadProc(FAvUtil, 'av_frame_alloc'));
   av_frame_free := Tav_frame_free(LoadProc(FAvUtil, 'av_frame_free'));
   av_frame_get_buffer := Tav_frame_get_buffer(LoadProc(FAvUtil, 'av_frame_get_buffer'));
@@ -584,6 +590,20 @@ begin
   if Assigned(TFFmpegApi.av_get_sample_fmt_name) then
   begin
     Name := TFFmpegApi.av_get_sample_fmt_name(SampleFormat);
+    if Name <> nil then
+      Result := string(AnsiString(Name));
+  end;
+end;
+
+// FFmpeg の pixel format 番号を表示用文字列に変換する。
+function PixelFormatName(PixelFormat: Integer): string;
+var
+  Name : PAnsiChar; // FFmpeg から返る pixel format 名
+begin
+  Result := Format('fmt %d', [PixelFormat]);
+  if Assigned(TFFmpegApi.av_get_pix_fmt_name) then
+  begin
+    Name := TFFmpegApi.av_get_pix_fmt_name(PixelFormat);
     if Name <> nil then
       Result := string(AnsiString(Name));
   end;

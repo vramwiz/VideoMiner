@@ -81,6 +81,8 @@ type
     procedure SetPlaybackActive(Value: Boolean);
     // 再生速度の表示文字列を overlay 表示へ渡す
     procedure SetPlaybackRateText(const Value: string);
+    // 現在の動画が alpha を持つかを表示面へ渡す
+    procedure SetSourceHasAlpha(Value: Boolean);
     // Check 中ホイールシークの 1 ステップ幅を設定する
     procedure SetSeekWheelFrameStepMs(Value: Integer);
     // 音量パーセントを overlay 表示へ渡す
@@ -146,6 +148,7 @@ type
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent write SetOnVolumeChange;
     property PlaybackActive: Boolean write SetPlaybackActive;
     property PlaybackRateText: string write SetPlaybackRateText;
+    property SourceHasAlpha: Boolean write SetSourceHasAlpha;
     property SeekWheelFrameStepMs: Integer write SetSeekWheelFrameStepMs;
     property SurfaceControl: TWinControl read GetSurfaceControl;
     property Muted: Boolean write SetMuted;
@@ -249,7 +252,10 @@ begin
   if FDecodeScratch <> nil then
     FDecodeScratch.SetSize(0, 0);
   if FSurface <> nil then
+  begin
+    FSurface.SourceHasAlpha := False;
     FSurface.Clear;
+  end;
 end;
 
 procedure TVideoMinerVideoView.Present(Bitmap: TBitmap);
@@ -402,6 +408,12 @@ procedure TVideoMinerVideoView.SetPlaybackRateText(const Value: string);
 begin
   if FSurface <> nil then
     FSurface.PlaybackRateText := Value;
+end;
+
+procedure TVideoMinerVideoView.SetSourceHasAlpha(Value: Boolean);
+begin
+  if FSurface <> nil then
+    FSurface.SourceHasAlpha := Value;
 end;
 
 procedure TVideoMinerVideoView.SetCanNavigatePrevious(Value: Boolean);
