@@ -127,6 +127,11 @@ type
     procedure EndActionOverlayClick(Sender: TObject);
     // 全画面表示を切り替える
     procedure ToggleFullScreen;
+    // 動画画面右クリックでサムネイル一覧を開く
+    procedure VideoSurfaceMouseDown(Sender: TObject);
+    // サムネイル一覧で選択された動画へ切り替える
+    procedure ThumbnailBrowserSelected(Sender: TObject; Index: Integer;
+      const FileName: string);
     // サムネイル一覧モードの表示/非表示を切り替える
     procedure ToggleThumbnailBrowser;
     // サムネイル一覧モードを閉じる
@@ -241,6 +246,8 @@ type
     procedure WMOpenPending(var Message: TMessage); message WM_VM_OPEN_PENDING;
     // 通常表示時のサイズ変更を window controller へ通知する
     procedure WMSize(var Message: TWMSize); message WM_SIZE;
+    // VCL のフォーカス移動処理より先に Tab を一覧切り替えとして拾う
+    procedure CMDialogKey(var Message: TCMDialogKey); message CM_DIALOGKEY;
     // 指定ミリ秒位置のフレームを表示する
     function ShowFrameAtMs(const PositionMs: Integer): Boolean;
     // 動画情報ラベルを更新する
@@ -297,6 +304,7 @@ begin
   FMediaList := TVideoMinerMediaList.Create;
   FChapterManager := TVideoMinerChapterManager.Create;
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
+  FVideoView.OnThumbnailBrowserClick := VideoSurfaceMouseDown;
   FThumbnailBrowser := TVideoMinerThumbnailBrowser.Create(Self);
   FThumbnailBrowser.Parent := FVideoView.SurfaceControl.Parent;
   FThumbnailBrowser.Align := FVideoView.SurfaceControl.Align;
@@ -304,6 +312,7 @@ begin
     FVideoView.SurfaceControl.Top, FVideoView.SurfaceControl.Width,
     FVideoView.SurfaceControl.Height);
   FThumbnailBrowser.Anchors := FVideoView.SurfaceControl.Anchors;
+  FThumbnailBrowser.OnSelected := ThumbnailBrowserSelected;
   FThumbnailBrowser.SetMediaList(FMediaList);
   FWindowModeController := TVideoMinerWindowModeController.Create(Self,
     PanelTitleBar, LabelMaximizeButton, FVideoView, StopPlayback);
@@ -330,6 +339,8 @@ begin
     [rdTop]);
   TResizeEdgeHelper.AttachEdges(FVideoView.SurfaceControl,
     VIDEO_MINER_RESIZE_BORDER, [rdBottom, rdLeft, rdRight]);
+  TResizeEdgeHelper.AttachEdges(FThumbnailBrowser, VIDEO_MINER_RESIZE_BORDER,
+    [rdBottom, rdLeft, rdRight]);
   FVideoView.OnBossExitClick := BossExitClick;
   FVideoView.OnBossGesture := BossGesture;
   FVideoView.OnEndActionClick := EndActionOverlayClick;
@@ -422,6 +433,27 @@ begin
   FWindowModeController.ToggleFullScreen;
 end;
 
+procedure TVideoMinerMainForm.VideoSurfaceMouseDown(Sender: TObject);
+begin
+  if (FThumbnailBrowser <> nil) and (not FThumbnailBrowser.Visible) then
+    ToggleThumbnailBrowser;
+end;
+procedure TVideoMinerMainForm.ThumbnailBrowserSelected(Sender: TObject;
+  Index: Integer; const FileName: string);
+begin
+  if FileName = '' then
+    Exit;
+
+  if SameText(FileName, FVideoFile) then
+  begin
+    CloseThumbnailBrowser;
+    Exit;
+  end;
+
+  if LoadVideoFile(FileName, True) then
+    CloseThumbnailBrowser;
+end;
+
 procedure TVideoMinerMainForm.ToggleThumbnailBrowser;
 begin
   if FThumbnailBrowser = nil then
@@ -466,6 +498,11 @@ end;
 function TVideoMinerMainForm.DoMouseWheel(Shift: TShiftState;
   WheelDelta: Integer; MousePos: TPoint): Boolean;
 begin
+  Result := (FThumbnailBrowser <> nil) and FThumbnailBrowser.Visible and
+    FThumbnailBrowser.HandleMouseWheel(Shift, WheelDelta, MousePos);
+  if Result then
+    Exit;
+
   Result := (FVideoView <> nil) and
     FVideoView.HandleMouseWheel(Shift, WheelDelta, MousePos);
   if not Result then
@@ -1597,6 +1634,23 @@ begin
   inherited;
   if FWindowModeController <> nil then
     FWindowModeController.HandleSize;
+  if FThumbnailBrowser <> nil then
+    TResizeEdgeHelper.AdjustEdges(FThumbnailBrowser);
+end;
+
+procedure TVideoMinerMainForm.CMDialogKey(var Message: TCMDialogKey);
+begin
+  if (Message.CharCode = VK_TAB) and
+     (KeyDataToShiftState(Message.KeyData) = []) then
+  begin
+    if (FWindowModeController <> nil) and
+       (not FWindowModeController.BossMode) then
+      ToggleThumbnailBrowser;
+    Message.Result := 1;
+    Exit;
+  end;
+
+  inherited;
 end;
 
 procedure TVideoMinerMainForm.WMCopyData(var Message: TWMCopyData);

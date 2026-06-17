@@ -48,6 +48,7 @@ type
     FOnNavigatePreviousClick: TNotifyEvent;                      // 前動画ボタンの通知先
     FOnPlaybackRateClick    : TNotifyEvent;                      // 再生速度ボタンの通知先
     FOnPlayPauseClick       : TNotifyEvent;                      // 再生/一時停止ボタンまたは単クリックの通知先
+    FOnThumbnailBrowserClick: TNotifyEvent;                      // サムネイル一覧表示を求める右クリック通知先
     FOnSeek                 : TVideoMinerOverlaySeekEvent;       // シークバー操作の通知先
     FOnSeekByWheel          : TVideoMinerOverlaySeekEvent;       // シークバー上ホイール操作の通知先
     FOnSkipBackwardClick    : TNotifyEvent;                      // 10 秒戻しボタンの通知先
@@ -231,6 +232,7 @@ type
       write SetOnNavigatePreviousClick;
     property OnPlaybackRateClick: TNotifyEvent read FOnPlaybackRateClick write SetOnPlaybackRateClick;
     property OnPlayPauseClick: TNotifyEvent read FOnPlayPauseClick write SetOnPlayPauseClick;
+    property OnThumbnailBrowserClick: TNotifyEvent read FOnThumbnailBrowserClick write FOnThumbnailBrowserClick;
     property OnSeek: TVideoMinerOverlaySeekEvent read FOnSeek write SetOnSeek;
     property OnSeekByWheel: TVideoMinerOverlaySeekEvent read FOnSeekByWheel write SetOnSeekByWheel;
     property OnSkipBackwardClick: TNotifyEvent read FOnSkipBackwardClick write SetOnSkipBackwardClick;
@@ -785,6 +787,14 @@ begin
   if FBossMode then
   begin
     CancelPendingSurfaceClick;
+    Exit;
+  end;
+
+  if Button = mbRight then
+  begin
+    CancelPendingSurfaceClick;
+    if Assigned(FOnThumbnailBrowserClick) then
+      FOnThumbnailBrowserClick(Self);
     Exit;
   end;
 

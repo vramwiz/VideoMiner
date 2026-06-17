@@ -10,7 +10,7 @@ uses
   VideoMinerSettings;
 
 const
-  VIDEO_MINER_RESIZE_BORDER = 6; // 枠なしフォーム端でリサイズ判定する幅 px
+  VIDEO_MINER_RESIZE_BORDER = 12; // 枠なしフォーム端でリサイズ判定する幅 px
 
 // 枠なしでも最小化/最大化を持つトップレベルウィンドウとして作る
 procedure ConfigureBorderlessCreateParams(var Params: TCreateParams);

@@ -67,6 +67,8 @@ type
     procedure SetOnPlaybackRateClick(Value: TNotifyEvent);
     // 再生/一時停止ボタンのクリック先を設定する
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
+    // サムネイル一覧表示右クリックの通知先を設定する
+    procedure SetOnThumbnailBrowserClick(Value: TNotifyEvent);
     // シークバー操作の通知先を設定する
     procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
     // シークバー上ホイール操作の通知先を設定する
@@ -141,6 +143,7 @@ type
     property OnNavigatePreviousClick: TNotifyEvent write SetOnNavigatePreviousClick;
     property OnPlaybackRateClick: TNotifyEvent write SetOnPlaybackRateClick;
     property OnPlayPauseClick: TNotifyEvent write SetOnPlayPauseClick;
+    property OnThumbnailBrowserClick: TNotifyEvent write SetOnThumbnailBrowserClick;
     property OnSeek: TVideoMinerOverlaySeekEvent write SetOnSeek;
     property OnSeekByWheel: TVideoMinerOverlaySeekEvent write SetOnSeekByWheel;
     property OnSkipBackwardClick: TNotifyEvent write SetOnSkipBackwardClick;
@@ -288,6 +291,11 @@ begin
     FSurface.FullScreen := Value;
 end;
 
+procedure TVideoMinerVideoView.SetOnThumbnailBrowserClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnThumbnailBrowserClick := Value;
+end;
 procedure TVideoMinerVideoView.SetOnFullScreenClick(Value: TNotifyEvent);
 begin
   if FSurface <> nil then
