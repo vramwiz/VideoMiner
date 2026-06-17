@@ -8,7 +8,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.Classes, System.Math, System.SysUtils, System.Types,
   Vcl.Controls, Vcl.ExtCtrls, Vcl.Graphics, FFmpegDecoder, FFmpegDecoderTypes,
-  VideoMinerMediaList, VideoMinerThumbnailCache, VideoMinerWindowChrome;
+  VideoMinerMediaList, VideoMinerSettings, VideoMinerThumbnailCache, VideoMinerWindowChrome;
 
 type
   TVideoMinerThumbnailSelectedEvent = procedure(Sender: TObject;
@@ -23,6 +23,7 @@ type
     FMediaList    : TVideoMinerMediaList; // 表示対象になる同一フォルダ内の動画一覧
     FOnSelected   : TVideoMinerThumbnailSelectedEvent; // タイル選択の通知先
     FScrollOffset : Integer;              // タイル一覧の縦スクロール量 px
+    FSelectedIndex : Integer;             // キーボード操作で選択中の一覧位置
     FThumbnailFiles  : TArray<string>;    // サムネイル状態が対応するファイル名
     FThumbnailStates : TArray<TVideoMinerThumbnailState>; // サムネイル生成状態
     FThumbnails      : TArray<TBitmap>;   // 生成済みサムネイル画像
@@ -30,6 +31,7 @@ type
     FTileHeight      : Integer;           // 現在のタイル高さ px
     FTileWidth       : Integer;           // 現在のタイル幅 px
     FTileRects    : TArray<TRect>;        // 最後にレイアウトした各タイルの表示矩形
+    FZoomButtonHover : Integer;           // hover 中のズームボタン方向
     // 現在の幅からタイルの列数を返す
     function ColumnCount: Integer;
     // タイル全体の高さを返す
@@ -38,6 +40,18 @@ type
     procedure ClampScrollOffset;
     // 指定位置にあるタイル index を返す
     function HitTile(const Point: TPoint): Integer;
+    // 指定位置のタイルをキーボード選択状態にする
+    procedure SelectTile(Index: Integer; EnsureVisible: Boolean);
+    // 選択中タイルが画面内に入るようスクロールする
+    procedure ScrollToSelected;
+    // 選択中タイルを指定量だけ移動する
+    procedure MoveSelection(Delta: Integer);
+    // 選択中タイルを開く
+    procedure ActivateSelectedTile;
+    // 指定方向のズームボタン矩形を返す
+    function ZoomButtonRect(Direction: Integer): TRect;
+    // 指定位置にあるズームボタン方向を返す
+    function HitZoomButton(const Point: TPoint): Integer;
     // 現在の一覧状態に合わせてタイル矩形を作る
     procedure LayoutTiles;
     // サムネイル配列を現在のメディア一覧へ合わせる
@@ -62,20 +76,32 @@ type
     procedure DrawFileName(Canvas: TCanvas; const Bounds: TRect; const FileName: string);
     // 1 つのタイルを描く
     procedure DrawTile(Canvas: TCanvas; Index: Integer; const Bounds: TRect);
+    // 右下のサムネイル拡大縮小ボタンを描く
+    procedure DrawZoomButtons(Canvas: TCanvas);
     // 表示時に現在ファイルが見える位置へスクロールする
     procedure ScrollToCurrent;
-    // ホイール入力でサムネイルサイズを拡大縮小する
+    // ホイール入力で一覧を縦スクロールする
+    procedure ScrollByWheel(WheelDelta: Integer);
+    // 指定方向へサムネイルサイズを 1 段階変更する
+    procedure ZoomByDirection(Direction: Integer);
+    // 中央ボタン押下中のホイール入力でサムネイルサイズを拡大縮小する
     procedure ZoomByWheel(WheelDelta: Integer; const MousePos: TPoint);
+    // 指定位置を基準にサムネイルサイズを変更する
+    procedure ZoomAt(WheelDelta: Integer; const AnchorClient: TPoint);
   protected
     // 背景消去を抑止する
     procedure WMEraseBkgnd(var Message: TWMEraseBkgnd); message WM_ERASEBKGND;
+    // 矢印キーと Enter を一覧操作として受け取れるようにする
+    procedure WMGetDlgCode(var Message: TWMGetDlgCode); message WM_GETDLGCODE;
     // サムネイル表示中もフォーム端のリサイズ判定を親フォームへ通す
     procedure WMNCHitTest(var Message: TWMNCHitTest); message WM_NCHITTEST;
     // タイル hover を更新する
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    // 一覧にフォーカスがあるときのキー操作を処理する
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     // 一覧外へ出たら hover を解除する
     procedure CMMouseLeave(var Message: TMessage); message CM_MOUSELEAVE;
-    // マウスホイールで一覧を縦スクロールする
+    // 通常ホイールでスクロールし、中央ボタン押下中だけ拡大縮小する
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean; override;
     // タイルクリックを選択通知に変換する
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -90,9 +116,11 @@ type
     destructor Destroy; override;
     // 表示するメディア一覧を差し替える
     procedure SetMediaList(MediaList: TVideoMinerMediaList);
-    // フォーム経由で届いたホイール入力を一覧スクロールとして処理する
+    // フォーム経由で届いたホイール入力を一覧操作として処理する
     function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean;
+    // フォーム経由で届いたキー入力を一覧操作として処理する
+    function HandleKeyDown(var Key: Word; Shift: TShiftState): Boolean;
     // 一覧モードを開く
     procedure Open;
     // 一覧モードを閉じる
@@ -110,6 +138,7 @@ const
   TILE_BACKGROUND_COLOR     = $00202020; // 画像未生成タイルの背景色
   TILE_HOVER_COLOR          = $00303030; // hover 中タイルの背景色
   TILE_CURRENT_BORDER_COLOR = $0000A5FF; // 現在再生中タイルの強調枠色
+  TILE_SELECTED_BORDER_COLOR = $0046FF72; // キーボード選択中タイルの強調枠色
   TILE_HOVER_BORDER_COLOR   = $00FFCC66; // hover 中タイルの強調枠色
   TILE_BORDER_COLOR         = $00404040; // 通常タイルの枠色
   TILE_WIDTH                = 220;       // タイルの基本幅 px
@@ -117,6 +146,12 @@ const
   TILE_MIN_WIDTH            = 150;       // タイルの最小幅 px
   TILE_MAX_WIDTH            = 380;       // タイルの最大幅 px
   TILE_ZOOM_STEP            = 24;        // ホイール 1 ノッチあたりのサイズ変更量 px
+  TILE_SCROLL_STEP          = 120;       // ホイール 1 ノッチあたりの縦スクロール量 px
+  ZOOM_BUTTON_SIZE          = 38;        // 拡大縮小ボタンの直径 px
+  ZOOM_BUTTON_GAP           = 10;        // 拡大縮小ボタン同士の間隔 px
+  ZOOM_BUTTON_COLOR         = $00383838; // 拡大縮小ボタンの背景色
+  ZOOM_BUTTON_HOVER_COLOR   = $00585858; // hover 中の拡大縮小ボタン背景色
+  ZOOM_BUTTON_BORDER_COLOR  = $00C8C8C8; // 拡大縮小ボタンの枠色
   TILE_GAP                  = 14;        // タイル間の余白 px
   TILE_MARGIN               = 22;        // 一覧外周の余白 px
   NAME_BAND_HEIGHT          = 28;        // ファイル名を重ねる帯の高さ px
@@ -130,12 +165,15 @@ begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csOpaque];
   DoubleBuffered := True;
-  TabStop := False;
+  TabStop := True;
   Visible := False;
   FCurrentIndex := -1;
   FHoverIndex := -1;
-  FTileWidth := TILE_WIDTH;
-  FTileHeight := TILE_HEIGHT;
+  FSelectedIndex := -1;
+  FZoomButtonHover := 0;
+  FTileWidth := LoadThumbnailTileWidth(TILE_WIDTH, TILE_MIN_WIDTH,
+    TILE_MAX_WIDTH);
+  FTileHeight := Max(1, Round(FTileWidth * TILE_HEIGHT / TILE_WIDTH));
   FThumbnailTimer := TTimer.Create(Self);
   FThumbnailTimer.Enabled := False;
   FThumbnailTimer.Interval := THUMBNAIL_TIMER_INTERVAL;
@@ -494,6 +532,7 @@ end;
 procedure TVideoMinerThumbnailBrowser.DrawTile(Canvas: TCanvas; Index: Integer;
   const Bounds: TRect);
 var
+  BorderRect: TRect;
   FileName: string;
   NameRect: TRect;
   TextRect: TRect;
@@ -531,17 +570,64 @@ begin
   begin
     Canvas.Brush.Style := bsClear;
     Canvas.Pen.Color := TILE_CURRENT_BORDER_COLOR;
-    Canvas.Pen.Width := 3;
+    Canvas.Pen.Width := 4;
     Canvas.Rectangle(Bounds);
     Canvas.Brush.Style := bsSolid;
     Canvas.Pen.Width := 1;
+  end;
+
+  if Index = FSelectedIndex then
+  begin
+    BorderRect := Bounds;
+    if Index = FCurrentIndex then
+      InflateRect(BorderRect, -5, -5);
+    Canvas.Brush.Style := bsClear;
+    Canvas.Pen.Color := TILE_SELECTED_BORDER_COLOR;
+    Canvas.Pen.Width := 3;
+    Canvas.Rectangle(BorderRect);
+    Canvas.Brush.Style := bsSolid;
+    Canvas.Pen.Width := 1;
+  end;
+end;
+
+procedure TVideoMinerThumbnailBrowser.DrawZoomButtons(Canvas: TCanvas);
+var
+  Direction: Integer;
+  R: TRect;
+  TextRect: TRect;
+begin
+  for Direction in [1, -1] do
+  begin
+    R := ZoomButtonRect(Direction);
+    if Direction = FZoomButtonHover then
+      Canvas.Brush.Color := ZOOM_BUTTON_HOVER_COLOR
+    else
+      Canvas.Brush.Color := ZOOM_BUTTON_COLOR;
+    Canvas.Pen.Color := ZOOM_BUTTON_BORDER_COLOR;
+    Canvas.Pen.Width := 1;
+    Canvas.Ellipse(R);
+
+    TextRect := R;
+    Canvas.Font.Color := clWhite;
+    Canvas.Font.Size := 18;
+    Canvas.Font.Style := [fsBold];
+    if Direction > 0 then
+      DrawText(Canvas.Handle, PChar('+'), -1, TextRect,
+        DT_CENTER or DT_VCENTER or DT_SINGLELINE)
+    else
+      DrawText(Canvas.Handle, PChar('-'), -1, TextRect,
+        DT_CENTER or DT_VCENTER or DT_SINGLELINE);
+    Canvas.Font.Style := [];
   end;
 end;
 
 function TVideoMinerThumbnailBrowser.DoMouseWheel(Shift: TShiftState;
   WheelDelta: Integer; MousePos: TPoint): Boolean;
 begin
-  ZoomByWheel(WheelDelta, MousePos);
+  if (ssMiddle in Shift) or (GetKeyState(VK_MBUTTON) < 0) then
+    ZoomByWheel(WheelDelta, MousePos)
+  else
+    ScrollByWheel(WheelDelta);
   Result := True;
 end;
 
@@ -550,6 +636,36 @@ function TVideoMinerThumbnailBrowser.HandleMouseWheel(Shift: TShiftState;
 begin
   Result := DoMouseWheel(Shift, WheelDelta, MousePos);
 end;
+
+function TVideoMinerThumbnailBrowser.HandleKeyDown(var Key: Word;
+  Shift: TShiftState): Boolean;
+var
+  Cols: Integer;
+begin
+  Result := False;
+  if Shift <> [] then
+    Exit;
+
+  Cols := ColumnCount;
+  case Key of
+    VK_LEFT:
+      MoveSelection(-1);
+    VK_RIGHT:
+      MoveSelection(1);
+    VK_UP:
+      MoveSelection(-Cols);
+    VK_DOWN:
+      MoveSelection(Cols);
+    VK_RETURN:
+      ActivateSelectedTile;
+  else
+    Exit;
+  end;
+
+  Key := 0;
+  Result := True;
+end;
+
 function TVideoMinerThumbnailBrowser.HitTile(const Point: TPoint): Integer;
 var
   I: Integer;
@@ -563,6 +679,44 @@ begin
       Exit;
     end;
   end;
+end;
+
+function TVideoMinerThumbnailBrowser.HitZoomButton(const Point: TPoint): Integer;
+var
+  Center: TPoint;
+  Direction: Integer;
+  Radius: Integer;
+  R: TRect;
+begin
+  Result := 0;
+  Radius := ZOOM_BUTTON_SIZE div 2;
+  for Direction in [1, -1] do
+  begin
+    R := ZoomButtonRect(Direction);
+    if not PtInRect(R, Point) then
+      Continue;
+
+    Center := System.Types.Point((R.Left + R.Right) div 2,
+      (R.Top + R.Bottom) div 2);
+    if Sqr(Point.X - Center.X) + Sqr(Point.Y - Center.Y) <= Sqr(Radius) then
+    begin
+      Result := Direction;
+      Exit;
+    end;
+  end;
+end;
+
+function TVideoMinerThumbnailBrowser.ZoomButtonRect(Direction: Integer): TRect;
+var
+  Bottom: Integer;
+  Left: Integer;
+begin
+  Left := ClientWidth - TILE_MARGIN - ZOOM_BUTTON_SIZE;
+  Bottom := ClientHeight - TILE_MARGIN;
+  if Direction > 0 then
+    Dec(Bottom, ZOOM_BUTTON_SIZE + ZOOM_BUTTON_GAP);
+  Result := Rect(Left, Bottom - ZOOM_BUTTON_SIZE, Left + ZOOM_BUTTON_SIZE,
+    Bottom);
 end;
 
 procedure TVideoMinerThumbnailBrowser.LayoutTiles;
@@ -604,28 +758,44 @@ end;
 procedure TVideoMinerThumbnailBrowser.CMMouseLeave(var Message: TMessage);
 begin
   inherited;
-  if FHoverIndex >= 0 then
+  if (FHoverIndex >= 0) or (FZoomButtonHover <> 0) then
   begin
     FHoverIndex := -1;
+    FZoomButtonHover := 0;
     Cursor := crDefault;
     Invalidate;
   end;
 end;
 
+procedure TVideoMinerThumbnailBrowser.KeyDown(var Key: Word;
+  Shift: TShiftState);
+begin
+  inherited KeyDown(Key, Shift);
+  HandleKeyDown(Key, Shift);
+end;
 procedure TVideoMinerThumbnailBrowser.MouseMove(Shift: TShiftState; X,
   Y: Integer);
 var
   NewHoverIndex: Integer;
+  NewZoomButtonHover: Integer;
 begin
   inherited MouseMove(Shift, X, Y);
-  NewHoverIndex := HitTile(Point(X, Y));
-  if NewHoverIndex >= 0 then
+  NewZoomButtonHover := HitZoomButton(Point(X, Y));
+  if NewZoomButtonHover <> 0 then
+    NewHoverIndex := -1
+  else
+    NewHoverIndex := HitTile(Point(X, Y));
+
+  if (NewHoverIndex >= 0) or (NewZoomButtonHover <> 0) then
     Cursor := crHandPoint
   else
     Cursor := crDefault;
-  if FHoverIndex <> NewHoverIndex then
+
+  if (FHoverIndex <> NewHoverIndex) or
+     (FZoomButtonHover <> NewZoomButtonHover) then
   begin
     FHoverIndex := NewHoverIndex;
+    FZoomButtonHover := NewZoomButtonHover;
     Invalidate;
   end;
 end;
@@ -643,13 +813,24 @@ begin
     Exit;
   end;
 
-  if (Button <> mbLeft) or (FMediaList = nil) then
+  if Button <> mbLeft then
+    Exit;
+
+  Index := HitZoomButton(Point(X, Y));
+  if Index <> 0 then
+  begin
+    ZoomByDirection(Index);
+    Exit;
+  end;
+
+  if FMediaList = nil then
     Exit;
 
   Index := HitTile(Point(X, Y));
   if Index < 0 then
     Exit;
 
+  SelectTile(Index, False);
   FileName := FMediaList.FileAt(Index);
   if (FileName <> '') and Assigned(FOnSelected) then
     FOnSelected(Self, Index, FileName);
@@ -661,6 +842,7 @@ begin
     FCurrentIndex := FMediaList.CurrentIndex
   else
     FCurrentIndex := -1;
+  FSelectedIndex := FCurrentIndex;
   ScrollToCurrent;
   Visible := True;
   BringToFront;
@@ -687,6 +869,7 @@ begin
     Canvas.Font.Size := 11;
     DrawText(Canvas.Handle, PChar('No videos'), -1, TextRect,
       DT_CENTER or DT_VCENTER or DT_SINGLELINE);
+    DrawZoomButtons(Canvas);
     Exit;
   end;
 
@@ -696,6 +879,7 @@ begin
       Continue;
     DrawTile(Canvas, I, FTileRects[I]);
   end;
+  DrawZoomButtons(Canvas);
 end;
 
 procedure TVideoMinerThumbnailBrowser.Resize;
@@ -705,6 +889,73 @@ begin
   LayoutTiles;
 end;
 
+procedure TVideoMinerThumbnailBrowser.ActivateSelectedTile;
+var
+  FileName: string;
+begin
+  if (FMediaList = nil) or (FSelectedIndex < 0) or
+     (FSelectedIndex >= FMediaList.Count) then
+    Exit;
+
+  FileName := FMediaList.FileAt(FSelectedIndex);
+  if (FileName <> '') and Assigned(FOnSelected) then
+    FOnSelected(Self, FSelectedIndex, FileName);
+end;
+
+procedure TVideoMinerThumbnailBrowser.MoveSelection(Delta: Integer);
+var
+  NewIndex: Integer;
+begin
+  if (FMediaList = nil) or (FMediaList.Count <= 0) then
+    Exit;
+
+  NewIndex := FSelectedIndex;
+  if NewIndex < 0 then
+    NewIndex := FCurrentIndex;
+  if NewIndex < 0 then
+    NewIndex := 0;
+  NewIndex := Max(0, Min(FMediaList.Count - 1, NewIndex + Delta));
+  SelectTile(NewIndex, True);
+end;
+
+procedure TVideoMinerThumbnailBrowser.ScrollToSelected;
+var
+  Cols: Integer;
+  Row: Integer;
+  TileBottom: Integer;
+  TileTop: Integer;
+begin
+  if (FMediaList = nil) or (FSelectedIndex < 0) then
+    Exit;
+
+  Cols := ColumnCount;
+  Row := FSelectedIndex div Cols;
+  TileTop := TILE_MARGIN + Row * (FTileHeight + TILE_GAP);
+  TileBottom := TileTop + FTileHeight;
+  if TileTop < FScrollOffset + TILE_MARGIN then
+    FScrollOffset := TileTop - TILE_MARGIN
+  else if TileBottom > FScrollOffset + ClientHeight - TILE_MARGIN then
+    FScrollOffset := TileBottom - ClientHeight + TILE_MARGIN;
+  ClampScrollOffset;
+  LayoutTiles;
+end;
+
+procedure TVideoMinerThumbnailBrowser.SelectTile(Index: Integer;
+  EnsureVisible: Boolean);
+begin
+  if (FMediaList = nil) or (FMediaList.Count <= 0) then
+    Index := -1
+  else
+    Index := Max(0, Min(FMediaList.Count - 1, Index));
+
+  if FSelectedIndex = Index then
+    Exit;
+
+  FSelectedIndex := Index;
+  if EnsureVisible then
+    ScrollToSelected;
+  Invalidate;
+end;
 procedure TVideoMinerThumbnailBrowser.ScrollToCurrent;
 var
   Cols: Integer;
@@ -734,6 +985,12 @@ begin
     FCurrentIndex := FMediaList.CurrentIndex
   else
     FCurrentIndex := -1;
+  if FMediaList = nil then
+    FSelectedIndex := -1
+  else if FSelectedIndex < 0 then
+    FSelectedIndex := FCurrentIndex
+  else if FSelectedIndex >= FMediaList.Count then
+    FSelectedIndex := FMediaList.Count - 1;
   EnsureThumbnailSlots;
   ClampScrollOffset;
   LayoutTiles;
@@ -748,10 +1005,35 @@ begin
     Open;
 end;
 
+procedure TVideoMinerThumbnailBrowser.ScrollByWheel(WheelDelta: Integer);
+begin
+  if WheelDelta = 0 then
+    Exit;
+
+  FScrollOffset := FScrollOffset - MulDiv(WheelDelta, TILE_SCROLL_STEP,
+    WHEEL_DELTA);
+  ClampScrollOffset;
+  LayoutTiles;
+  Invalidate;
+end;
+
+procedure TVideoMinerThumbnailBrowser.ZoomByDirection(Direction: Integer);
+begin
+  if Direction > 0 then
+    ZoomAt(WHEEL_DELTA, Point(ClientWidth div 2, ClientHeight div 2))
+  else if Direction < 0 then
+    ZoomAt(-WHEEL_DELTA, Point(ClientWidth div 2, ClientHeight div 2));
+end;
+
 procedure TVideoMinerThumbnailBrowser.ZoomByWheel(WheelDelta: Integer;
   const MousePos: TPoint);
+begin
+  ZoomAt(WheelDelta, ScreenToClient(MousePos));
+end;
+
+procedure TVideoMinerThumbnailBrowser.ZoomAt(WheelDelta: Integer;
+  const AnchorClient: TPoint);
 var
-  AnchorClient: TPoint;
   AnchorIndex: Integer;
   AnchorOffset: Integer;
   AnchorRow: Integer;
@@ -761,7 +1043,6 @@ begin
   if WheelDelta = 0 then
     Exit;
 
-  AnchorClient := ScreenToClient(MousePos);
   AnchorIndex := HitTile(AnchorClient);
   if AnchorIndex < 0 then
     AnchorIndex := FHoverIndex;
@@ -784,6 +1065,7 @@ begin
   NewHeight := Max(1, Round(NewWidth * TILE_HEIGHT / TILE_WIDTH));
   FTileWidth := NewWidth;
   FTileHeight := NewHeight;
+  SaveThumbnailTileWidth(FTileWidth, TILE_MIN_WIDTH, TILE_MAX_WIDTH);
 
   if AnchorIndex >= 0 then
   begin
@@ -796,10 +1078,17 @@ begin
   LayoutTiles;
   Invalidate;
 end;
+
 procedure TVideoMinerThumbnailBrowser.WMEraseBkgnd(
   var Message: TWMEraseBkgnd);
 begin
   Message.Result := 1;
+end;
+
+procedure TVideoMinerThumbnailBrowser.WMGetDlgCode(var Message: TWMGetDlgCode);
+begin
+  inherited;
+  Message.Result := Message.Result or DLGC_WANTARROWS or DLGC_WANTALLKEYS;
 end;
 
 procedure TVideoMinerThumbnailBrowser.WMNCHitTest(var Message: TWMNCHitTest);

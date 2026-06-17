@@ -1343,6 +1343,10 @@ begin
     Exit;
   end;
 
+  if (FThumbnailBrowser <> nil) and FThumbnailBrowser.Visible and
+     FThumbnailBrowser.HandleKeyDown(Key, Shift) then
+    Exit;
+
   if (Key = VK_ESCAPE) and (FThumbnailBrowser <> nil) and
      FThumbnailBrowser.Visible then
   begin

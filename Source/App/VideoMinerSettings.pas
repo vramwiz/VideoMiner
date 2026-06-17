@@ -47,6 +47,8 @@ function LoadManualChapterPlaybackPosition(const FileName: string; MaxMs: Intege
   out PositionMs: Integer): Boolean;
 // 通常表示時のメインフォーム位置とサイズを読み込む
 function LoadMainFormBounds: TVideoMinerWindowBounds;
+// サムネイル一覧のタイル幅を読み込む
+function LoadThumbnailTileWidth(DefaultWidth, MinWidth, MaxWidth: Integer): Integer;
 // 終端到達時の動作を保存する
 procedure SaveEndAction(Value: TVideoMinerEndAction);
 // 音量とミュート状態を保存する
@@ -63,6 +65,8 @@ procedure SaveManualChapterPlaybackPosition(const FileName: string;
 procedure ClearManualChapterPlaybackPosition(const FileName: string);
 // 通常表示時のメインフォーム位置とサイズを保存する
 procedure SaveMainFormBounds(const Bounds: TVideoMinerWindowBounds);
+// サムネイル一覧のタイル幅を保存する
+procedure SaveThumbnailTileWidth(Value, MinWidth, MaxWidth: Integer);
 // デコード方式を INI 保存用の文字列へ変換する
 function VideoDecoderModeToText(Mode: TVideoDecoderMode): string;
 
@@ -87,6 +91,8 @@ const
   SECTION_AUDIO          = 'Audio';              // 音声設定の INI セクション
   KEY_AUDIO_MUTED        = 'Muted';              // ミュート状態の INI キー
   KEY_AUDIO_VOLUME       = 'VolumePercent';      // 音量パーセントの INI キー
+  SECTION_THUMBNAIL      = 'ThumbnailBrowser';   // サムネイル一覧設定の INI セクション
+  KEY_THUMBNAIL_WIDTH    = 'TileWidth';          // サムネイルタイル幅の INI キー
   SECTION_CHAPTER_PREFIX = 'ManualChapters:';    // ファイル別チャプターのセクション接頭辞
   KEY_CHAPTER_FILE       = 'FileName';           // チャプター対象ファイルの INI キー
   KEY_CHAPTER_COUNT      = 'Count';              // 手動チャプター数の INI キー
@@ -244,6 +250,20 @@ begin
     Result.Height := Ini.ReadInteger(SECTION_WINDOW, KEY_WINDOW_HEIGHT, 0);
     if (Result.Width < 320) or (Result.Height < 240) then
       Result.Available := False;
+  finally
+    Ini.Free;
+  end;
+end;
+
+function LoadThumbnailTileWidth(DefaultWidth, MinWidth, MaxWidth: Integer): Integer;
+var
+  Ini: TIniFile;
+begin
+  Result := Max(MinWidth, Min(MaxWidth, DefaultWidth));
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    Result := Max(MinWidth, Min(MaxWidth,
+      Ini.ReadInteger(SECTION_THUMBNAIL, KEY_THUMBNAIL_WIDTH, Result)));
   finally
     Ini.Free;
   end;
@@ -446,6 +466,19 @@ begin
     Ini.WriteInteger(SECTION_WINDOW, KEY_WINDOW_TOP, Bounds.Top);
     Ini.WriteInteger(SECTION_WINDOW, KEY_WINDOW_WIDTH, Bounds.Width);
     Ini.WriteInteger(SECTION_WINDOW, KEY_WINDOW_HEIGHT, Bounds.Height);
+  finally
+    Ini.Free;
+  end;
+end;
+
+procedure SaveThumbnailTileWidth(Value, MinWidth, MaxWidth: Integer);
+var
+  Ini: TIniFile;
+begin
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    Ini.WriteInteger(SECTION_THUMBNAIL, KEY_THUMBNAIL_WIDTH,
+      Max(MinWidth, Min(MaxWidth, Value)));
   finally
     Ini.Free;
   end;
