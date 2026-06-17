@@ -14,6 +14,7 @@ uses
   VideoMinerAudioPlayback,
   VideoMinerChapterManager, VideoMinerCommandController, VideoMinerMediaList, VideoMinerDebugLog,
   VideoMinerFrameCheck, VideoMinerMediaOpen, VideoMinerSettings,
+  VideoMinerThumbnailBrowser,
   VideoMinerPlaybackController, VideoMinerPlaybackTiming,
   VideoMinerVideoView, VideoMinerWindowChrome, VideoMinerWindowModeController;
 
@@ -95,6 +96,7 @@ type
     FCommandController               : TVideoMinerCommandController;    // overlay とショートカットのコマンド接続
     FWindowModeController            : TVideoMinerWindowModeController; // 全画面/枠なし/ボスが来たモードの制御
     FChapterManager                  : TVideoMinerChapterManager;       // 手動/自動チャプターとチェック状態の管理
+    FThumbnailBrowser                : TVideoMinerThumbnailBrowser;     // 同一フォルダ内動画の一覧表示モード
     FLoopSegmentEndMs                : Integer;                         // ループ再生区間の終端 ms
     FLoopSegmentStartMs              : Integer;                         // ループ再生区間の開始 ms
     FEndAction                       : TVideoMinerEndAction;            // 動画終端到達時の動作
@@ -125,6 +127,10 @@ type
     procedure EndActionOverlayClick(Sender: TObject);
     // 全画面表示を切り替える
     procedure ToggleFullScreen;
+    // サムネイル一覧モードの表示/非表示を切り替える
+    procedure ToggleThumbnailBrowser;
+    // サムネイル一覧モードを閉じる
+    procedure CloseThumbnailBrowser;
     // manager のチャプター情報を overlay 用表示へ反映する
     procedure RefreshChapterOverlay;
     // 終端動作ボタンの表示を更新する
@@ -291,6 +297,14 @@ begin
   FMediaList := TVideoMinerMediaList.Create;
   FChapterManager := TVideoMinerChapterManager.Create;
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
+  FThumbnailBrowser := TVideoMinerThumbnailBrowser.Create(Self);
+  FThumbnailBrowser.Parent := FVideoView.SurfaceControl.Parent;
+  FThumbnailBrowser.Align := FVideoView.SurfaceControl.Align;
+  FThumbnailBrowser.SetBounds(FVideoView.SurfaceControl.Left,
+    FVideoView.SurfaceControl.Top, FVideoView.SurfaceControl.Width,
+    FVideoView.SurfaceControl.Height);
+  FThumbnailBrowser.Anchors := FVideoView.SurfaceControl.Anchors;
+  FThumbnailBrowser.SetMediaList(FMediaList);
   FWindowModeController := TVideoMinerWindowModeController.Create(Self,
     PanelTitleBar, LabelMaximizeButton, FVideoView, StopPlayback);
   FCommandController := TVideoMinerCommandController.Create(FAudioPlayback,
@@ -390,6 +404,7 @@ begin
   if FWindowModeController <> nil then
     FWindowModeController.SaveWindowBounds;
   FWindowModeController.Free;
+  FThumbnailBrowser.Free;
   FVideoView.Free;
   FChapterManager.Free;
   FMediaList.Free;
@@ -405,6 +420,21 @@ end;
 procedure TVideoMinerMainForm.ToggleFullScreen;
 begin
   FWindowModeController.ToggleFullScreen;
+end;
+
+procedure TVideoMinerMainForm.ToggleThumbnailBrowser;
+begin
+  if FThumbnailBrowser = nil then
+    Exit;
+
+  FThumbnailBrowser.SetMediaList(FMediaList);
+  FThumbnailBrowser.Toggle;
+end;
+
+procedure TVideoMinerMainForm.CloseThumbnailBrowser;
+begin
+  if FThumbnailBrowser <> nil then
+    FThumbnailBrowser.Close;
 end;
 
 procedure TVideoMinerMainForm.InitializeTitleIcon;
@@ -988,6 +1018,8 @@ begin
 
   LoadManualChapterState(FVideoFile);
   UpdateNavigationButtons;
+  if FThumbnailBrowser <> nil then
+    FThumbnailBrowser.SetMediaList(FMediaList);
   UpdateInfoLabel;
   RefreshChapterOverlay;
   StepWatch := TStopwatch.StartNew;
@@ -1270,6 +1302,21 @@ begin
 
   if FWindowModeController.BossMode then
   begin
+    Key := 0;
+    Exit;
+  end;
+
+  if (Key = VK_ESCAPE) and (FThumbnailBrowser <> nil) and
+     FThumbnailBrowser.Visible then
+  begin
+    CloseThumbnailBrowser;
+    Key := 0;
+    Exit;
+  end;
+
+  if (Key = VK_TAB) and (Shift = []) then
+  begin
+    ToggleThumbnailBrowser;
     Key := 0;
     Exit;
   end;

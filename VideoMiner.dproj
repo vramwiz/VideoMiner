@@ -132,6 +132,7 @@
         <DCCReference Include="Source\App\VideoMinerMediaList.pas"/>
         <DCCReference Include="Source\App\VideoMinerOverlay.pas"/>
         <DCCReference Include="Source\App\VideoMinerShortcutBindings.pas"/>
+        <DCCReference Include="Source\App\VideoMinerThumbnailBrowser.pas"/>
         <DCCReference Include="Source\App\VideoMinerVideoSurface.pas"/>
         <DCCReference Include="Source\App\VideoMinerVideoView.pas"/>
         <DCCReference Include="Source\App\VideoMinerWindowChrome.pas"/>

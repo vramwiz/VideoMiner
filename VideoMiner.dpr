@@ -15,6 +15,7 @@ uses
   VideoMinerMediaList in 'Source\App\VideoMinerMediaList.pas',
   VideoMinerOverlay in 'Source\App\VideoMinerOverlay.pas',
   VideoMinerShortcutBindings in 'Source\App\VideoMinerShortcutBindings.pas',
+  VideoMinerThumbnailBrowser in 'Source\App\VideoMinerThumbnailBrowser.pas',
   VideoMinerVideoSurface in 'Source\App\VideoMinerVideoSurface.pas',
   VideoMinerVideoView in 'Source\App\VideoMinerVideoView.pas',
   VideoMinerWindowChrome in 'Source\App\VideoMinerWindowChrome.pas',
