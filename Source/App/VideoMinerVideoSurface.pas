@@ -82,8 +82,10 @@ type
     procedure DrawFrame(Canvas: TCanvas; const DestRect: TRect);
     // alpha 確認用の市松模様合成 Bitmap を最新化する
     procedure EnsureAlphaCompositeBitmap;
+{$IFDEF DEBUG}
     // alpha 確認状態を動画面左上へ描く
     procedure DrawAlphaStatus(Canvas: TCanvas; const DestRect: TRect);
+{$ENDIF}
     // クライアント領域内に動画全体が収まる描画矩形を返す
     function FitRect: TRect;
     // 中央 overlay ボタン群に当たっているか返す
@@ -546,6 +548,7 @@ begin
   FAlphaCompositeDirty := False;
 end;
 
+{$IFDEF DEBUG}
 procedure TVideoMinerVideoSurface.DrawAlphaStatus(Canvas: TCanvas;
   const DestRect: TRect);
 var
@@ -575,6 +578,8 @@ begin
   Canvas.FillRect(TextRect);
   Canvas.TextOut(TextRect.Left + 4, TextRect.Top + 3, Text);
 end;
+{$ENDIF}
+
 procedure TVideoMinerVideoSurface.DrawFrame(Canvas: TCanvas; const DestRect: TRect);
 var
   FrameBitmap : TBitmap;
@@ -1128,7 +1133,9 @@ begin
     DrawCanvas.FillRect(Rect(DestRect.Right, DestRect.Top, ClientWidth, DestRect.Bottom));
 
   DrawFrame(DrawCanvas, DestRect);
+{$IFDEF DEBUG}
   DrawAlphaStatus(DrawCanvas, DestRect);
+{$ENDIF}
   if FPreviousFileButton <> nil then
     FPreviousFileButton.UpdateLayout(ClientRect);
   if FFirstFrameButton <> nil then

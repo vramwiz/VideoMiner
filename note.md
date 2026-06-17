@@ -303,7 +303,9 @@ function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
 - 2026-06-17 時点では、alpha 付き動画の確認用に、入力 pixel format 名と alpha 有無をデコーダ情報へ持たせるようにした。
   - `yuva` / `rgba` / `bgra` / `argb` / `abgr` / `gbrap` / `ya` 系の pixel format を alpha 付きとして扱う。
   - alpha 付き動画では、表示面で BGRA の alpha を市松模様へ手動合成して表示する。
-  - 動画面左上に `Alpha preview  A min-max  transparent n%` を出し、透明情報が残っているかを自作プレイヤー側で確認できる。
+  - Debug ビルドでは動画面左上に `Alpha preview  A min-max  transparent n%` を出し、透明情報が残っているかを自作プレイヤー側で確認できる。
+  - Release ビルドでは通常利用の邪魔にならないよう、透明率などの診断文字列は表示しない。
+  - 透明情報を持つ `.mov` は、再生時に市松模様へ合成して透明部分を確認できる。
 
 ## 実装済みの主な機能
 
