@@ -306,7 +306,7 @@ const
   CLOSE_BUTTON_HOVER_COLOR      = $00232323; // 閉じるボタン hover 時の背景色
   CAPTION_BUTTON_HOVER_COLOR    = $00232323; // 最小化/最大化ボタン hover 時の背景色
   FRAME_GUIDE_INNER_COLOR       = clWhite;   // hover 枠の内側色
-  FRAME_GUIDE_OUTER_COLOR       = clBlack;   // hover 枠の外側色
+  FRAME_GUIDE_OUTER_COLOR       = clWhite;   // hover 枠の外側色
   FRAME_GUIDE_EDGE_SIZE         = 12;         // hover 枠を出すフォーム端の幅 px
   FRAME_GUIDE_LINE_SIZE         = 1;          // hover 枠 1 本ぶんの太さ px
   FRAME_GUIDE_TIMER_INTERVAL_MS = 80;         // hover 枠表示状態を確認する間隔 ms
@@ -493,6 +493,7 @@ procedure TVideoMinerMainForm.InitializeFrameGuide;
     Panel.BevelOuter := bvNone;
     Panel.Caption := '';
     Panel.Color := Color;
+    Panel.ParentBackground := False;
     Panel.Enabled := False;
     Panel.Visible := False;
   end;
