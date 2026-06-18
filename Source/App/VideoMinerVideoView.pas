@@ -13,8 +13,12 @@ uses
 type
   TVideoMinerVideoView = class
   private
-    FDecodeScratch : TBitmap;                 // 表示せずに次フレームを確認するための作業用 Bitmap
-    FSurface       : TVideoMinerVideoSurface; // 実際の動画表示と overlay 描画を持つサーフェス
+    FDecodeScratch           : TBitmap;                 // 表示せずに次フレームを確認するための作業用 Bitmap
+    FShownFrameCache         : TBitmap;                 // 直近の明示表示フレームを即時再表示するためのキャッシュ
+    FShownFrameCachePosition : Integer;                 // キャッシュしている明示表示フレームの位置 ms
+    FSurface                 : TVideoMinerVideoSurface; // 実際の動画表示と overlay 描画を持つサーフェス
+    // 現在の表示フレームを指定位置の即時再表示用に保存する
+    procedure CacheShownFrame(PositionMs: Integer);
     // フォーム側で親子関係やフォーカス対象として扱うサーフェスを返す
     function GetSurfaceControl: TWinControl;
     // 現在表示中の動画フレーム Bitmap を返す
@@ -25,6 +29,8 @@ type
     // 表示サーフェスを BGRX32 デコード先として使える状態にする
     function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
       out BufferStride: Integer; out ErrorMessage: string): Boolean;
+    // 指定位置のキャッシュがあれば、デコード完了を待たずに表示する
+    function TryPresentCachedFrame(PositionMs: Integer): Boolean;
     // ボスが来たモードの表示状態をサーフェスへ渡す
     procedure SetBossMode(Value: Boolean);
     // 次動画へ移動できるかを overlay 表示へ渡す
@@ -246,6 +252,8 @@ begin
   inherited Create;
 
   FDecodeScratch := TBitmap.Create;
+  FShownFrameCache := TBitmap.Create;
+  FShownFrameCachePosition := -1;
   FSurface := TVideoMinerVideoSurface.Create(Image.Owner);
   FSurface.Parent := Image.Parent;
   FSurface.Align := Image.Align;
@@ -261,8 +269,23 @@ end;
 destructor TVideoMinerVideoView.Destroy;
 begin
   FSurface.Free;
+  FShownFrameCache.Free;
   FDecodeScratch.Free;
   inherited Destroy;
+end;
+
+procedure TVideoMinerVideoView.CacheShownFrame(PositionMs: Integer);
+begin
+  if (FSurface = nil) or (FSurface.Bitmap = nil) or
+     (FSurface.Bitmap.Width <= 0) or (FSurface.Bitmap.Height <= 0) then
+  begin
+    FShownFrameCache.SetSize(0, 0);
+    FShownFrameCachePosition := -1;
+    Exit;
+  end;
+
+  FShownFrameCache.Assign(FSurface.Bitmap);
+  FShownFrameCachePosition := PositionMs;
 end;
 
 procedure TVideoMinerVideoView.ChangeBossHelpPage(Delta: Integer);
@@ -274,11 +297,26 @@ procedure TVideoMinerVideoView.Clear;
 begin
   if FDecodeScratch <> nil then
     FDecodeScratch.SetSize(0, 0);
+  if FShownFrameCache <> nil then
+    FShownFrameCache.SetSize(0, 0);
+  FShownFrameCachePosition := -1;
   if FSurface <> nil then
   begin
     FSurface.SourceHasAlpha := False;
     FSurface.Clear;
   end;
+end;
+
+function TVideoMinerVideoView.TryPresentCachedFrame(PositionMs: Integer): Boolean;
+begin
+  Result := (FSurface <> nil) and (FShownFrameCache <> nil) and
+    (FShownFrameCachePosition = PositionMs) and
+    (FShownFrameCache.Width > 0) and (FShownFrameCache.Height > 0);
+  if not Result then
+    Exit;
+
+  FSurface.Bitmap.Assign(FShownFrameCache);
+  FSurface.PresentImmediate;
 end;
 
 procedure TVideoMinerVideoView.Present(Bitmap: TBitmap);
@@ -522,6 +560,7 @@ begin
 
   if PresentFrame then
   begin
+    TryPresentCachedFrame(PositionMs);
     if not PrepareFrameBuffer(Decoder, Buffer, BufferStride, ErrorMessage) then
       Exit;
   end
@@ -548,7 +587,10 @@ begin
   end;
 
   if PresentFrame then
+  begin
     PresentImmediate(FSurface.Bitmap);
+    CacheShownFrame(PositionMs);
+  end;
   if (not PresentFrame) and (FSurface <> nil) then
     FSurface.PresentImmediate;
   Result := True;

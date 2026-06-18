@@ -1338,10 +1338,13 @@ begin
 end;
 
 procedure TVideoMinerMainForm.PlayFromCurrentPosition;
+var
+  FrameShown: Boolean;
 begin
   if FVideoFile = '' then
     Exit;
 
+  FrameShown := FCurrentVideoPositionMs = FSeekPositionMs;
   if FSeekPositionMs >= FSeekMaxMs then
   begin
     FUpdatingSeek := True;
@@ -1350,10 +1353,10 @@ begin
     finally
       FUpdatingSeek := False;
     end;
-    ShowFrameAtMs(0);
+    FrameShown := ShowFrameAtMs(0);
   end;
 
-  StartPlaybackAtMs(FSeekPositionMs);
+  StartPlaybackAtMs(FSeekPositionMs, FrameShown);
 end;
 
 procedure TVideoMinerMainForm.BossGesture(Sender: TObject);
@@ -1502,8 +1505,18 @@ begin
 end;
 
 procedure TVideoMinerMainForm.SeekPlaybackTickToMs(PositionMs: Integer);
+var
+  FrameShown: Boolean;
 begin
-  SeekToMs(PositionMs);
+  FUpdatingSeek := True;
+  try
+    FSeekPositionMs := PositionMs;
+  finally
+    FUpdatingSeek := False;
+  end;
+
+  FrameShown := ShowFrameAtMs(PositionMs);
+  StartPlaybackAtMs(PositionMs, FrameShown);
 end;
 
 procedure TVideoMinerMainForm.SeekToFirstFrame;

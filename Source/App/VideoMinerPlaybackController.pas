@@ -795,7 +795,7 @@ begin
       [TargetMs, BoolToStr(WasPlaying, True)]));
 
   PreviewMs := 0;
-  FastRestart := ResumeIfPlaying and WasPlaying and (TargetMs < SeekMaxMs);
+  FastRestart := False;
   Seeking := True;
   try
     if FastRestart then
@@ -1173,21 +1173,24 @@ begin
     if GuardingSeek then
       ConvertFrame := False;
 
-    LaggingVideoResult := HandleLaggingVideo(Decoder, SeekMaxMs,
-      AudioPositionMs, DropWatch.ElapsedMilliseconds, DropCount,
-      CurrentVideoPositionMs, PositionMs, ConvertFrame, ErrorMessage);
-    case LaggingVideoResult of
-      lvrSyncedToAudio:
-        begin
-          DidSeekToAudio := True;
-          Break;
-        end;
-      lvrError:
-        begin
-          if Assigned(SetStatus) then
-            SetStatus('Failed to sync video: ' + ErrorMessage);
-          Exit;
-        end;
+    if not GuardingSeek then
+    begin
+      LaggingVideoResult := HandleLaggingVideo(Decoder, SeekMaxMs,
+        AudioPositionMs, DropWatch.ElapsedMilliseconds, DropCount,
+        CurrentVideoPositionMs, PositionMs, ConvertFrame, ErrorMessage);
+      case LaggingVideoResult of
+        lvrSyncedToAudio:
+          begin
+            DidSeekToAudio := True;
+            Break;
+          end;
+        lvrError:
+          begin
+            if Assigned(SetStatus) then
+              SetStatus('Failed to sync video: ' + ErrorMessage);
+            Exit;
+          end;
+      end;
     end;
 
     UseScratchFrame := ConvertFrame and (AudioPositionMs < 0);

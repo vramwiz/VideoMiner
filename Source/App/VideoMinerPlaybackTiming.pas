@@ -37,7 +37,8 @@ const
   VIDEO_AUDIO_SYNC_LAG_MS           = 60;   // 音声同期のためにフレーム破棄を検討する遅れ幅 ms
   VIDEO_AUDIO_SEEK_LAG_MS           = 120;  // フレーム破棄ではなく音声位置へ seek する遅れ幅 ms
   VIDEO_END_TOLERANCE_MS            = 1500; // 終端付近として扱う残り時間 ms
-  VIDEO_SEEK_GUARD_TOLERANCE_MS     = 1500; // seek 直後のフレームを許容する目標位置との差 ms
+  VIDEO_SEEK_GUARD_BEFORE_MS        = 5;    // seek 直後に目標位置より前のフレームを許す範囲 ms
+  VIDEO_SEEK_GUARD_AFTER_MS         = 120;  // seek 直後に目標位置より後のフレームを許す範囲 ms
   VIDEO_SEEK_GUARD_FRAMES           = 5;    // seek guard で初期確認するフレーム数
   VIDEO_BACKWARD_FRAME_TOLERANCE_MS = 5;    // 逆戻り scratch frame とみなす許容差 ms
   VIDEO_DROP_FRAME_MAX              = 90;   // 1 tick で連続破棄できる最大フレーム数
@@ -104,7 +105,8 @@ end;
 
 function VideoMinerSeekGuardAccepts(TargetMs, DecodedMs: Integer): Boolean;
 begin
-  Result := Abs(DecodedMs - TargetMs) <= VIDEO_SEEK_GUARD_TOLERANCE_MS;
+  Result := (DecodedMs + VIDEO_SEEK_GUARD_BEFORE_MS >= TargetMs) and
+    (DecodedMs <= TargetMs + VIDEO_SEEK_GUARD_AFTER_MS);
 end;
 
 function VideoMinerDefaultSeekGuardFrames: Integer;
