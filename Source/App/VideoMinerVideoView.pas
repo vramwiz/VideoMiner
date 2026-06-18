@@ -89,6 +89,8 @@ type
     procedure SetSourceHasAlpha(Value: Boolean);
     // Check 中ホイールシークの 1 ステップ幅を設定する
     procedure SetSeekWheelFrameStepMs(Value: Integer);
+    // 90% セーフエリア確認枠の表示状態を設定する
+    procedure SetSafeAreaVisible(Value: Boolean);
     // 音量パーセントを overlay 表示へ渡す
     procedure SetVolumePercent(Value: Integer);
   public
@@ -153,6 +155,7 @@ type
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent write SetOnVolumeChange;
     property PlaybackActive: Boolean write SetPlaybackActive;
     property PlaybackRateText: string write SetPlaybackRateText;
+    property SafeAreaVisible: Boolean write SetSafeAreaVisible;
     property SourceHasAlpha: Boolean write SetSourceHasAlpha;
     property SeekWheelFrameStepMs: Integer write SetSeekWheelFrameStepMs;
     property CurrentFrameBitmap: TBitmap read GetCurrentFrameBitmap;
@@ -428,6 +431,11 @@ begin
     FSurface.PlaybackRateText := Value;
 end;
 
+procedure TVideoMinerVideoView.SetSafeAreaVisible(Value: Boolean);
+begin
+  if FSurface <> nil then
+    FSurface.SafeAreaVisible := Value;
+end;
 procedure TVideoMinerVideoView.SetSourceHasAlpha(Value: Boolean);
 begin
   if FSurface <> nil then

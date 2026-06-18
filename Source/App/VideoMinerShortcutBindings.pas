@@ -20,6 +20,7 @@ type
     SeekToFirstFrame : TShortcutActionProc; // 先頭フレームへ移動する
     SeekToLastFrame  : TShortcutActionProc; // 末尾フレームへ移動する
     ToggleFullScreen : TShortcutActionProc; // 全画面表示を切り替える
+    ToggleSafeArea   : TShortcutActionProc; // 90% セーフエリア確認枠を切り替える
     ToggleMute       : TShortcutActionProc; // ミュート状態を切り替える
     TogglePlayPause  : TShortcutActionProc; // 再生と一時停止を切り替える
     VolumeDown       : TShortcutActionProc; // 音量を下げる
@@ -42,6 +43,7 @@ begin
   Shortcuts.Clear;
   Shortcuts.Add(Ord('O')  , [ssCtrl], Handlers.OpenDialog);
   Shortcuts.Add(Ord('C')  , [ssCtrl], Handlers.CopyCurrentFrame);
+  Shortcuts.Add(Ord('G')  , [ssCtrl], Handlers.ToggleSafeArea);
   Shortcuts.Add(VK_LEFT   , [ssCtrl], Handlers.ChapterPrevious);
   Shortcuts.Add(VK_RIGHT  , [ssCtrl], Handlers.ChapterNext);
   Shortcuts.Add(VK_F11    , []      , Handlers.ToggleFullScreen);

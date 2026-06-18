@@ -58,6 +58,7 @@ type
     FPlayPauseButton        : TVideoMinerOverlayPlayPauseButton; // 再生/一時停止の中央ボタン
     FPreviousFileButton     : TVideoMinerOverlayFileNavButton;   // 前動画へ移動する左端ボタン
     FPreviewRect            : TRect;                             // 動画フレームが実際に描画される領域
+    FSafeAreaVisible        : Boolean;                           // 90% セーフエリア確認枠を表示中か
     FSeekBar                : TVideoMinerOverlaySeekBar;         // 下側のシーク/音量/状態操作バー
     FSeekBarVisible         : Boolean;                           // 下側シークバーを表示中か
     FSeekWheelFrameStepMs   : Integer;                           // Check 中ホイールシークの 1 ステップ幅 ms
@@ -81,6 +82,8 @@ type
     function HitPreviousFileButton(const Point: TPoint): Boolean;
     // 現在のズーム状態に従って動画フレームを描画する
     procedure DrawFrame(Canvas: TCanvas; const DestRect: TRect);
+    // 動画座標の中央 90% を確認用ガイドとして描く
+    procedure DrawSafeAreaGuide(Canvas: TCanvas; const DestRect: TRect);
     // alpha 確認用の市松模様合成 Bitmap を最新化する
     procedure EnsureAlphaCompositeBitmap;
 {$IFDEF DEBUG}
@@ -115,6 +118,8 @@ type
     procedure SetEndActionText(const Value: string);
     // 下側シークバーの表示状態を切り替える
     procedure SetSeekBarVisible(Value: Boolean);
+    // 90% セーフエリア確認枠の表示状態を切り替える
+    procedure SetSafeAreaVisible(Value: Boolean);
     // Check 中ホイールシークの 1 ステップ幅を設定する
     procedure SetSeekWheelFrameStepMs(Value: Integer);
     // 全画面状態を overlay へ渡す
@@ -240,6 +245,7 @@ type
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent read FOnVolumeChange write SetOnVolumeChange;
     property PlaybackActive: Boolean write SetPlaybackActive;
     property PlaybackRateText: string write SetPlaybackRateText;
+    property SafeAreaVisible: Boolean read FSafeAreaVisible write SetSafeAreaVisible;
     property SourceHasAlpha: Boolean read FSourceHasAlpha write SetSourceHasAlpha;
     property Muted: Boolean write SetMuted;
     property VolumePercent: Integer write SetVolumePercent;
@@ -627,6 +633,91 @@ begin
   Canvas.CopyRect(DestRect, FrameBitmap.Canvas, SourceRect);
 end;
 
+procedure TVideoMinerVideoSurface.DrawSafeAreaGuide(Canvas: TCanvas; const DestRect: TRect);
+var
+  ClipState: Integer;
+  GuideRect: TRect;
+  SafeBottom: Double;
+  SafeLeft: Double;
+  SafeRight: Double;
+  SafeTop: Double;
+  SourceHeight: Double;
+  SourceLeft: Double;
+  SourceRect: TRect;
+  SourceTop: Double;
+  SourceWidth: Double;
+
+  function MapX(ImageX: Double): Integer;
+  begin
+    Result := DestRect.Left + Round((ImageX - SourceLeft) * DestRect.Width / SourceWidth);
+  end;
+
+  function MapY(ImageY: Double): Integer;
+  begin
+    Result := DestRect.Top + Round((ImageY - SourceTop) * DestRect.Height / SourceHeight);
+  end;
+
+  procedure DrawGuideRectangle(Width: Integer; Color: TColor);
+  begin
+    Canvas.Pen.Style := psSolid;
+    Canvas.Pen.Width := Width;
+    Canvas.Pen.Color := Color;
+    Canvas.Brush.Style := bsClear;
+    Canvas.Rectangle(GuideRect);
+  end;
+
+begin
+  if (not FSafeAreaVisible) or DestRect.IsEmpty or
+     (FBitmap.Width <= 0) or (FBitmap.Height <= 0) then
+    Exit;
+
+  if FZoomScale <= MIN_ZOOM then
+  begin
+    SourceLeft := 0;
+    SourceTop := 0;
+    SourceWidth := FBitmap.Width;
+    SourceHeight := FBitmap.Height;
+  end
+  else
+  begin
+    ClampZoomCenter;
+    SourceWidth := Max(1.0, FBitmap.Width / FZoomScale);
+    SourceHeight := Max(1.0, FBitmap.Height / FZoomScale);
+    SourceRect.Left := Round(FZoomCenterX - SourceWidth / 2);
+    SourceRect.Top := Round(FZoomCenterY - SourceHeight / 2);
+    SourceRect.Right := SourceRect.Left + Round(SourceWidth);
+    SourceRect.Bottom := SourceRect.Top + Round(SourceHeight);
+
+    if SourceRect.Left < 0 then
+      OffsetRect(SourceRect, -SourceRect.Left, 0);
+    if SourceRect.Top < 0 then
+      OffsetRect(SourceRect, 0, -SourceRect.Top);
+    if SourceRect.Right > FBitmap.Width then
+      OffsetRect(SourceRect, FBitmap.Width - SourceRect.Right, 0);
+    if SourceRect.Bottom > FBitmap.Height then
+      OffsetRect(SourceRect, 0, FBitmap.Height - SourceRect.Bottom);
+
+    SourceLeft := SourceRect.Left;
+    SourceTop := SourceRect.Top;
+    SourceWidth := Max(1.0, SourceRect.Width);
+    SourceHeight := Max(1.0, SourceRect.Height);
+  end;
+
+  SafeLeft := FBitmap.Width * 0.05;
+  SafeTop := FBitmap.Height * 0.05;
+  SafeRight := FBitmap.Width * 0.95;
+  SafeBottom := FBitmap.Height * 0.95;
+
+  GuideRect := Rect(MapX(SafeLeft), MapY(SafeTop), MapX(SafeRight), MapY(SafeBottom));
+  ClipState := SaveDC(Canvas.Handle);
+  try
+    IntersectClipRect(Canvas.Handle, DestRect.Left, DestRect.Top, DestRect.Right, DestRect.Bottom);
+    DrawGuideRectangle(8, clBlack);
+    DrawGuideRectangle(5, RGB(0, 255, 96));
+  finally
+    RestoreDC(Canvas.Handle, ClipState);
+  end;
+end;
 function TVideoMinerVideoSurface.ImagePointFromClient(const Point: TPoint;
   out ImageX, ImageY: Double): Boolean;
 var
@@ -1143,6 +1234,7 @@ begin
     DrawCanvas.FillRect(Rect(DestRect.Right, DestRect.Top, ClientWidth, DestRect.Bottom));
 
   DrawFrame(DrawCanvas, DestRect);
+  DrawSafeAreaGuide(DrawCanvas, DestRect);
 {$IFDEF DEBUG}
   DrawAlphaStatus(DrawCanvas, DestRect);
 {$ENDIF}
@@ -1243,6 +1335,14 @@ begin
   end;
 end;
 
+procedure TVideoMinerVideoSurface.SetSafeAreaVisible(Value: Boolean);
+begin
+  if FSafeAreaVisible = Value then
+    Exit;
+
+  FSafeAreaVisible := Value;
+  Invalidate;
+end;
 procedure TVideoMinerVideoSurface.SetSeekWheelFrameStepMs(Value: Integer);
 begin
   FSeekWheelFrameStepMs := Max(1, Value);

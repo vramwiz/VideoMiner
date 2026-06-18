@@ -38,6 +38,7 @@ type
     FOnSeekToLastFrame         : TVideoMinerCommandProc;        // 最終フレーム移動の委譲先
     FOnSeekToMs                : TVideoMinerCommandSeekProc;    // 絶対位置シークの委譲先
     FOnStopPlayback            : TVideoMinerCommandProc;        // 再生停止の委譲先
+    FOnToggleSafeArea          : TVideoMinerCommandProc;        // 90% セーフエリア確認枠切り替えの委譲先
     FOnToggleFullScreen        : TVideoMinerCommandProc;        // 全画面切り替えの委譲先
     // 音量/ミュート状態を動画ビューの overlay 表示へ反映する
     procedure SyncVolumeToView;
@@ -95,6 +96,8 @@ type
     procedure SkipForwardClick(Sender: TObject);
     // 全画面切り替えをアプリ側へ委譲する
     procedure ToggleFullScreen;
+    // 90% セーフエリア確認枠切り替えをアプリ側へ委譲する
+    procedure ToggleSafeArea;
     // ミュート状態を切り替え、表示と設定保存へ反映する
     procedure ToggleMute;
     // 再生中なら停止し、停止中なら現在位置から再生する
@@ -121,6 +124,7 @@ type
     property OnSeekToLastFrame: TVideoMinerCommandProc read FOnSeekToLastFrame write FOnSeekToLastFrame;
     property OnSeekToMs: TVideoMinerCommandSeekProc read FOnSeekToMs write FOnSeekToMs;
     property OnStopPlayback: TVideoMinerCommandProc read FOnStopPlayback write FOnStopPlayback;
+    property OnToggleSafeArea: TVideoMinerCommandProc read FOnToggleSafeArea write FOnToggleSafeArea;
     property OnToggleFullScreen: TVideoMinerCommandProc read FOnToggleFullScreen write FOnToggleFullScreen;
   end;
 
@@ -171,6 +175,7 @@ begin
   Handlers.SeekToFirstFrame := SeekToFirstFrame;
   Handlers.SeekToLastFrame := SeekToLastFrame;
   Handlers.ToggleFullScreen := ToggleFullScreen;
+  Handlers.ToggleSafeArea := ToggleSafeArea;
   Handlers.ToggleMute := ToggleMute;
   Handlers.TogglePlayPause := TogglePlayPause;
   Handlers.CyclePlaybackRate := CyclePlaybackRate;
@@ -330,6 +335,11 @@ begin
     FOnToggleFullScreen;
 end;
 
+procedure TVideoMinerCommandController.ToggleSafeArea;
+begin
+  if Assigned(FOnToggleSafeArea) then
+    FOnToggleSafeArea;
+end;
 procedure TVideoMinerCommandController.ToggleMute;
 begin
   if FAudioPlayback = nil then

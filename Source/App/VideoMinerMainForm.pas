@@ -100,6 +100,7 @@ type
     FLoopSegmentEndMs                : Integer;                         // ループ再生区間の終端 ms
     FLoopSegmentStartMs              : Integer;                         // ループ再生区間の開始 ms
     FEndAction                       : TVideoMinerEndAction;            // 動画終端到達時の動作
+    FSafeAreaVisible                 : Boolean;                         // 90% セーフエリア確認枠を表示中か
     FShortcuts                       : TShortcutAction;                 // キーボードショートカット登録先
     FTitleIcon                       : TImage;                          // 独自タイトルバー左端のアイコン
     FLastInfoUpdateTick              : UInt64;                          // 情報表示を最後に更新した tick
@@ -129,6 +130,8 @@ type
     procedure EndActionOverlayClick(Sender: TObject);
     // 全画面表示を切り替える
     procedure ToggleFullScreen;
+    // 90% セーフエリア確認枠を切り替える
+    procedure ToggleSafeArea;
     // 動画画面右クリックでサムネイル一覧を開く
     procedure VideoSurfaceMouseDown(Sender: TObject);
     // サムネイル一覧で選択された動画へ切り替える
@@ -333,6 +336,7 @@ begin
   FCommandController.OnSeekToLastFrame := SeekToLastFrame;
   FCommandController.OnSeekToMs := SeekToMs;
   FCommandController.OnStopPlayback := StopPlayback;
+  FCommandController.OnToggleSafeArea := ToggleSafeArea;
   FCommandController.OnToggleFullScreen := ToggleFullScreen;
   FCommandController.RegisterShortcuts(FShortcuts);
   FCommandController.BindVideoView;
@@ -436,6 +440,16 @@ begin
   FWindowModeController.ToggleFullScreen;
 end;
 
+procedure TVideoMinerMainForm.ToggleSafeArea;
+begin
+  FSafeAreaVisible := not FSafeAreaVisible;
+  if FVideoView <> nil then
+    FVideoView.SafeAreaVisible := FSafeAreaVisible;
+  if FSafeAreaVisible then
+    SetStatusCaption('90% safe area guide on.')
+  else
+    SetStatusCaption('90% safe area guide off.');
+end;
 procedure TVideoMinerMainForm.VideoSurfaceMouseDown(Sender: TObject);
 begin
   if (FThumbnailBrowser <> nil) and (not FThumbnailBrowser.Visible) then
