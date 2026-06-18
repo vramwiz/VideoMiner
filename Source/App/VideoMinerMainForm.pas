@@ -103,11 +103,31 @@ type
     FSafeAreaVisible                 : Boolean;                         // 90% セーフエリア確認枠を表示中か
     FShortcuts                       : TShortcutAction;                 // キーボードショートカット登録先
     FTitleIcon                       : TImage;                          // 独自タイトルバー左端のアイコン
+    FFrameGuideBottom                : TPanel;                          // hover 時だけ表示する下端外側のフォーム枠
+    FFrameGuideInnerBottom           : TPanel;                          // hover 時だけ表示する下端内側のフォーム枠
+    FFrameGuideInnerLeft             : TPanel;                          // hover 時だけ表示する左端内側のフォーム枠
+    FFrameGuideInnerRight            : TPanel;                          // hover 時だけ表示する右端内側のフォーム枠
+    FFrameGuideInnerTop              : TPanel;                          // hover 時だけ表示する上端内側のフォーム枠
+    FFrameGuideLeft                  : TPanel;                          // hover 時だけ表示する左端外側のフォーム枠
+    FFrameGuideRight                 : TPanel;                          // hover 時だけ表示する右端外側のフォーム枠
+    FFrameGuideTop                   : TPanel;                          // hover 時だけ表示する上端外側のフォーム枠
+    FFrameGuideTimer                 : TTimer;                          // マウス位置を見てフォーム枠表示を切り替える
+    FFrameGuideVisible               : Boolean;                         // hover 用フォーム枠を表示中か
     FLastInfoUpdateTick              : UInt64;                          // 情報表示を最後に更新した tick
     FBlockedNavigationKeys           : TVideoMinerKeySet;               // 押しっぱなし抑止中のナビゲーションキー
     FNavigationInputBlockedUntilTick : UInt64;                          // ナビゲーション入力を無視する終了 tick
     // 独自タイトルバー左端のアプリアイコンを作る
     procedure InitializeTitleIcon;
+    // hover 時だけ見えるフォーム枠を作る
+    procedure InitializeFrameGuide;
+    // hover 用フォーム枠の表示/非表示を切り替える
+    procedure SetFrameGuideVisible(Value: Boolean);
+    // hover 用フォーム枠を現在のフォームサイズへ合わせる
+    procedure UpdateFrameGuideLayout;
+    // マウス位置から hover 用フォーム枠の表示状態を更新する
+    procedure UpdateFrameGuideVisibility;
+    // hover 用フォーム枠表示の timer 処理
+    procedure FrameGuideTimer(Sender: TObject);
     // タイトルバーのボタン背景色を切り替える
     procedure SetCaptionButtonColor(Sender: TObject; Color: TColor);
     // 現在位置に手動チャプターを追加する
@@ -285,6 +305,11 @@ const
   TITLE_BAR_COLOR               = $00171617; // 独自タイトルバーの通常背景色
   CLOSE_BUTTON_HOVER_COLOR      = $00232323; // 閉じるボタン hover 時の背景色
   CAPTION_BUTTON_HOVER_COLOR    = $00232323; // 最小化/最大化ボタン hover 時の背景色
+  FRAME_GUIDE_INNER_COLOR       = clWhite;   // hover 枠の内側色
+  FRAME_GUIDE_OUTER_COLOR       = clBlack;   // hover 枠の外側色
+  FRAME_GUIDE_EDGE_SIZE         = 12;         // hover 枠を出すフォーム端の幅 px
+  FRAME_GUIDE_LINE_SIZE         = 1;          // hover 枠 1 本ぶんの太さ px
+  FRAME_GUIDE_TIMER_INTERVAL_MS = 80;         // hover 枠表示状態を確認する間隔 ms
   SLOW_OPEN_LOG_MS              = 200;       // open 処理を slow log へ出す基準時間 ms
 
 {$R *.dfm}
@@ -301,6 +326,7 @@ begin
   PanelMaximizeButton.Color := TITLE_BAR_COLOR;
   PanelMinimizeButton.Color := TITLE_BAR_COLOR;
   InitializeTitleIcon;
+  InitializeFrameGuide;
   FEndAction := LoadEndAction;
   FShortcuts := TShortcutAction.Create;
   FOleInitialized := OleInitialize(nil) >= 0;
@@ -368,6 +394,10 @@ begin
   FReloadCurrentFileTimer.Enabled := False;
   FReloadCurrentFileTimer.Interval := CURRENT_FILE_RELOAD_SETTLE_MS;
   FReloadCurrentFileTimer.OnTimer := ReloadCurrentFileTimer;
+  FFrameGuideTimer := TTimer.Create(Self);
+  FFrameGuideTimer.Enabled := True;
+  FFrameGuideTimer.Interval := FRAME_GUIDE_TIMER_INTERVAL_MS;
+  FFrameGuideTimer.OnTimer := FrameGuideTimer;
   FFolderWatcher := TFolderWatch.Create;
   FFolderWatcher.FirstScanDone := True;
   FFolderWatcher.OnFileChange := FolderWatchFileChange;
@@ -452,6 +482,156 @@ begin
     SetStatusCaption('90% safe area guide on.')
   else
     SetStatusCaption('90% safe area guide off.');
+end;
+
+procedure TVideoMinerMainForm.InitializeFrameGuide;
+
+  procedure CreateGuidePanel(out Panel: TPanel; Color: TColor);
+  begin
+    Panel := TPanel.Create(Self);
+    Panel.Parent := Self;
+    Panel.BevelOuter := bvNone;
+    Panel.Caption := '';
+    Panel.Color := Color;
+    Panel.Enabled := False;
+    Panel.Visible := False;
+  end;
+
+begin
+  CreateGuidePanel(FFrameGuideTop, FRAME_GUIDE_OUTER_COLOR);
+  CreateGuidePanel(FFrameGuideBottom, FRAME_GUIDE_OUTER_COLOR);
+  CreateGuidePanel(FFrameGuideLeft, FRAME_GUIDE_OUTER_COLOR);
+  CreateGuidePanel(FFrameGuideRight, FRAME_GUIDE_OUTER_COLOR);
+  CreateGuidePanel(FFrameGuideInnerTop, FRAME_GUIDE_INNER_COLOR);
+  CreateGuidePanel(FFrameGuideInnerBottom, FRAME_GUIDE_INNER_COLOR);
+  CreateGuidePanel(FFrameGuideInnerLeft, FRAME_GUIDE_INNER_COLOR);
+  CreateGuidePanel(FFrameGuideInnerRight, FRAME_GUIDE_INNER_COLOR);
+  UpdateFrameGuideLayout;
+end;
+
+procedure TVideoMinerMainForm.SetFrameGuideVisible(Value: Boolean);
+
+  procedure SetGuidePanelVisible(Panel: TPanel);
+  begin
+    if Panel <> nil then
+      Panel.Visible := Value;
+  end;
+
+  procedure BringGuidePanelToFront(Panel: TPanel);
+  begin
+    if Panel <> nil then
+      Panel.BringToFront;
+  end;
+
+begin
+  if (FFrameGuideVisible = Value) and (not Value) then
+    Exit;
+
+  if FFrameGuideVisible <> Value then
+  begin
+    FFrameGuideVisible := Value;
+    SetGuidePanelVisible(FFrameGuideTop);
+    SetGuidePanelVisible(FFrameGuideBottom);
+    SetGuidePanelVisible(FFrameGuideLeft);
+    SetGuidePanelVisible(FFrameGuideRight);
+    SetGuidePanelVisible(FFrameGuideInnerTop);
+    SetGuidePanelVisible(FFrameGuideInnerBottom);
+    SetGuidePanelVisible(FFrameGuideInnerLeft);
+    SetGuidePanelVisible(FFrameGuideInnerRight);
+  end;
+
+  if Value then
+  begin
+    UpdateFrameGuideLayout;
+    BringGuidePanelToFront(FFrameGuideTop);
+    BringGuidePanelToFront(FFrameGuideBottom);
+    BringGuidePanelToFront(FFrameGuideLeft);
+    BringGuidePanelToFront(FFrameGuideRight);
+    BringGuidePanelToFront(FFrameGuideInnerTop);
+    BringGuidePanelToFront(FFrameGuideInnerBottom);
+    BringGuidePanelToFront(FFrameGuideInnerLeft);
+    BringGuidePanelToFront(FFrameGuideInnerRight);
+  end;
+end;
+
+procedure TVideoMinerMainForm.UpdateFrameGuideLayout;
+var
+  InnerHeight: Integer;
+  InnerWidth: Integer;
+  Thickness: Integer;
+begin
+  Thickness := FRAME_GUIDE_LINE_SIZE;
+  if (ClientWidth <= 0) or (ClientHeight <= 0) then
+    Exit;
+  InnerWidth := Max(0, ClientWidth - Thickness * 2);
+  InnerHeight := Max(0, ClientHeight - Thickness * 2);
+
+  if FFrameGuideTop <> nil then
+    FFrameGuideTop.SetBounds(0, 0, ClientWidth, Thickness);
+  if FFrameGuideBottom <> nil then
+    FFrameGuideBottom.SetBounds(0, ClientHeight - Thickness, ClientWidth,
+      Thickness);
+  if FFrameGuideLeft <> nil then
+    FFrameGuideLeft.SetBounds(0, 0, Thickness, ClientHeight);
+  if FFrameGuideRight <> nil then
+    FFrameGuideRight.SetBounds(ClientWidth - Thickness, 0, Thickness,
+      ClientHeight);
+  if FFrameGuideInnerTop <> nil then
+    FFrameGuideInnerTop.SetBounds(Thickness, Thickness, InnerWidth, Thickness);
+  if FFrameGuideInnerBottom <> nil then
+    FFrameGuideInnerBottom.SetBounds(Thickness, ClientHeight - Thickness * 2,
+      InnerWidth, Thickness);
+  if FFrameGuideInnerLeft <> nil then
+    FFrameGuideInnerLeft.SetBounds(Thickness, Thickness, Thickness,
+      InnerHeight);
+  if FFrameGuideInnerRight <> nil then
+    FFrameGuideInnerRight.SetBounds(ClientWidth - Thickness * 2, Thickness,
+      Thickness, InnerHeight);
+end;
+
+procedure TVideoMinerMainForm.UpdateFrameGuideVisibility;
+var
+  ClientPoint: TPoint;
+  CursorPoint: TPoint;
+  InEdge: Boolean;
+  InForm: Boolean;
+  InTitleBar: Boolean;
+begin
+  if (FWindowModeController <> nil) and
+     (FWindowModeController.FullScreen or FWindowModeController.BossMode) then
+  begin
+    SetFrameGuideVisible(False);
+    Exit;
+  end;
+
+  if WindowState = wsMinimized then
+  begin
+    SetFrameGuideVisible(False);
+    Exit;
+  end;
+
+  GetCursorPos(CursorPoint);
+  ClientPoint := ScreenToClient(CursorPoint);
+  InForm := PtInRect(Rect(0, 0, ClientWidth, ClientHeight), ClientPoint);
+  if not InForm then
+  begin
+    SetFrameGuideVisible(False);
+    Exit;
+  end;
+
+  InTitleBar := (PanelTitleBar <> nil) and PanelTitleBar.Visible and
+    PtInRect(PanelTitleBar.BoundsRect, ClientPoint);
+  InEdge := (ClientPoint.X < FRAME_GUIDE_EDGE_SIZE) or
+    (ClientPoint.X >= ClientWidth - FRAME_GUIDE_EDGE_SIZE) or
+    (ClientPoint.Y < FRAME_GUIDE_EDGE_SIZE) or
+    (ClientPoint.Y >= ClientHeight - FRAME_GUIDE_EDGE_SIZE);
+
+  SetFrameGuideVisible(InTitleBar or InEdge);
+end;
+
+procedure TVideoMinerMainForm.FrameGuideTimer(Sender: TObject);
+begin
+  UpdateFrameGuideVisibility;
 end;
 procedure TVideoMinerMainForm.VideoSurfaceMouseDown(Sender: TObject);
 begin
@@ -1671,6 +1851,7 @@ end;
 procedure TVideoMinerMainForm.WMNCHitTest(var Message: TWMNCHitTest);
 begin
   inherited;
+  UpdateFrameGuideVisibility;
   if FWindowModeController <> nil then
     FWindowModeController.HitTestBorderlessResize(
       Point(Message.XPos, Message.YPos), Message.Result);
@@ -1696,6 +1877,7 @@ begin
     FWindowModeController.HandleSize;
   if FThumbnailBrowser <> nil then
     TResizeEdgeHelper.AdjustEdges(FThumbnailBrowser);
+  UpdateFrameGuideLayout;
 end;
 
 procedure TVideoMinerMainForm.CMDialogKey(var Message: TCMDialogKey);
