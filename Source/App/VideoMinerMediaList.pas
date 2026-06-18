@@ -1,7 +1,7 @@
-unit VideoMinerMediaList;
+ï»¿unit VideoMinerMediaList;
 
-// ŠJ‚¢‚½“®‰æ‚Æ“¯‚¶ƒtƒHƒ‹ƒ_‚ğì‹Æ’PˆÊ‚Æ‚µ‚Äˆµ‚¤ƒƒfƒBƒAˆê——‚ğŠÇ—‚·‚éB
-// ƒtƒ@ƒCƒ‹ûWAì¬“ú‡‚Ì•À‚Ñ‘Ö‚¦A‘OŒãƒtƒ@ƒCƒ‹‚Ö‚ÌˆÚ“®‰Â”Û‚¾‚¯‚ğ’S“–‚·‚éB
+// é–‹ã„ãŸå‹•ç”»ã¨åŒã˜ãƒ•ã‚©ãƒ«ãƒ€ã‚’ä½œæ¥­å˜ä½ã¨ã—ã¦æ‰±ã†ãƒ¡ãƒ‡ã‚£ã‚¢ä¸€è¦§ã‚’ç®¡ç†ã™ã‚‹ã€‚
+// ãƒ•ã‚¡ã‚¤ãƒ«åé›†ã€ä½œæˆæ—¥æ™‚é †ã®ä¸¦ã³æ›¿ãˆã€å‰å¾Œãƒ•ã‚¡ã‚¤ãƒ«ã¸ã®ç§»å‹•å¯å¦ã ã‘ã‚’æ‹…å½“ã™ã‚‹ã€‚
 
 interface
 
@@ -11,22 +11,24 @@ uses
 type
   TVideoMinerMediaList = class
   private
-    FFiles        : TArray<string>; // Œ»İ‚ÌƒtƒHƒ‹ƒ_“à‚ÅˆÚ“®‘ÎÛ‚É‚È‚é“®‰æƒtƒ@ƒCƒ‹ˆê——
-    FCurrentIndex : Integer;        // ˆê——“à‚ÅŒ»İŠJ‚¢‚Ä‚¢‚éƒtƒ@ƒCƒ‹ˆÊ’u
+    FFiles        : TArray<string>; // ç¾åœ¨ã®ãƒ•ã‚©ãƒ«ãƒ€å†…ã§ç§»å‹•å¯¾è±¡ã«ãªã‚‹å‹•ç”»ãƒ•ã‚¡ã‚¤ãƒ«ä¸€è¦§
+    FCurrentIndex : Integer;        // ä¸€è¦§å†…ã§ç¾åœ¨é–‹ã„ã¦ã„ã‚‹ãƒ•ã‚¡ã‚¤ãƒ«ä½ç½®
     class function IsMediaFile(const FileName: string): Boolean; static;
     function GetCount: Integer;
     function GetCurrentFile: string;
   public
     constructor Create;
-    // ˆê——‚ÆŒ»İˆÊ’u‚ğ–¢\’zó‘Ô‚Ö–ß‚·
+    // æŒ‡å®šãƒ•ã‚©ãƒ«ãƒ€å†…ã§æœ€åˆã«é–‹ãå‹•ç”»ãƒ•ã‚¡ã‚¤ãƒ«ã‚’è¿”ã™
+    class function FirstMediaFileInFolder(const Folder: string): string; static;
+    // ä¸€è¦§ã¨ç¾åœ¨ä½ç½®ã‚’æœªæ§‹ç¯‰çŠ¶æ…‹ã¸æˆ»ã™
     procedure Clear;
-    // w’èƒtƒ@ƒCƒ‹‚ÌƒtƒHƒ‹ƒ_‚©‚ç“®‰æˆê——‚ğì‚èAw’èƒtƒ@ƒCƒ‹‚ğŒ»İˆÊ’u‚É‚·‚é
+    // æŒ‡å®šãƒ•ã‚¡ã‚¤ãƒ«ã®ãƒ•ã‚©ãƒ«ãƒ€ã‹ã‚‰å‹•ç”»ä¸€è¦§ã‚’ä½œã‚Šã€æŒ‡å®šãƒ•ã‚¡ã‚¤ãƒ«ã‚’ç¾åœ¨ä½ç½®ã«ã™ã‚‹
     procedure BuildForFile(const FileName: string);
-    // ˆê——ŠO‚È‚ç‹ó•¶š‚ğ•Ô‚µAˆê——“à‚È‚çw’èˆÊ’u‚Ìƒtƒ@ƒCƒ‹–¼‚ğ•Ô‚·
+    // ä¸€è¦§å¤–ãªã‚‰ç©ºæ–‡å­—ã‚’è¿”ã—ã€ä¸€è¦§å†…ãªã‚‰æŒ‡å®šä½ç½®ã®ãƒ•ã‚¡ã‚¤ãƒ«åã‚’è¿”ã™
     function FileAt(Index: Integer): string;
-    // Œ»İˆÊ’u‚©‚ç Delta •ª‚¾‚¯ˆÚ“®‚Å‚«‚é‚©•Ô‚·
+    // ç¾åœ¨ä½ç½®ã‹ã‚‰ Delta åˆ†ã ã‘ç§»å‹•ã§ãã‚‹ã‹è¿”ã™
     function CanNavigate(Delta: Integer): Boolean;
-    // Œ»İˆÊ’u‚©‚ç Delta •ª‚¾‚¯ˆÚ“®‚µ‚½æ‚Ìƒtƒ@ƒCƒ‹–¼‚ğ•Ô‚·
+    // ç¾åœ¨ä½ç½®ã‹ã‚‰ Delta åˆ†ã ã‘ç§»å‹•ã—ãŸå…ˆã®ãƒ•ã‚¡ã‚¤ãƒ«åã‚’è¿”ã™
     function NavigateFile(Delta: Integer): string;
     property Count: Integer read GetCount;
     property CurrentIndex: Integer read FCurrentIndex;
@@ -38,10 +40,10 @@ implementation
 type
   TMediaFileSortInfo = class
   public
-    SortTime: TDateTime; // ì¬“ú‡ƒ\[ƒg‚Ég‚¤
+    SortTime: TDateTime; // ä½œæˆæ—¥æ™‚é †ã‚½ãƒ¼ãƒˆã«ä½¿ã†æ™‚åˆ»
   end;
 
-// ì¬“ú‚ªŒÃ‚¢‡‚É•À‚×A“¯‚È‚çƒtƒ@ƒCƒ‹–¼‡‚ÅˆÀ’è‚³‚¹‚é
+// ä½œæˆæ—¥æ™‚ãŒå¤ã„é †ã«ä¸¦ã¹ã€åŒæ™‚åˆ»ãªã‚‰ãƒ•ã‚¡ã‚¤ãƒ«åé †ã§å®‰å®šã•ã›ã‚‹
 function CompareMediaFilesByTime(List: TStringList; Index1, Index2: Integer): Integer;
 var
   Info1: TMediaFileSortInfo;
@@ -58,7 +60,7 @@ begin
     Result := CompareText(ExtractFileName(List[Index1]), ExtractFileName(List[Index2]));
 end;
 
-// ì¬“ú‚ğæ“¾‚Å‚«‚È‚¢ƒtƒ@ƒCƒ‹‚Å‚Í 0 ‚ğ•Ô‚µ‚ÄŒÄ‚Ño‚µ‘¤‚Å‘ã‘Ö‚ğg‚í‚¹‚é
+// ä½œæˆæ—¥æ™‚ã‚’å–å¾—ã§ããªã„ãƒ•ã‚¡ã‚¤ãƒ«ã§ã¯ 0 ã‚’è¿”ã—ã¦å‘¼ã³å‡ºã—å´ã§ä»£æ›¿æ™‚åˆ»ã‚’ä½¿ã‚ã›ã‚‹
 function GetFileCreationTime(const FileName: string): TDateTime;
 begin
   try
@@ -80,7 +82,7 @@ begin
   FCurrentIndex := -1;
 end;
 
-// ‘ÎÛŠg’£q‚¾‚¯‚ğƒtƒHƒ‹ƒ_“àƒiƒrƒQ[ƒVƒ‡ƒ“‚ÖŠÜ‚ß‚é
+// å¯¾è±¡æ‹¡å¼µå­ã ã‘ã‚’ãƒ•ã‚©ãƒ«ãƒ€å†…ãƒŠãƒ“ã‚²ãƒ¼ã‚·ãƒ§ãƒ³ã¸å«ã‚ã‚‹
 class function TVideoMinerMediaList.IsMediaFile(const FileName: string): Boolean;
 var
   Ext: string;
@@ -93,14 +95,68 @@ begin
     (Ext = '.ts') or (Ext = '.m2ts');
 end;
 
-// ƒtƒHƒ‹ƒ_“à‚Ì‘ÎÛƒtƒ@ƒCƒ‹‚ğûW‚µAì¬“ú‚ÌŒÃ‚¢‡‚Å•Û‚·‚é
-procedure TVideoMinerMediaList.BuildForFile(const FileName: string);
+// ãƒ•ã‚©ãƒ«ãƒ€å†…ã®å¯¾è±¡ãƒ•ã‚¡ã‚¤ãƒ«ã‚’åé›†ã—ã€ä½œæˆæ—¥æ™‚ã®å¤ã„é †ã§ä¿æŒã™ã‚‹
+procedure CollectMediaFilesInFolder(const Folder: string; Files: TStringList);
 var
-  Folder: string;
+  Candidate: string;
   SearchRec: TSearchRec;
+  SortInfo: TMediaFileSortInfo;
+begin
+  if FindFirst(IncludeTrailingPathDelimiter(Folder) + '*.*', faAnyFile,
+    SearchRec) = 0 then
+  try
+    repeat
+      if (SearchRec.Attr and faDirectory) <> 0 then
+        Continue;
+
+      Candidate := IncludeTrailingPathDelimiter(Folder) + SearchRec.Name;
+      if TVideoMinerMediaList.IsMediaFile(Candidate) then
+      begin
+        SortInfo := TMediaFileSortInfo.Create;
+        SortInfo.SortTime := GetFileCreationTime(Candidate);
+        if SortInfo.SortTime <= 0 then
+          SortInfo.SortTime := SearchRec.TimeStamp;
+        Files.AddObject(Candidate, SortInfo);
+      end;
+    until FindNext(SearchRec) <> 0;
+  finally
+    FindClose(SearchRec);
+  end;
+end;
+
+class function TVideoMinerMediaList.FirstMediaFileInFolder(
+  const Folder: string): string;
+var
   Files: TStringList;
   I: Integer;
-  Candidate: string;
+begin
+  Result := '';
+  if Folder = '' then
+    Exit;
+
+  Files := TStringList.Create;
+  try
+    Files.CaseSensitive := False;
+    Files.Duplicates := dupIgnore;
+    CollectMediaFilesInFolder(Folder, Files);
+    if Files.Count <= 0 then
+      Exit;
+
+    Files.CustomSort(CompareMediaFilesByTime);
+    Result := Files[0];
+  finally
+    for I := 0 to Files.Count - 1 do
+      Files.Objects[I].Free;
+    Files.Free;
+  end;
+end;
+
+// ãƒ•ã‚©ãƒ«ãƒ€å†…ã®å¯¾è±¡ãƒ•ã‚¡ã‚¤ãƒ«ã‚’åé›†ã—ã€ä½œæˆæ—¥æ™‚ã®å¤ã„é †ã§ä¿æŒã™ã‚‹
+procedure TVideoMinerMediaList.BuildForFile(const FileName: string);
+var
+  Files: TStringList;
+  Folder: string;
+  I: Integer;
   SortInfo: TMediaFileSortInfo;
 begin
   Folder := IncludeTrailingPathDelimiter(ExtractFilePath(FileName));
@@ -108,26 +164,7 @@ begin
   try
     Files.CaseSensitive := False;
     Files.Duplicates := dupIgnore;
-
-    if FindFirst(Folder + '*.*', faAnyFile, SearchRec) = 0 then
-    try
-      repeat
-        if (SearchRec.Attr and faDirectory) = 0 then
-        begin
-          Candidate := Folder + SearchRec.Name;
-          if IsMediaFile(Candidate) then
-          begin
-            SortInfo := TMediaFileSortInfo.Create;
-            SortInfo.SortTime := GetFileCreationTime(Candidate);
-            if SortInfo.SortTime <= 0 then
-              SortInfo.SortTime := SearchRec.TimeStamp;
-            Files.AddObject(Candidate, SortInfo);
-          end;
-        end;
-      until FindNext(SearchRec) <> 0;
-    finally
-      FindClose(SearchRec);
-    end;
+    CollectMediaFilesInFolder(Folder, Files);
 
     if Files.IndexOf(FileName) < 0 then
     begin
@@ -150,13 +187,13 @@ begin
   end;
 end;
 
-// Œ»İ\’zÏ‚İ‚Ìƒtƒ@ƒCƒ‹”‚ğ•Ô‚·
+// ç¾åœ¨æ§‹ç¯‰æ¸ˆã¿ã®ãƒ•ã‚¡ã‚¤ãƒ«æ•°ã‚’è¿”ã™
 function TVideoMinerMediaList.GetCount: Integer;
 begin
   Result := Length(FFiles);
 end;
 
-// Œ»İˆÊ’u‚ª–³Œø‚Èê‡‚Í‹ó•¶š‚ğ•Ô‚·
+// ç¾åœ¨ä½ç½®ãŒç„¡åŠ¹ãªå ´åˆã¯ç©ºæ–‡å­—ã‚’è¿”ã™
 function TVideoMinerMediaList.GetCurrentFile: string;
 begin
   Result := FileAt(FCurrentIndex);

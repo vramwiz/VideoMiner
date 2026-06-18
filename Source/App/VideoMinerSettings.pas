@@ -1,73 +1,81 @@
-unit VideoMinerSettings;
+ï»¿unit VideoMinerSettings;
 
-// VideoMiner ‚Ìƒ†[ƒU[İ’è‚ğ INI ƒtƒ@ƒCƒ‹‚Ö•Û‘¶/“Ç‚·‚éB
-// UI ó‘ÔAÄ¶İ’èAè“®ƒ`ƒƒƒvƒ^[ˆÊ’u‚È‚ÇA‹N“®‚ğ‚Ü‚½‚¢‚Å•Û‚·‚é’l‚¾‚¯‚ğˆµ‚¤B
+// VideoMiner ã®ãƒ¦ãƒ¼ã‚¶ãƒ¼è¨­å®šã‚’ INI ãƒ•ã‚¡ã‚¤ãƒ«ã¸ä¿å­˜/èª­è¾¼ã™ã‚‹ã€‚
+// UI çŠ¶æ…‹ã€å†ç”Ÿè¨­å®šã€æ‰‹å‹•ãƒãƒ£ãƒ—ã‚¿ãƒ¼ä½ç½®ãªã©ã€èµ·å‹•ã‚’ã¾ãŸã„ã§ä¿æŒã™ã‚‹å€¤ã ã‘ã‚’æ‰±ã†ã€‚
 
 interface
 
 type
-  // è“®ƒ`ƒƒƒvƒ^[ˆÊ’u‚ğ ms ’PˆÊ‚Å•Û‚·‚é”z—ñ
+  // æ‰‹å‹•ãƒãƒ£ãƒ—ã‚¿ãƒ¼ä½ç½®ã‚’ ms å˜ä½ã§ä¿æŒã™ã‚‹é…åˆ—
   TVideoMinerChapterPositions = TArray<Integer>;
-  // ƒfƒR[ƒh•û®‚ÌŠó–]’lBDebug ‚Å‚Í auto ‚ğ software ˆµ‚¢‚É‚µ‚Ä’²¸‚µ‚â‚·‚­‚·‚éB
+  // æœ€è¿‘é–‹ã„ãŸãƒ•ã‚©ãƒ«ãƒ€ã‚’é †ä½ä»˜ãã§ä¿æŒã™ã‚‹é…åˆ—
+  TVideoMinerFolderHistory = TArray<string>;
+  // ãƒ‡ã‚³ãƒ¼ãƒ‰æ–¹å¼ã®å¸Œæœ›å€¤ã€‚Debug ã§ã¯ auto ã‚’ software æ‰±ã„ã«ã—ã¦èª¿æŸ»ã—ã‚„ã™ãã™ã‚‹ã€‚
   TVideoDecoderMode = (vdmAuto, vdmQsv, vdmSoftware);
-  // “®‰æI’[‚Ö“’B‚µ‚½‚Æ‚«‚ÌÄ¶“®ì
+  // å‹•ç”»çµ‚ç«¯ã¸åˆ°é”ã—ãŸã¨ãã®å†ç”Ÿå‹•ä½œ
   TVideoMinerEndAction = (eaStop, eaLoop, eaNext);
 
   TVideoMinerAudioSettings = record
-    Muted         : Boolean; // ƒ~ƒ…[ƒgó‘Ô
-    VolumePercent : Integer; // ‰¹—Êƒp[ƒZƒ“ƒg
+    Muted         : Boolean; // ãƒŸãƒ¥ãƒ¼ãƒˆçŠ¶æ…‹
+    VolumePercent : Integer; // éŸ³é‡ãƒ‘ãƒ¼ã‚»ãƒ³ãƒˆ
   end;
 
   TVideoMinerLastMedia = record
-    Available : Boolean; // ‘O‰ñƒƒfƒBƒAî•ñ‚ğ•œŒ³‚Ég‚¦‚é‚©
-    Folder    : string;  // ‘O‰ñŠJ‚¢‚½ƒtƒHƒ‹ƒ_
-    FileName  : string;  // ‘O‰ñŠJ‚¢‚½ƒtƒ@ƒCƒ‹
+    Available : Boolean; // å‰å›ãƒ¡ãƒ‡ã‚£ã‚¢æƒ…å ±ã‚’å¾©å…ƒã«ä½¿ãˆã‚‹ã‹
+    Folder    : string;  // å‰å›é–‹ã„ãŸãƒ•ã‚©ãƒ«ãƒ€
+    FileName  : string;  // å‰å›é–‹ã„ãŸãƒ•ã‚¡ã‚¤ãƒ«
   end;
 
   TVideoMinerWindowBounds = record
-    Available : Boolean; // •Û‘¶Ï‚İÀ•W‚ğ•œŒ³‚Ég‚¦‚é‚©
-    Left      : Integer; // ’Êí•\¦‚Ì¶ˆÊ’u
-    Top       : Integer; // ’Êí•\¦‚ÌãˆÊ’u
-    Width     : Integer; // ’Êí•\¦‚Ì•
-    Height    : Integer; // ’Êí•\¦‚Ì‚‚³
+    Available : Boolean; // ä¿å­˜æ¸ˆã¿åº§æ¨™ã‚’å¾©å…ƒã«ä½¿ãˆã‚‹ã‹
+    Left      : Integer; // é€šå¸¸è¡¨ç¤ºæ™‚ã®å·¦ä½ç½®
+    Top       : Integer; // é€šå¸¸è¡¨ç¤ºæ™‚ã®ä¸Šä½ç½®
+    Width     : Integer; // é€šå¸¸è¡¨ç¤ºæ™‚ã®å¹…
+    Height    : Integer; // é€šå¸¸è¡¨ç¤ºæ™‚ã®é«˜ã•
   end;
 
-// Œ»İ‚Ì“®‰æƒfƒR[ƒh•û®‚ğ•Ô‚·
+// ç¾åœ¨ã®å‹•ç”»ãƒ‡ã‚³ãƒ¼ãƒ‰æ–¹å¼ã‚’è¿”ã™
 function GetVideoDecoderMode: TVideoDecoderMode;
-// I’[“’B‚Ì“®ì‚ğ“Ç‚İ‚Ş
+// çµ‚ç«¯åˆ°é”æ™‚ã®å‹•ä½œã‚’èª­ã¿è¾¼ã‚€
 function LoadEndAction: TVideoMinerEndAction;
-// ‰¹—Ê‚Æƒ~ƒ…[ƒgó‘Ô‚ğ“Ç‚İ‚Ş
+// éŸ³é‡ã¨ãƒŸãƒ¥ãƒ¼ãƒˆçŠ¶æ…‹ã‚’èª­ã¿è¾¼ã‚€
 function LoadAudioSettings: TVideoMinerAudioSettings;
-// ‘O‰ñŠJ‚¢‚½ƒtƒHƒ‹ƒ_‚Æƒtƒ@ƒCƒ‹‚ğ“Ç‚İ‚Ş
+// å‰å›é–‹ã„ãŸãƒ•ã‚©ãƒ«ãƒ€ã¨ãƒ•ã‚¡ã‚¤ãƒ«ã‚’èª­ã¿è¾¼ã‚€
 function LoadLastMedia: TVideoMinerLastMedia;
-// w’èƒtƒ@ƒCƒ‹‚É‘Î‰‚·‚éè“®ƒ`ƒƒƒvƒ^[ˆÊ’u‚ğ“Ç‚İ‚Ş
+// ãƒ•ã‚©ãƒ«ãƒ€é–²è¦§å±¥æ­´ã‚’èª­ã¿è¾¼ã‚€
+function LoadFolderHistory: TVideoMinerFolderHistory;
+// æŒ‡å®šãƒ•ã‚¡ã‚¤ãƒ«ã«å¯¾å¿œã™ã‚‹æ‰‹å‹•ãƒãƒ£ãƒ—ã‚¿ãƒ¼ä½ç½®ã‚’èª­ã¿è¾¼ã‚€
 function LoadManualChapterPositions(const FileName: string): TVideoMinerChapterPositions;
-// w’èƒtƒ@ƒCƒ‹‚É‘Î‰‚·‚éÄ¶ÄŠJˆÊ’u‚ğ“Ç‚İ‚Ş
+// æŒ‡å®šãƒ•ã‚¡ã‚¤ãƒ«ã«å¯¾å¿œã™ã‚‹å†ç”Ÿå†é–‹ä½ç½®ã‚’èª­ã¿è¾¼ã‚€
 function LoadManualChapterPlaybackPosition(const FileName: string; MaxMs: Integer;
   out PositionMs: Integer): Boolean;
-// ’Êí•\¦‚ÌƒƒCƒ“ƒtƒH[ƒ€ˆÊ’u‚ÆƒTƒCƒY‚ğ“Ç‚İ‚Ş
+// é€šå¸¸è¡¨ç¤ºæ™‚ã®ãƒ¡ã‚¤ãƒ³ãƒ•ã‚©ãƒ¼ãƒ ä½ç½®ã¨ã‚µã‚¤ã‚ºã‚’èª­ã¿è¾¼ã‚€
 function LoadMainFormBounds: TVideoMinerWindowBounds;
-// ƒTƒ€ƒlƒCƒ‹ˆê——‚Ìƒ^ƒCƒ‹•‚ğ“Ç‚İ‚Ş
+// ã‚µãƒ ãƒã‚¤ãƒ«ä¸€è¦§ã®ã‚¿ã‚¤ãƒ«å¹…ã‚’èª­ã¿è¾¼ã‚€
 function LoadThumbnailTileWidth(DefaultWidth, MinWidth, MaxWidth: Integer): Integer;
-// I’[“’B‚Ì“®ì‚ğ•Û‘¶‚·‚é
+// çµ‚ç«¯åˆ°é”æ™‚ã®å‹•ä½œã‚’ä¿å­˜ã™ã‚‹
 procedure SaveEndAction(Value: TVideoMinerEndAction);
-// ‰¹—Ê‚Æƒ~ƒ…[ƒgó‘Ô‚ğ•Û‘¶‚·‚é
+// éŸ³é‡ã¨ãƒŸãƒ¥ãƒ¼ãƒˆçŠ¶æ…‹ã‚’ä¿å­˜ã™ã‚‹
 procedure SaveAudioSettings(const Settings: TVideoMinerAudioSettings);
-// ‘O‰ñŠJ‚¢‚½ƒtƒHƒ‹ƒ_‚Æƒtƒ@ƒCƒ‹‚ğ•Û‘¶‚·‚é
+// å‰å›é–‹ã„ãŸãƒ•ã‚©ãƒ«ãƒ€ã¨ãƒ•ã‚¡ã‚¤ãƒ«ã‚’ä¿å­˜ã™ã‚‹
 procedure SaveLastMedia(const Folder, FileName: string);
-// w’èƒtƒ@ƒCƒ‹‚É‘Î‰‚·‚éè“®ƒ`ƒƒƒvƒ^[ˆÊ’u‚ğ•Û‘¶‚·‚é
+// æŒ‡å®šãƒ•ã‚©ãƒ«ãƒ€ã‚’é–²è¦§å±¥æ­´ã®å…ˆé ­ã¸ç§»å‹•ã—ã¦ä¿å­˜ã™ã‚‹
+procedure TouchFolderHistory(const Folder: string);
+// æŒ‡å®šãƒ•ã‚©ãƒ«ãƒ€ã‚’é–²è¦§å±¥æ­´ã‹ã‚‰å‰Šé™¤ã™ã‚‹
+procedure DeleteFolderHistory(const Folder: string);
+// æŒ‡å®šãƒ•ã‚¡ã‚¤ãƒ«ã«å¯¾å¿œã™ã‚‹æ‰‹å‹•ãƒãƒ£ãƒ—ã‚¿ãƒ¼ä½ç½®ã‚’ä¿å­˜ã™ã‚‹
 procedure SaveManualChapterPositions(const FileName: string;
   const Positions: TVideoMinerChapterPositions);
-// w’èƒtƒ@ƒCƒ‹‚É‘Î‰‚·‚éÄ¶ÄŠJˆÊ’u‚ğ•Û‘¶‚·‚é
+// æŒ‡å®šãƒ•ã‚¡ã‚¤ãƒ«ã«å¯¾å¿œã™ã‚‹å†ç”Ÿå†é–‹ä½ç½®ã‚’ä¿å­˜ã™ã‚‹
 procedure SaveManualChapterPlaybackPosition(const FileName: string;
   PositionMs, MaxMs: Integer);
-// w’èƒtƒ@ƒCƒ‹‚É‘Î‰‚·‚éÄ¶ÄŠJˆÊ’u‚¾‚¯‚ğíœ‚·‚é
+// æŒ‡å®šãƒ•ã‚¡ã‚¤ãƒ«ã«å¯¾å¿œã™ã‚‹å†ç”Ÿå†é–‹ä½ç½®ã ã‘ã‚’å‰Šé™¤ã™ã‚‹
 procedure ClearManualChapterPlaybackPosition(const FileName: string);
-// ’Êí•\¦‚ÌƒƒCƒ“ƒtƒH[ƒ€ˆÊ’u‚ÆƒTƒCƒY‚ğ•Û‘¶‚·‚é
+// é€šå¸¸è¡¨ç¤ºæ™‚ã®ãƒ¡ã‚¤ãƒ³ãƒ•ã‚©ãƒ¼ãƒ ä½ç½®ã¨ã‚µã‚¤ã‚ºã‚’ä¿å­˜ã™ã‚‹
 procedure SaveMainFormBounds(const Bounds: TVideoMinerWindowBounds);
-// ƒTƒ€ƒlƒCƒ‹ˆê——‚Ìƒ^ƒCƒ‹•‚ğ•Û‘¶‚·‚é
+// ã‚µãƒ ãƒã‚¤ãƒ«ä¸€è¦§ã®ã‚¿ã‚¤ãƒ«å¹…ã‚’ä¿å­˜ã™ã‚‹
 procedure SaveThumbnailTileWidth(Value, MinWidth, MaxWidth: Integer);
-// ƒfƒR[ƒh•û®‚ğ INI •Û‘¶—p‚Ì•¶š—ñ‚Ö•ÏŠ·‚·‚é
+// ãƒ‡ã‚³ãƒ¼ãƒ‰æ–¹å¼ã‚’ INI ä¿å­˜ç”¨ã®æ–‡å­—åˆ—ã¸å¤‰æ›ã™ã‚‹
 function VideoDecoderModeToText(Mode: TVideoDecoderMode): string;
 
 implementation
@@ -76,34 +84,38 @@ uses
   System.IniFiles, System.Math, System.SysUtils, Winapi.ShlObj, Winapi.Windows;
 
 const
-  SECTION_SETTINGS       = 'VideoMiner';         // ƒAƒvƒŠ‘S‘Ìİ’è‚Ì INI ƒZƒNƒVƒ‡ƒ“
-  KEY_DECODER_MODE       = 'VideoDecoderMode';   // ƒfƒR[ƒh•û®‚Ì INI ƒL[
-  SECTION_WINDOW         = 'MainForm';           // ƒƒCƒ“ƒtƒH[ƒ€À•W‚Ì INI ƒZƒNƒVƒ‡ƒ“
-  KEY_WINDOW_LEFT        = 'Left';               // ƒEƒBƒ“ƒhƒE¶ˆÊ’u‚Ì INI ƒL[
-  KEY_WINDOW_TOP         = 'Top';                // ƒEƒBƒ“ƒhƒEãˆÊ’u‚Ì INI ƒL[
-  KEY_WINDOW_WIDTH       = 'Width';              // ƒEƒBƒ“ƒhƒE•‚Ì INI ƒL[
-  KEY_WINDOW_HEIGHT      = 'Height';             // ƒEƒBƒ“ƒhƒE‚‚³‚Ì INI ƒL[
-  SECTION_LAST_MEDIA     = 'LastMedia';          // ‘O‰ñƒƒfƒBƒAî•ñ‚Ì INI ƒZƒNƒVƒ‡ƒ“
-  KEY_LAST_FOLDER        = 'Folder';             // ‘O‰ñƒtƒHƒ‹ƒ_‚Ì INI ƒL[
-  KEY_LAST_FILE          = 'FileName';           // ‘O‰ñƒtƒ@ƒCƒ‹‚Ì INI ƒL[
-  SECTION_PLAYBACK       = 'Playback';           // Ä¶İ’è‚Ì INI ƒZƒNƒVƒ‡ƒ“
-  KEY_END_ACTION         = 'EndAction';          // I’[“’B“®ì‚Ì INI ƒL[
-  SECTION_AUDIO          = 'Audio';              // ‰¹ºİ’è‚Ì INI ƒZƒNƒVƒ‡ƒ“
-  KEY_AUDIO_MUTED        = 'Muted';              // ƒ~ƒ…[ƒgó‘Ô‚Ì INI ƒL[
-  KEY_AUDIO_VOLUME       = 'VolumePercent';      // ‰¹—Êƒp[ƒZƒ“ƒg‚Ì INI ƒL[
-  SECTION_THUMBNAIL      = 'ThumbnailBrowser';   // ƒTƒ€ƒlƒCƒ‹ˆê——İ’è‚Ì INI ƒZƒNƒVƒ‡ƒ“
-  KEY_THUMBNAIL_WIDTH    = 'TileWidth';          // ƒTƒ€ƒlƒCƒ‹ƒ^ƒCƒ‹•‚Ì INI ƒL[
-  SECTION_CHAPTER_PREFIX = 'ManualChapters:';    // ƒtƒ@ƒCƒ‹•Êƒ`ƒƒƒvƒ^[‚ÌƒZƒNƒVƒ‡ƒ“Ú“ª«
-  KEY_CHAPTER_FILE       = 'FileName';           // ƒ`ƒƒƒvƒ^[‘ÎÛƒtƒ@ƒCƒ‹‚Ì INI ƒL[
-  KEY_CHAPTER_COUNT      = 'Count';              // è“®ƒ`ƒƒƒvƒ^[”‚Ì INI ƒL[
-  KEY_CHAPTER_POS_PREFIX = 'Position';           // è“®ƒ`ƒƒƒvƒ^[ˆÊ’uƒL[‚ÌÚ“ª«
-  KEY_CHAPTER_PLAYBACK   = 'PlaybackPositionMs'; // è“®ƒ`ƒƒƒvƒ^[Ä¶ˆÊ’u‚Ì INI ƒL[
+  SECTION_SETTINGS       = 'VideoMiner';         // ã‚¢ãƒ—ãƒªå…¨ä½“è¨­å®šã® INI ã‚»ã‚¯ã‚·ãƒ§ãƒ³
+  KEY_DECODER_MODE       = 'VideoDecoderMode';   // ãƒ‡ã‚³ãƒ¼ãƒ‰æ–¹å¼ã® INI ã‚­ãƒ¼
+  SECTION_WINDOW         = 'MainForm';           // ãƒ¡ã‚¤ãƒ³ãƒ•ã‚©ãƒ¼ãƒ åº§æ¨™ã® INI ã‚»ã‚¯ã‚·ãƒ§ãƒ³
+  KEY_WINDOW_LEFT        = 'Left';               // ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦å·¦ä½ç½®ã® INI ã‚­ãƒ¼
+  KEY_WINDOW_TOP         = 'Top';                // ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ä¸Šä½ç½®ã® INI ã‚­ãƒ¼
+  KEY_WINDOW_WIDTH       = 'Width';              // ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦å¹…ã® INI ã‚­ãƒ¼
+  KEY_WINDOW_HEIGHT      = 'Height';             // ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦é«˜ã•ã® INI ã‚­ãƒ¼
+  SECTION_LAST_MEDIA     = 'LastMedia';          // å‰å›ãƒ¡ãƒ‡ã‚£ã‚¢æƒ…å ±ã® INI ã‚»ã‚¯ã‚·ãƒ§ãƒ³
+  KEY_LAST_FOLDER        = 'Folder';             // å‰å›ãƒ•ã‚©ãƒ«ãƒ€ã® INI ã‚­ãƒ¼
+  KEY_LAST_FILE          = 'FileName';           // å‰å›ãƒ•ã‚¡ã‚¤ãƒ«ã® INI ã‚­ãƒ¼
+  SECTION_FOLDER_HISTORY = 'FolderHistory';      // ãƒ•ã‚©ãƒ«ãƒ€é–²è¦§å±¥æ­´ã® INI ã‚»ã‚¯ã‚·ãƒ§ãƒ³
+  KEY_FOLDER_COUNT       = 'Count';              // ãƒ•ã‚©ãƒ«ãƒ€é–²è¦§å±¥æ­´ä»¶æ•°ã® INI ã‚­ãƒ¼
+  KEY_FOLDER_PREFIX      = 'Folder';             // ãƒ•ã‚©ãƒ«ãƒ€é–²è¦§å±¥æ­´ã‚­ãƒ¼ã®æ¥é ­è¾
+  FOLDER_HISTORY_MAX     = 12;                   // ä¿å­˜ã™ã‚‹ãƒ•ã‚©ãƒ«ãƒ€é–²è¦§å±¥æ­´ã®æœ€å¤§ä»¶æ•°
+  SECTION_PLAYBACK       = 'Playback';           // å†ç”Ÿè¨­å®šã® INI ã‚»ã‚¯ã‚·ãƒ§ãƒ³
+  KEY_END_ACTION         = 'EndAction';          // çµ‚ç«¯åˆ°é”æ™‚å‹•ä½œã® INI ã‚­ãƒ¼
+  SECTION_AUDIO          = 'Audio';              // éŸ³å£°è¨­å®šã® INI ã‚»ã‚¯ã‚·ãƒ§ãƒ³
+  KEY_AUDIO_MUTED        = 'Muted';              // ãƒŸãƒ¥ãƒ¼ãƒˆçŠ¶æ…‹ã® INI ã‚­ãƒ¼
+  KEY_AUDIO_VOLUME       = 'VolumePercent';      // éŸ³é‡ãƒ‘ãƒ¼ã‚»ãƒ³ãƒˆã® INI ã‚­ãƒ¼
+  SECTION_THUMBNAIL      = 'ThumbnailBrowser';   // ã‚µãƒ ãƒã‚¤ãƒ«ä¸€è¦§è¨­å®šã® INI ã‚»ã‚¯ã‚·ãƒ§ãƒ³
+  KEY_THUMBNAIL_WIDTH    = 'TileWidth';          // ã‚µãƒ ãƒã‚¤ãƒ«ã‚¿ã‚¤ãƒ«å¹…ã® INI ã‚­ãƒ¼
+  SECTION_CHAPTER_PREFIX = 'ManualChapters:';    // ãƒ•ã‚¡ã‚¤ãƒ«åˆ¥ãƒãƒ£ãƒ—ã‚¿ãƒ¼ã®ã‚»ã‚¯ã‚·ãƒ§ãƒ³æ¥é ­è¾
+  KEY_CHAPTER_FILE       = 'FileName';           // ãƒãƒ£ãƒ—ã‚¿ãƒ¼å¯¾è±¡ãƒ•ã‚¡ã‚¤ãƒ«ã® INI ã‚­ãƒ¼
+  KEY_CHAPTER_COUNT      = 'Count';              // æ‰‹å‹•ãƒãƒ£ãƒ—ã‚¿ãƒ¼æ•°ã® INI ã‚­ãƒ¼
+  KEY_CHAPTER_POS_PREFIX = 'Position';           // æ‰‹å‹•ãƒãƒ£ãƒ—ã‚¿ãƒ¼ä½ç½®ã‚­ãƒ¼ã®æ¥é ­è¾
+  KEY_CHAPTER_PLAYBACK   = 'PlaybackPositionMs'; // æ‰‹å‹•ãƒãƒ£ãƒ—ã‚¿ãƒ¼å†ç”Ÿä½ç½®ã® INI ã‚­ãƒ¼
 
 var
-  CurrentVideoDecoderMode : TVideoDecoderMode = vdmAuto; // “Ç‚İ‚İÏ‚İ‚ÌƒfƒR[ƒh•û®
-  SettingsLoaded          : Boolean = False;             // ‰Šúİ’è‚ğ“Ç‚İ‚İÏ‚İ‚©
+  CurrentVideoDecoderMode : TVideoDecoderMode = vdmAuto; // èª­ã¿è¾¼ã¿æ¸ˆã¿ã®ãƒ‡ã‚³ãƒ¼ãƒ‰æ–¹å¼
+  SettingsLoaded          : Boolean = False;             // åˆæœŸè¨­å®šã‚’èª­ã¿è¾¼ã¿æ¸ˆã¿ã‹
 
-// INI ƒtƒ@ƒCƒ‹‚Ì•Û‘¶æ‚ğ•Ô‚µA•K—v‚È‚çİ’èƒfƒBƒŒƒNƒgƒŠ‚ğì‚é
+// INI ãƒ•ã‚¡ã‚¤ãƒ«ã®ä¿å­˜å…ˆã‚’è¿”ã—ã€å¿…è¦ãªã‚‰è¨­å®šãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒªã‚’ä½œã‚‹
 function SettingsFileName: string;
 var
   AppDataPath: array[0..MAX_PATH - 1] of Char;
@@ -119,7 +131,7 @@ begin
   Result := IncludeTrailingPathDelimiter(SettingsDir) + 'VideoMiner.ini';
 end;
 
-// INI ã‚Ì•¶š—ñ‚ğƒfƒR[ƒh•û®‚Ö•ÏŠ·‚·‚é
+// INI ä¸Šã®æ–‡å­—åˆ—ã‚’ãƒ‡ã‚³ãƒ¼ãƒ‰æ–¹å¼ã¸å¤‰æ›ã™ã‚‹
 function TextToVideoDecoderMode(const Value: string): TVideoDecoderMode;
 begin
   if SameText(Value, 'qsv') then
@@ -142,7 +154,7 @@ begin
   end;
 end;
 
-// INI ã‚Ì•¶š—ñ‚ğI’[“’B‚Ì“®ì‚Ö•ÏŠ·‚·‚é
+// INI ä¸Šã®æ–‡å­—åˆ—ã‚’çµ‚ç«¯åˆ°é”æ™‚ã®å‹•ä½œã¸å¤‰æ›ã™ã‚‹
 function TextToEndAction(const Value: string): TVideoMinerEndAction;
 begin
   if SameText(Value, 'loop') then
@@ -153,7 +165,7 @@ begin
     Result := eaStop;
 end;
 
-// I’[“’B‚Ì“®ì‚ğ INI •Û‘¶—p‚Ì•¶š—ñ‚Ö•ÏŠ·‚·‚é
+// çµ‚ç«¯åˆ°é”æ™‚ã®å‹•ä½œã‚’ INI ä¿å­˜ç”¨ã®æ–‡å­—åˆ—ã¸å¤‰æ›ã™ã‚‹
 function EndActionToText(Value: TVideoMinerEndAction): string;
 begin
   case Value of
@@ -166,13 +178,13 @@ begin
   end;
 end;
 
-// ƒtƒ@ƒCƒ‹‚²‚Æ‚Ìè“®ƒ`ƒƒƒvƒ^[•Û‘¶ƒZƒNƒVƒ‡ƒ“–¼‚ğì‚é
+// ãƒ•ã‚¡ã‚¤ãƒ«ã”ã¨ã®æ‰‹å‹•ãƒãƒ£ãƒ—ã‚¿ãƒ¼ä¿å­˜ã‚»ã‚¯ã‚·ãƒ§ãƒ³åã‚’ä½œã‚‹
 function ManualChapterSectionName(const FileName: string): string;
 begin
   Result := SECTION_CHAPTER_PREFIX + ExpandFileName(FileName);
 end;
 
-// ‰‰ñQÆ‚ÉƒAƒvƒŠ‘S‘Ìİ’è‚¾‚¯‚ğƒLƒƒƒbƒVƒ…‚·‚é
+// åˆå›å‚ç…§æ™‚ã«ã‚¢ãƒ—ãƒªå…¨ä½“è¨­å®šã ã‘ã‚’ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã™ã‚‹
 procedure LoadSettings;
 var
   Ini: TIniFile;
@@ -286,6 +298,36 @@ begin
   end;
 end;
 
+function LoadFolderHistory: TVideoMinerFolderHistory;
+var
+  Count: Integer;
+  Folder: string;
+  I: Integer;
+  Ini: TIniFile;
+begin
+  SetLength(Result, 0);
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    Count := Max(0, Min(FOLDER_HISTORY_MAX,
+      Ini.ReadInteger(SECTION_FOLDER_HISTORY, KEY_FOLDER_COUNT, 0)));
+    SetLength(Result, Count);
+    Count := 0;
+    for I := 0 to High(Result) do
+    begin
+      Folder := Ini.ReadString(SECTION_FOLDER_HISTORY,
+        KEY_FOLDER_PREFIX + IntToStr(I), '');
+      if Folder = '' then
+        Continue;
+
+      Result[Count] := Folder;
+      Inc(Count);
+    end;
+    SetLength(Result, Count);
+  finally
+    Ini.Free;
+  end;
+end;
+
 function LoadManualChapterPositions(
   const FileName: string): TVideoMinerChapterPositions;
 var
@@ -387,6 +429,86 @@ begin
   try
     Ini.WriteString(SECTION_LAST_MEDIA, KEY_LAST_FOLDER, Folder);
     Ini.WriteString(SECTION_LAST_MEDIA, KEY_LAST_FILE, FileName);
+  finally
+    Ini.Free;
+  end;
+end;
+
+procedure TouchFolderHistory(const Folder: string);
+var
+  Count: Integer;
+  Existing: TVideoMinerFolderHistory;
+  I: Integer;
+  Ini: TIniFile;
+  NormalizedFolder: string;
+begin
+  if Folder = '' then
+    Exit;
+
+  NormalizedFolder := IncludeTrailingPathDelimiter(ExpandFileName(Folder));
+  Existing := LoadFolderHistory;
+  SetLength(Existing, Length(Existing) + 1);
+  for I := High(Existing) downto 1 do
+    Existing[I] := Existing[I - 1];
+  Existing[0] := NormalizedFolder;
+
+  Count := 1;
+  for I := 1 to High(Existing) do
+  begin
+    if SameText(Existing[I], NormalizedFolder) then
+      Continue;
+
+    Existing[Count] := Existing[I];
+    Inc(Count);
+    if Count >= FOLDER_HISTORY_MAX then
+      Break;
+  end;
+  SetLength(Existing, Count);
+
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    Ini.EraseSection(SECTION_FOLDER_HISTORY);
+    Ini.WriteInteger(SECTION_FOLDER_HISTORY, KEY_FOLDER_COUNT, Length(Existing));
+    for I := 0 to High(Existing) do
+      Ini.WriteString(SECTION_FOLDER_HISTORY,
+        KEY_FOLDER_PREFIX + IntToStr(I), Existing[I]);
+  finally
+    Ini.Free;
+  end;
+end;
+
+procedure DeleteFolderHistory(const Folder: string);
+var
+  Count: Integer;
+  Existing: TVideoMinerFolderHistory;
+  I: Integer;
+  Ini: TIniFile;
+  NormalizedFolder: string;
+begin
+  if Folder = '' then
+    Exit;
+
+  NormalizedFolder := IncludeTrailingPathDelimiter(ExpandFileName(Folder));
+  Existing := LoadFolderHistory;
+
+  Count := 0;
+  for I := 0 to High(Existing) do
+  begin
+    if SameText(Existing[I], NormalizedFolder) then
+      Continue;
+
+    Existing[Count] := Existing[I];
+    Inc(Count);
+  end;
+  SetLength(Existing, Count);
+
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    Ini.EraseSection(SECTION_FOLDER_HISTORY);
+    Ini.WriteInteger(SECTION_FOLDER_HISTORY, KEY_FOLDER_COUNT, Length(Existing));
+    for I := 0 to High(Existing) do
+      Ini.WriteString(SECTION_FOLDER_HISTORY,
+        KEY_FOLDER_PREFIX + IntToStr(I), Existing[I]);
   finally
     Ini.Free;
   end;

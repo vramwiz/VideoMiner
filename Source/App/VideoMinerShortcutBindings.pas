@@ -1,7 +1,7 @@
-unit VideoMinerShortcutBindings;
+ï»¿unit VideoMinerShortcutBindings;
 
-// VideoMiner —p‚ÌƒL[ƒ{[ƒhƒVƒ‡[ƒgƒJƒbƒgŠ„‚è“–‚Ä‚ğˆê‚©Š‚É‚Ü‚Æ‚ß‚éB
-// ÀÛ‚Ìˆ—‚ÍŒÄ‚Ño‚µ‘¤‚©‚ç“n‚³‚ê‚½ƒnƒ“ƒhƒ‰‚ÖˆÏ÷‚µA‚±‚Ìƒ†ƒjƒbƒg‚ÍƒL[•\‚¾‚¯‚ğ‚ÂB
+// VideoMiner ç”¨ã®ã‚­ãƒ¼ãƒœãƒ¼ãƒ‰ã‚·ãƒ§ãƒ¼ãƒˆã‚«ãƒƒãƒˆå‰²ã‚Šå½“ã¦ã‚’ä¸€ã‹æ‰€ã«ã¾ã¨ã‚ã‚‹ã€‚
+// å®Ÿéš›ã®å‡¦ç†ã¯å‘¼ã³å‡ºã—å´ã‹ã‚‰æ¸¡ã•ã‚ŒãŸãƒãƒ³ãƒ‰ãƒ©ã¸å§”è­²ã—ã€ã“ã®ãƒ¦ãƒ‹ãƒƒãƒˆã¯ã‚­ãƒ¼è¡¨ã ã‘ã‚’æŒã¤ã€‚
 
 interface
 
@@ -10,28 +10,28 @@ uses
 
 type
   TVideoMinerShortcutHandlers = record
-    ChapterPrevious  : TShortcutActionProc; // ‘O‚Ìƒ`ƒƒƒvƒ^[‚ÖˆÚ“®‚·‚é
-    ChapterNext      : TShortcutActionProc; // Ÿ‚Ìƒ`ƒƒƒvƒ^[‚ÖˆÚ“®‚·‚é
-    OpenDialog       : TShortcutActionProc; // ƒtƒ@ƒCƒ‹‚ğŠJ‚­ƒ_ƒCƒAƒƒO‚ğ•\¦‚·‚é
-    NavigatePrevious : TShortcutActionProc; // ƒtƒHƒ‹ƒ_“à‚Ì‘O‚Ì“®‰æ‚ÖˆÚ“®‚·‚é
-    NavigateNext     : TShortcutActionProc; // ƒtƒHƒ‹ƒ_“à‚ÌŸ‚Ì“®‰æ‚ÖˆÚ“®‚·‚é
-    CyclePlaybackRate: TShortcutActionProc; // Ä¶‘¬“x‚ğØ‚è‘Ö‚¦‚é
-    SeekToFirstFrame : TShortcutActionProc; // æ“ªƒtƒŒ[ƒ€‚ÖˆÚ“®‚·‚é
-    SeekToLastFrame  : TShortcutActionProc; // ––”öƒtƒŒ[ƒ€‚ÖˆÚ“®‚·‚é
-    ToggleFullScreen : TShortcutActionProc; // ‘S‰æ–Ê•\¦‚ğØ‚è‘Ö‚¦‚é
-    ToggleMute       : TShortcutActionProc; // ƒ~ƒ…[ƒgó‘Ô‚ğØ‚è‘Ö‚¦‚é
-    TogglePlayPause  : TShortcutActionProc; // Ä¶‚Æˆê’â~‚ğØ‚è‘Ö‚¦‚é
-    VolumeDown       : TShortcutActionProc; // ‰¹—Ê‚ğ‰º‚°‚é
-    VolumeUp         : TShortcutActionProc; // ‰¹—Ê‚ğã‚°‚é
+    ChapterPrevious  : TShortcutActionProc; // å‰ã®ãƒãƒ£ãƒ—ã‚¿ãƒ¼ã¸ç§»å‹•ã™ã‚‹
+    ChapterNext      : TShortcutActionProc; // æ¬¡ã®ãƒãƒ£ãƒ—ã‚¿ãƒ¼ã¸ç§»å‹•ã™ã‚‹
+    OpenDialog       : TShortcutActionProc; // ãƒ•ã‚¡ã‚¤ãƒ«ã‚’é–‹ããƒ€ã‚¤ã‚¢ãƒ­ã‚°ã‚’è¡¨ç¤ºã™ã‚‹
+    NavigatePrevious : TShortcutActionProc; // ãƒ•ã‚©ãƒ«ãƒ€å†…ã®å‰ã®å‹•ç”»ã¸ç§»å‹•ã™ã‚‹
+    NavigateNext     : TShortcutActionProc; // ãƒ•ã‚©ãƒ«ãƒ€å†…ã®æ¬¡ã®å‹•ç”»ã¸ç§»å‹•ã™ã‚‹
+    CyclePlaybackRate: TShortcutActionProc; // å†ç”Ÿé€Ÿåº¦ã‚’åˆ‡ã‚Šæ›¿ãˆã‚‹
+    SeekToFirstFrame : TShortcutActionProc; // å…ˆé ­ãƒ•ãƒ¬ãƒ¼ãƒ ã¸ç§»å‹•ã™ã‚‹
+    SeekToLastFrame  : TShortcutActionProc; // æœ«å°¾ãƒ•ãƒ¬ãƒ¼ãƒ ã¸ç§»å‹•ã™ã‚‹
+    ToggleFullScreen : TShortcutActionProc; // å…¨ç”»é¢è¡¨ç¤ºã‚’åˆ‡ã‚Šæ›¿ãˆã‚‹
+    ToggleMute       : TShortcutActionProc; // ãƒŸãƒ¥ãƒ¼ãƒˆçŠ¶æ…‹ã‚’åˆ‡ã‚Šæ›¿ãˆã‚‹
+    TogglePlayPause  : TShortcutActionProc; // å†ç”Ÿã¨ä¸€æ™‚åœæ­¢ã‚’åˆ‡ã‚Šæ›¿ãˆã‚‹
+    VolumeDown       : TShortcutActionProc; // éŸ³é‡ã‚’ä¸‹ã’ã‚‹
+    VolumeUp         : TShortcutActionProc; // éŸ³é‡ã‚’ä¸Šã’ã‚‹
   end;
 
-// VideoMiner ‚ÌŠù’èƒVƒ‡[ƒgƒJƒbƒg‚ğ“o˜^‚µ’¼‚·
+// VideoMiner ã®æ—¢å®šã‚·ãƒ§ãƒ¼ãƒˆã‚«ãƒƒãƒˆã‚’ç™»éŒ²ã—ç›´ã™
 procedure RegisterVideoMinerShortcuts(Shortcuts: TShortcutAction;
   const Handlers: TVideoMinerShortcutHandlers);
 
 implementation
 
-// ƒL[‚ÌŠ„‚è“–‚Ä‚¾‚¯‚ğ’è‹`‚µAÀs“à—e‚Íƒnƒ“ƒhƒ‰ƒŒƒR[ƒh‚Ö”C‚¹‚é
+// ã‚­ãƒ¼ã®å‰²ã‚Šå½“ã¦ã ã‘ã‚’å®šç¾©ã—ã€å®Ÿè¡Œå†…å®¹ã¯ãƒãƒ³ãƒ‰ãƒ©ãƒ¬ã‚³ãƒ¼ãƒ‰ã¸ä»»ã›ã‚‹
 procedure RegisterVideoMinerShortcuts(Shortcuts: TShortcutAction;
   const Handlers: TVideoMinerShortcutHandlers);
 begin
@@ -39,21 +39,21 @@ begin
     Exit;
 
   Shortcuts.Clear;
-  Shortcuts.Add(Ord('O'), [ssCtrl], Handlers.OpenDialog);
-  Shortcuts.Add(VK_LEFT, [ssCtrl], Handlers.ChapterPrevious);
-  Shortcuts.Add(VK_RIGHT, [ssCtrl], Handlers.ChapterNext);
-  Shortcuts.Add(VK_F11, [], Handlers.ToggleFullScreen);
-  Shortcuts.Add(VK_SPACE, [], Handlers.TogglePlayPause);
-  Shortcuts.Add(VK_LEFT, [], Handlers.NavigatePrevious);
-  Shortcuts.Add(VK_RIGHT, [], Handlers.NavigateNext);
-  Shortcuts.Add(VK_PRIOR, [], Handlers.NavigatePrevious);
-  Shortcuts.Add(VK_NEXT, [], Handlers.NavigateNext);
-  Shortcuts.Add(Ord('R'), [], Handlers.CyclePlaybackRate);
-  Shortcuts.Add(VK_HOME, [], Handlers.SeekToFirstFrame);
-  Shortcuts.Add(VK_END, [], Handlers.SeekToLastFrame);
-  Shortcuts.Add(VK_UP, [], Handlers.VolumeUp);
-  Shortcuts.Add(VK_DOWN, [], Handlers.VolumeDown);
-  Shortcuts.Add(Ord('M'), [], Handlers.ToggleMute);
+  Shortcuts.Add(Ord('O')  , [ssCtrl], Handlers.OpenDialog);
+  Shortcuts.Add(VK_LEFT   , [ssCtrl], Handlers.ChapterPrevious);
+  Shortcuts.Add(VK_RIGHT  , [ssCtrl], Handlers.ChapterNext);
+  Shortcuts.Add(VK_F11    , []      , Handlers.ToggleFullScreen);
+  Shortcuts.Add(VK_SPACE  , []      , Handlers.TogglePlayPause);
+  Shortcuts.Add(VK_LEFT   , []      , Handlers.NavigatePrevious);
+  Shortcuts.Add(VK_RIGHT  , []      , Handlers.NavigateNext);
+  Shortcuts.Add(VK_PRIOR  , []      , Handlers.NavigatePrevious);
+  Shortcuts.Add(VK_NEXT   , []      , Handlers.NavigateNext);
+  Shortcuts.Add(Ord('R')  , []      , Handlers.CyclePlaybackRate);
+  Shortcuts.Add(VK_HOME   , []      , Handlers.SeekToFirstFrame);
+  Shortcuts.Add(VK_END    , []      , Handlers.SeekToLastFrame);
+  Shortcuts.Add(VK_UP     , []      , Handlers.VolumeUp);
+  Shortcuts.Add(VK_DOWN   , []      , Handlers.VolumeDown);
+  Shortcuts.Add(Ord('M')  , []      , Handlers.ToggleMute);
 end;
 
 end.

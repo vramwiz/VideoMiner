@@ -1,7 +1,7 @@
-unit VideoMinerThumbnailBrowser;
+ï»¿unit VideoMinerThumbnailBrowser;
 
-// “¯ˆêƒtƒHƒ‹ƒ_“à‚Ì“®‰æ‚ğŒ©“n‚·ƒTƒ€ƒlƒCƒ‹ˆê——ƒ‚[ƒh‚ğ•`‰æ‚·‚éB
-// •\¦’†ƒ^ƒCƒ‹‚ÌƒTƒ€ƒlƒCƒ‹‚ğ­‚µ‚¸‚Â¶¬‚µAƒNƒŠƒbƒN‘I‘ğ‚ğƒƒCƒ“ƒtƒH[ƒ€‚Ö’Ê’m‚·‚éB
+// åŒä¸€ãƒ•ã‚©ãƒ«ãƒ€å†…ã®å‹•ç”»ã‚’è¦‹æ¸¡ã™ã‚µãƒ ãƒã‚¤ãƒ«ä¸€è¦§ãƒ¢ãƒ¼ãƒ‰ã‚’æç”»ã™ã‚‹ã€‚
+// è¡¨ç¤ºä¸­ã‚¿ã‚¤ãƒ«ã®ã‚µãƒ ãƒã‚¤ãƒ«ã‚’å°‘ã—ãšã¤ç”Ÿæˆã—ã€ã‚¯ãƒªãƒƒã‚¯é¸æŠã‚’ãƒ¡ã‚¤ãƒ³ãƒ•ã‚©ãƒ¼ãƒ ã¸é€šçŸ¥ã™ã‚‹ã€‚
 
 interface
 
@@ -18,130 +18,156 @@ type
 
   TVideoMinerThumbnailBrowser = class(TCustomControl)
   private
-    FCurrentIndex : Integer;              // Œ»İÄ¶’†‚Æ‚µ‚Ä‹­’²‚·‚éˆê——ˆÊ’u
-    FHoverIndex   : Integer;              // ƒ}ƒEƒX‚ªd‚È‚Á‚Ä‚¢‚éƒ^ƒCƒ‹ˆÊ’u
-    FMediaList    : TVideoMinerMediaList; // •\¦‘ÎÛ‚É‚È‚é“¯ˆêƒtƒHƒ‹ƒ_“à‚Ì“®‰æˆê——
-    FOnSelected   : TVideoMinerThumbnailSelectedEvent; // ƒ^ƒCƒ‹‘I‘ğ‚Ì’Ê’mæ
-    FPreviewBitmap : TBitmap;            // hover ƒvƒŒƒrƒ…[’†‚É•\¦‚·‚éˆê‰æ‘œ
-    FPreviewDecoder : TFFmpegDecoder;    // hover –{ƒvƒŒƒrƒ…[—p‚ÌˆêƒfƒR[ƒ_
-    FPreviewFileName : string;           // hover –{ƒvƒŒƒrƒ…[‚ÅŠJ‚¢‚Ä‚¢‚éƒtƒ@ƒCƒ‹
-    FPreviewIndex  : Integer;            // hover ƒvƒŒƒrƒ…[‘ÎÛ‚Ìˆê——ˆÊ’u
-    FPreviewInfo   : TVideoInfo;         // hover –{ƒvƒŒƒrƒ…[‘ÎÛ‚Ì“®‰æî•ñ
-    FPreviewStarted : Boolean;           // hover –{ƒvƒŒƒrƒ…[‚Ì‰‰ñ seek ‚ªÏ‚ñ‚¾‚©
-    FPreviewStep   : Integer;            // hover ƒvƒŒƒrƒ…[‚ÌXV‰ñ”
-    FPreviewTimer  : TTimer;             // hover ƒvƒŒƒrƒ…[‚ğXV‚·‚éƒ^ƒCƒ}[
-    FScrollOffset : Integer;              // ƒ^ƒCƒ‹ˆê——‚ÌcƒXƒNƒ[ƒ‹—Ê px
-    FSelectedIndex : Integer;             // ƒL[ƒ{[ƒh‘€ì‚Å‘I‘ğ’†‚Ìˆê——ˆÊ’u
-    FThumbnailFiles  : TArray<string>;    // ƒTƒ€ƒlƒCƒ‹ó‘Ô‚ª‘Î‰‚·‚éƒtƒ@ƒCƒ‹–¼
-    FThumbnailStates : TArray<TVideoMinerThumbnailState>; // ƒTƒ€ƒlƒCƒ‹¶¬ó‘Ô
-    FThumbnails      : TArray<TBitmap>;   // ¶¬Ï‚İƒTƒ€ƒlƒCƒ‹‰æ‘œ
-    FThumbnailTimer  : TTimer;            // ƒTƒ€ƒlƒCƒ‹‚ğ­‚µ‚¸‚Â¶¬‚·‚éƒ^ƒCƒ}[
-    FTileHeight      : Integer;           // Œ»İ‚Ìƒ^ƒCƒ‹‚‚³ px
-    FTileWidth       : Integer;           // Œ»İ‚Ìƒ^ƒCƒ‹• px
-    FTileRects    : TArray<TRect>;        // ÅŒã‚ÉƒŒƒCƒAƒEƒg‚µ‚½Šeƒ^ƒCƒ‹‚Ì•\¦‹éŒ`
-    FZoomButtonHover : Integer;           // hover ’†‚ÌƒY[ƒ€ƒ{ƒ^ƒ“•ûŒü
-    // Œ»İ‚Ì•‚©‚çƒ^ƒCƒ‹‚Ì—ñ”‚ğ•Ô‚·
+    FActiveFileName          : string;                     // å®Ÿéš›ã«ç¾åœ¨é–‹ã„ã¦ã„ã‚‹å‹•ç”»ãƒ•ã‚¡ã‚¤ãƒ«
+    FCurrentIndex            : Integer;                    // ç¾åœ¨å†ç”Ÿä¸­ã¨ã—ã¦å¼·èª¿ã™ã‚‹ä¸€è¦§ä½ç½®
+    FFolderHistory           : TVideoMinerFolderHistory;   // ä¿å­˜æ¸ˆã¿ãƒ•ã‚©ãƒ«ãƒ€é–²è¦§å±¥æ­´
+    FFolderHistoryHoverIndex : Integer;                    // ãƒã‚¦ã‚¹ãŒé‡ãªã£ã¦ã„ã‚‹ãƒ•ã‚©ãƒ«ãƒ€å±¥æ­´ä½ç½®
+    FFolderHistorySelectedIndex : Integer;                 // ã‚­ãƒ¼ãƒœãƒ¼ãƒ‰æ“ä½œå¯¾è±¡ã®ãƒ•ã‚©ãƒ«ãƒ€å±¥æ­´ä½ç½®
+    FHoverIndex              : Integer;                    // ãƒã‚¦ã‚¹ãŒé‡ãªã£ã¦ã„ã‚‹ã‚¿ã‚¤ãƒ«ä½ç½®
+    FMediaList               : TVideoMinerMediaList;       // è¡¨ç¤ºå¯¾è±¡ã«ãªã‚‹åŒä¸€ãƒ•ã‚©ãƒ«ãƒ€å†…ã®å‹•ç”»ä¸€è¦§
+    FOnSelected              : TVideoMinerThumbnailSelectedEvent; // ã‚¿ã‚¤ãƒ«é¸æŠã®é€šçŸ¥å…ˆ
+    FOwnedMediaList          : TVideoMinerMediaList;       // å±¥æ­´ãƒ•ã‚©ãƒ«ãƒ€è¡¨ç¤ºç”¨ã«ä¸€æ™‚ä¿æŒã™ã‚‹å‹•ç”»ä¸€è¦§
+    FPreviewBitmap : TBitmap;            // hover ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ä¸­ã«è¡¨ç¤ºã™ã‚‹ä¸€æ™‚ç”»åƒ
+    FPreviewDecoder : TFFmpegDecoder;    // hover æœ¬ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ç”¨ã®ä¸€æ™‚ãƒ‡ã‚³ãƒ¼ãƒ€
+    FPreviewFileName : string;           // hover æœ¬ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã§é–‹ã„ã¦ã„ã‚‹ãƒ•ã‚¡ã‚¤ãƒ«
+    FPreviewIndex  : Integer;            // hover ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼å¯¾è±¡ã®ä¸€è¦§ä½ç½®
+    FPreviewInfo   : TVideoInfo;         // hover æœ¬ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼å¯¾è±¡ã®å‹•ç”»æƒ…å ±
+    FPreviewStarted : Boolean;           // hover æœ¬ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã®åˆå› seek ãŒæ¸ˆã‚“ã ã‹
+    FPreviewStep   : Integer;            // hover ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã®æ›´æ–°å›æ•°
+    FPreviewTimer  : TTimer;             // hover ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã‚’æ›´æ–°ã™ã‚‹ã‚¿ã‚¤ãƒãƒ¼
+    FScrollOffset : Integer;              // ã‚¿ã‚¤ãƒ«ä¸€è¦§ã®ç¸¦ã‚¹ã‚¯ãƒ­ãƒ¼ãƒ«é‡ px
+    FSelectedIndex : Integer;             // ã‚­ãƒ¼ãƒœãƒ¼ãƒ‰æ“ä½œã§é¸æŠä¸­ã®ä¸€è¦§ä½ç½®
+    FThumbnailFiles  : TArray<string>;    // ã‚µãƒ ãƒã‚¤ãƒ«çŠ¶æ…‹ãŒå¯¾å¿œã™ã‚‹ãƒ•ã‚¡ã‚¤ãƒ«å
+    FThumbnailStates : TArray<TVideoMinerThumbnailState>; // ã‚µãƒ ãƒã‚¤ãƒ«ç”ŸæˆçŠ¶æ…‹
+    FThumbnails      : TArray<TBitmap>;   // ç”Ÿæˆæ¸ˆã¿ã‚µãƒ ãƒã‚¤ãƒ«ç”»åƒ
+    FThumbnailTimer  : TTimer;            // ã‚µãƒ ãƒã‚¤ãƒ«ã‚’å°‘ã—ãšã¤ç”Ÿæˆã™ã‚‹ã‚¿ã‚¤ãƒãƒ¼
+    FTileHeight      : Integer;           // ç¾åœ¨ã®ã‚¿ã‚¤ãƒ«é«˜ã• px
+    FTileWidth       : Integer;           // ç¾åœ¨ã®ã‚¿ã‚¤ãƒ«å¹… px
+    FTileRects    : TArray<TRect>;        // æœ€å¾Œã«ãƒ¬ã‚¤ã‚¢ã‚¦ãƒˆã—ãŸå„ã‚¿ã‚¤ãƒ«ã®è¡¨ç¤ºçŸ©å½¢
+    FZoomButtonHover : Integer;           // hover ä¸­ã®ã‚ºãƒ¼ãƒ ãƒœã‚¿ãƒ³æ–¹å‘
+    // ç¾åœ¨ã®å¹…ã‹ã‚‰ã‚¿ã‚¤ãƒ«ã®åˆ—æ•°ã‚’è¿”ã™
     function ColumnCount: Integer;
-    // ƒ^ƒCƒ‹‘S‘Ì‚Ì‚‚³‚ğ•Ô‚·
+    // ã‚¿ã‚¤ãƒ«å…¨ä½“ã®é«˜ã•ã‚’è¿”ã™
     function ContentHeight: Integer;
-    // ƒXƒNƒ[ƒ‹—Ê‚ğ—LŒø”ÍˆÍ‚Öû‚ß‚é
+    // ãƒ•ã‚©ãƒ«ãƒ€é–²è¦§å±¥æ­´ç”¨ã«ç¢ºä¿ã™ã‚‹å…ˆé ­è¡Œã®é«˜ã•ã‚’è¿”ã™
+    function FolderHistoryRowHeight: Integer;
+    // æŒ‡å®šä½ç½®ã®ãƒ•ã‚©ãƒ«ãƒ€å±¥æ­´ã‚¿ã‚¤ãƒ«çŸ©å½¢ã‚’è¿”ã™
+    function FolderHistoryTileRect(Index: Integer): TRect;
+    // ã‚¹ã‚¯ãƒ­ãƒ¼ãƒ«é‡ã‚’æœ‰åŠ¹ç¯„å›²ã¸åã‚ã‚‹
     procedure ClampScrollOffset;
-    // w’èˆÊ’u‚É‚ ‚éƒ^ƒCƒ‹ index ‚ğ•Ô‚·
+    // æŒ‡å®šä½ç½®ã«ã‚ã‚‹ãƒ•ã‚©ãƒ«ãƒ€å±¥æ­´ index ã‚’è¿”ã™
+    function HitFolderHistoryTile(const Point: TPoint): Integer;
+    // æŒ‡å®šä½ç½®ã«ã‚ã‚‹ã‚¿ã‚¤ãƒ« index ã‚’è¿”ã™
     function HitTile(const Point: TPoint): Integer;
-    // w’èˆÊ’u‚Ìƒ^ƒCƒ‹‚ğƒL[ƒ{[ƒh‘I‘ğó‘Ô‚É‚·‚é
+    // æŒ‡å®šä½ç½®ã®ã‚¿ã‚¤ãƒ«ã‚’ã‚­ãƒ¼ãƒœãƒ¼ãƒ‰é¸æŠçŠ¶æ…‹ã«ã™ã‚‹
     procedure SelectTile(Index: Integer; EnsureVisible: Boolean);
-    // ‘I‘ğ’†ƒ^ƒCƒ‹‚ª‰æ–Ê“à‚É“ü‚é‚æ‚¤ƒXƒNƒ[ƒ‹‚·‚é
+    // é¸æŠä¸­ã‚¿ã‚¤ãƒ«ãŒç”»é¢å†…ã«å…¥ã‚‹ã‚ˆã†ã‚¹ã‚¯ãƒ­ãƒ¼ãƒ«ã™ã‚‹
     procedure ScrollToSelected;
-    // ‘I‘ğ’†ƒ^ƒCƒ‹‚ğw’è—Ê‚¾‚¯ˆÚ“®‚·‚é
+    // é¸æŠä¸­ã‚¿ã‚¤ãƒ«ã‚’æŒ‡å®šé‡ã ã‘ç§»å‹•ã™ã‚‹
     procedure MoveSelection(Delta: Integer);
-    // ‘I‘ğ’†ƒ^ƒCƒ‹‚ğŠJ‚­
+    // é¸æŠä¸­ã‚¿ã‚¤ãƒ«ã‚’é–‹ã
     procedure ActivateSelectedTile;
-    // w’è•ûŒü‚ÌƒY[ƒ€ƒ{ƒ^ƒ“‹éŒ`‚ğ•Ô‚·
+    // é¸æŠä¸­ã®ãƒ•ã‚©ãƒ«ãƒ€å±¥æ­´ã‚’å±¥æ­´ã‹ã‚‰å‰Šé™¤ã™ã‚‹
+    procedure DeleteSelectedFolderHistory;
+    // ãƒ•ã‚©ãƒ«ãƒ€é–²è¦§å±¥æ­´ã¨é¸æŠä¸­ãƒ•ã‚©ãƒ«ãƒ€ã®ä¸€è¦§ã‚’å†èª­ã¿è¾¼ã¿ã™ã‚‹
+    procedure RefreshFolderHistory;
+    // è¡¨ç¤ºä¸­ä¸€è¦§ã§ç¾åœ¨é–‹ã„ã¦ã„ã‚‹å‹•ç”»ã®ä½ç½®ã‚’è¿”ã™
+    function ActiveFileIndexInMediaList: Integer;
+    // æŒ‡å®šæ–¹å‘ã®ã‚ºãƒ¼ãƒ ãƒœã‚¿ãƒ³çŸ©å½¢ã‚’è¿”ã™
     function ZoomButtonRect(Direction: Integer): TRect;
-    // w’èˆÊ’u‚É‚ ‚éƒY[ƒ€ƒ{ƒ^ƒ“•ûŒü‚ğ•Ô‚·
+    // æŒ‡å®šä½ç½®ã«ã‚ã‚‹ã‚ºãƒ¼ãƒ ãƒœã‚¿ãƒ³æ–¹å‘ã‚’è¿”ã™
     function HitZoomButton(const Point: TPoint): Integer;
-    // Œ»İ‚Ìˆê——ó‘Ô‚É‡‚í‚¹‚Äƒ^ƒCƒ‹‹éŒ`‚ğì‚é
+    // ç¾åœ¨ã®ä¸€è¦§çŠ¶æ…‹ã«åˆã‚ã›ã¦ã‚¿ã‚¤ãƒ«çŸ©å½¢ã‚’ä½œã‚‹
     procedure LayoutTiles;
-    // ƒTƒ€ƒlƒCƒ‹”z—ñ‚ğŒ»İ‚ÌƒƒfƒBƒAˆê——‚Ö‡‚í‚¹‚é
+    // ã‚µãƒ ãƒã‚¤ãƒ«é…åˆ—ã‚’ç¾åœ¨ã®ãƒ¡ãƒ‡ã‚£ã‚¢ä¸€è¦§ã¸åˆã‚ã›ã‚‹
     procedure EnsureThumbnailSlots;
-    // •Û‚µ‚Ä‚¢‚éƒTƒ€ƒlƒCƒ‹‚ğ”jŠü‚·‚é
+    // ä¿æŒã—ã¦ã„ã‚‹ã‚µãƒ ãƒã‚¤ãƒ«ã‚’ç ´æ£„ã™ã‚‹
     procedure ClearThumbnails;
-    // •\¦’†ƒ^ƒCƒ‹‚ÌƒTƒ€ƒlƒCƒ‹¶¬‚ğ—\–ñ‚·‚é
+    // è¡¨ç¤ºä¸­ã‚¿ã‚¤ãƒ«ã®ã‚µãƒ ãƒã‚¤ãƒ«ç”Ÿæˆã‚’äºˆç´„ã™ã‚‹
     procedure QueueThumbnail(Index: Integer);
-    // Ÿ‚É¶¬‚·‚é—\–ñÏ‚İƒ^ƒCƒ‹‚ğ•Ô‚·
+    // æ¬¡ã«ç”Ÿæˆã™ã‚‹äºˆç´„æ¸ˆã¿ã‚¿ã‚¤ãƒ«ã‚’è¿”ã™
     function NextQueuedThumbnailIndex: Integer;
-    // ƒLƒƒƒbƒVƒ…Ï‚İƒTƒ€ƒlƒCƒ‹‚ğ“Ç‚İ‚ß‚½‚ç True ‚ğ•Ô‚·
+    // ã‚­ãƒ£ãƒƒã‚·ãƒ¥æ¸ˆã¿ã‚µãƒ ãƒã‚¤ãƒ«ã‚’èª­ã¿è¾¼ã‚ãŸã‚‰ True ã‚’è¿”ã™
     function TryLoadCachedThumbnail(Index: Integer;
       const FileName: string): Boolean;
-    // w’èƒ^ƒCƒ‹‚ÌƒTƒ€ƒlƒCƒ‹‚ğ¶¬‚·‚é
+    // æŒ‡å®šã‚¿ã‚¤ãƒ«ã®ã‚µãƒ ãƒã‚¤ãƒ«ã‚’ç”Ÿæˆã™ã‚‹
     procedure GenerateThumbnail(Index: Integer;
       const FileName: string);
-    // hover –{ƒvƒŒƒrƒ…[—p‚ÌŸƒtƒŒ[ƒ€‚ğ¶¬‚·‚é
+    // hover æœ¬ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ç”¨ã®æ¬¡ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ç”Ÿæˆã™ã‚‹
     function GeneratePreviewFrame(Index: Integer; const FileName: string): Boolean;
-    // hover ƒvƒŒƒrƒ…[‚ğŠJn‘Ò‚¿ó‘Ô‚Ö–ß‚·
+    // hover ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã‚’é–‹å§‹å¾…ã¡çŠ¶æ…‹ã¸æˆ»ã™
     procedure ResetPreview(Index: Integer);
-    // hover ƒvƒŒƒrƒ…[‚ğ’â~‚·‚é
+    // hover ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã‚’åœæ­¢ã™ã‚‹
     procedure StopPreview;
-    // ƒ^ƒCƒ}[‚ÅƒTƒ€ƒlƒCƒ‹‚ğ 1 –‡‚¸‚Â¶¬‚·‚é
+    // æŒ‡å®šå±¥æ­´ãƒ•ã‚©ãƒ«ãƒ€å†…ã®å‹•ç”»ä¸€è¦§ã‚’ã‚µãƒ ãƒã‚¤ãƒ«è¡¨ç¤ºã™ã‚‹
+    procedure ShowFolderHistory(Index: Integer);
+    // ã‚¿ã‚¤ãƒãƒ¼ã§ã‚µãƒ ãƒã‚¤ãƒ«ã‚’ 1 æšãšã¤ç”Ÿæˆã™ã‚‹
     procedure ThumbnailTimer(Sender: TObject);
-    // ƒ^ƒCƒ}[‚Å hover ƒvƒŒƒrƒ…[‚ğ 1 ƒtƒŒ[ƒ€i‚ß‚é
+    // ã‚¿ã‚¤ãƒãƒ¼ã§ hover ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã‚’ 1 ãƒ•ãƒ¬ãƒ¼ãƒ é€²ã‚ã‚‹
     procedure PreviewTimer(Sender: TObject);
-    // ƒ^ƒCƒ‹“à‚ÉƒTƒ€ƒlƒCƒ‹‰æ‘œ‚Ü‚½‚Í¶¬ó‘Ô‚ğ•`‚­
+    // ã‚¿ã‚¤ãƒ«å†…ã«ã‚µãƒ ãƒã‚¤ãƒ«ç”»åƒã¾ãŸã¯ç”ŸæˆçŠ¶æ…‹ã‚’æã
     procedure DrawThumbnail(Canvas: TCanvas; Index: Integer; const Bounds: TRect);
-    // ƒ^ƒCƒ‹‰º•”‚É•\¦‚·‚éƒtƒ@ƒCƒ‹–¼‚ğ•`‚­
+    // ã‚¿ã‚¤ãƒ«ä¸‹éƒ¨ã«è¡¨ç¤ºã™ã‚‹ãƒ•ã‚¡ã‚¤ãƒ«åã‚’æã
     procedure DrawFileName(Canvas: TCanvas; const Bounds: TRect; const FileName: string);
-    // 1 ‚Â‚Ìƒ^ƒCƒ‹‚ğ•`‚­
+    // 1 ã¤ã®ã‚¿ã‚¤ãƒ«ã‚’æã
     procedure DrawTile(Canvas: TCanvas; Index: Integer; const Bounds: TRect);
-    // ‰E‰º‚ÌƒTƒ€ƒlƒCƒ‹Šg‘åk¬ƒ{ƒ^ƒ“‚ğ•`‚­
+    // ãƒ•ã‚©ãƒ«ãƒ€é–²è¦§å±¥æ­´ã‚¿ã‚¤ãƒ«å†…ã«ä»£è¡¨ã‚µãƒ ãƒã‚¤ãƒ«ã‚’æã
+    procedure DrawFolderHistoryThumbnail(Canvas: TCanvas; const FileName: string;
+      const Bounds: TRect; QueueIfMissing: Boolean);
+    // ãƒ•ã‚©ãƒ«ãƒ€é–²è¦§å±¥æ­´ã‚¿ã‚¤ãƒ«ã‚’æã
+    procedure DrawFolderHistoryTile(Canvas: TCanvas; Index: Integer; const Bounds: TRect);
+    // ã‚µãƒ ãƒã‚¤ãƒ«ä¸€è¦§ 1 è¡Œç›®ã«ãƒ•ã‚©ãƒ«ãƒ€é–²è¦§å±¥æ­´ç”¨ã®é ˜åŸŸã‚’æã
+    procedure DrawFolderHistoryRow(Canvas: TCanvas);
+    // å³ä¸‹ã®ã‚µãƒ ãƒã‚¤ãƒ«æ‹¡å¤§ç¸®å°ãƒœã‚¿ãƒ³ã‚’æã
     procedure DrawZoomButtons(Canvas: TCanvas);
-    // •\¦‚ÉŒ»İƒtƒ@ƒCƒ‹‚ªŒ©‚¦‚éˆÊ’u‚ÖƒXƒNƒ[ƒ‹‚·‚é
+    // è¡¨ç¤ºæ™‚ã«ç¾åœ¨ãƒ•ã‚¡ã‚¤ãƒ«ãŒè¦‹ãˆã‚‹ä½ç½®ã¸ã‚¹ã‚¯ãƒ­ãƒ¼ãƒ«ã™ã‚‹
     procedure ScrollToCurrent;
-    // ƒzƒC[ƒ‹“ü—Í‚Åˆê——‚ğcƒXƒNƒ[ƒ‹‚·‚é
+    // ãƒ›ã‚¤ãƒ¼ãƒ«å…¥åŠ›ã§ä¸€è¦§ã‚’ç¸¦ã‚¹ã‚¯ãƒ­ãƒ¼ãƒ«ã™ã‚‹
     procedure ScrollByWheel(WheelDelta: Integer);
-    // w’è•ûŒü‚ÖƒTƒ€ƒlƒCƒ‹ƒTƒCƒY‚ğ 1 ’iŠK•ÏX‚·‚é
+    // æŒ‡å®šæ–¹å‘ã¸ã‚µãƒ ãƒã‚¤ãƒ«ã‚µã‚¤ã‚ºã‚’ 1 æ®µéšå¤‰æ›´ã™ã‚‹
     procedure ZoomByDirection(Direction: Integer);
-    // ’†‰›ƒ{ƒ^ƒ“‰Ÿ‰º’†‚ÌƒzƒC[ƒ‹“ü—Í‚ÅƒTƒ€ƒlƒCƒ‹ƒTƒCƒY‚ğŠg‘åk¬‚·‚é
+    // ä¸­å¤®ãƒœã‚¿ãƒ³æŠ¼ä¸‹ä¸­ã®ãƒ›ã‚¤ãƒ¼ãƒ«å…¥åŠ›ã§ã‚µãƒ ãƒã‚¤ãƒ«ã‚µã‚¤ã‚ºã‚’æ‹¡å¤§ç¸®å°ã™ã‚‹
     procedure ZoomByWheel(WheelDelta: Integer; const MousePos: TPoint);
-    // w’èˆÊ’u‚ğŠî€‚ÉƒTƒ€ƒlƒCƒ‹ƒTƒCƒY‚ğ•ÏX‚·‚é
+    // æŒ‡å®šä½ç½®ã‚’åŸºæº–ã«ã‚µãƒ ãƒã‚¤ãƒ«ã‚µã‚¤ã‚ºã‚’å¤‰æ›´ã™ã‚‹
     procedure ZoomAt(WheelDelta: Integer; const AnchorClient: TPoint);
   protected
-    // ”wŒiÁ‹‚ğ—}~‚·‚é
+    // èƒŒæ™¯æ¶ˆå»ã‚’æŠ‘æ­¢ã™ã‚‹
     procedure WMEraseBkgnd(var Message: TWMEraseBkgnd); message WM_ERASEBKGND;
-    // –îˆóƒL[‚Æ Enter ‚ğˆê——‘€ì‚Æ‚µ‚Äó‚¯æ‚ê‚é‚æ‚¤‚É‚·‚é
+    // çŸ¢å°ã‚­ãƒ¼ã¨ Enter ã‚’ä¸€è¦§æ“ä½œã¨ã—ã¦å—ã‘å–ã‚Œã‚‹ã‚ˆã†ã«ã™ã‚‹
     procedure WMGetDlgCode(var Message: TWMGetDlgCode); message WM_GETDLGCODE;
-    // ƒTƒ€ƒlƒCƒ‹•\¦’†‚àƒtƒH[ƒ€’[‚ÌƒŠƒTƒCƒY”»’è‚ğeƒtƒH[ƒ€‚Ö’Ê‚·
+    // ã‚µãƒ ãƒã‚¤ãƒ«è¡¨ç¤ºä¸­ã‚‚ãƒ•ã‚©ãƒ¼ãƒ ç«¯ã®ãƒªã‚µã‚¤ã‚ºåˆ¤å®šã‚’è¦ªãƒ•ã‚©ãƒ¼ãƒ ã¸é€šã™
     procedure WMNCHitTest(var Message: TWMNCHitTest); message WM_NCHITTEST;
-    // ƒ^ƒCƒ‹ hover ‚ğXV‚·‚é
+    // ã‚¿ã‚¤ãƒ« hover ã‚’æ›´æ–°ã™ã‚‹
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
-    // ˆê——‚ÉƒtƒH[ƒJƒX‚ª‚ ‚é‚Æ‚«‚ÌƒL[‘€ì‚ğˆ—‚·‚é
+    // ä¸€è¦§ã«ãƒ•ã‚©ãƒ¼ã‚«ã‚¹ãŒã‚ã‚‹ã¨ãã®ã‚­ãƒ¼æ“ä½œã‚’å‡¦ç†ã™ã‚‹
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
-    // ˆê——ŠO‚Öo‚½‚ç hover ‚ğ‰ğœ‚·‚é
+    // ä¸€è¦§å¤–ã¸å‡ºãŸã‚‰ hover ã‚’è§£é™¤ã™ã‚‹
     procedure CMMouseLeave(var Message: TMessage); message CM_MOUSELEAVE;
-    // ’ÊíƒzƒC[ƒ‹‚ÅƒXƒNƒ[ƒ‹‚µA’†‰›ƒ{ƒ^ƒ“‰Ÿ‰º’†‚¾‚¯Šg‘åk¬‚·‚é
+    // é€šå¸¸ãƒ›ã‚¤ãƒ¼ãƒ«ã§ã‚¹ã‚¯ãƒ­ãƒ¼ãƒ«ã—ã€ä¸­å¤®ãƒœã‚¿ãƒ³æŠ¼ä¸‹ä¸­ã ã‘æ‹¡å¤§ç¸®å°ã™ã‚‹
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean; override;
-    // ƒ^ƒCƒ‹ƒNƒŠƒbƒN‚ğ‘I‘ğ’Ê’m‚É•ÏŠ·‚·‚é
+    // ã‚¿ã‚¤ãƒ«ã‚¯ãƒªãƒƒã‚¯ã‚’é¸æŠé€šçŸ¥ã«å¤‰æ›ã™ã‚‹
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
-    // ƒ^ƒCƒ‹ˆê——‚ğ•`‰æ‚·‚é
+    // ã‚¿ã‚¤ãƒ«ä¸€è¦§ã‚’æç”»ã™ã‚‹
     procedure Paint; override;
-    // ƒTƒCƒY•ÏX‚ÉƒXƒNƒ[ƒ‹ˆÊ’u‚ğ•â³‚·‚é
+    // ã‚µã‚¤ã‚ºå¤‰æ›´æ™‚ã«ã‚¹ã‚¯ãƒ­ãƒ¼ãƒ«ä½ç½®ã‚’è£œæ­£ã™ã‚‹
     procedure Resize; override;
   public
-    // •\¦ƒRƒ“ƒgƒ[ƒ‹‚Ì‰Šúó‘Ô‚ğì‚é
+    // è¡¨ç¤ºã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«ã®åˆæœŸçŠ¶æ…‹ã‚’ä½œã‚‹
     constructor Create(AOwner: TComponent); override;
-    // •Û‚µ‚½ƒTƒ€ƒlƒCƒ‹‰æ‘œ‚ğ‰ğ•ú‚·‚é
+    // ä¿æŒã—ãŸã‚µãƒ ãƒã‚¤ãƒ«ç”»åƒã‚’è§£æ”¾ã™ã‚‹
     destructor Destroy; override;
-    // •\¦‚·‚éƒƒfƒBƒAˆê——‚ğ·‚µ‘Ö‚¦‚é
+    // è¡¨ç¤ºã™ã‚‹ãƒ¡ãƒ‡ã‚£ã‚¢ä¸€è¦§ã‚’å·®ã—æ›¿ãˆã‚‹
     procedure SetMediaList(MediaList: TVideoMinerMediaList);
-    // ƒtƒH[ƒ€Œo—R‚Å“Í‚¢‚½ƒzƒC[ƒ‹“ü—Í‚ğˆê——‘€ì‚Æ‚µ‚Äˆ—‚·‚é
+    // ãƒ•ã‚©ãƒ¼ãƒ çµŒç”±ã§å±Šã„ãŸãƒ›ã‚¤ãƒ¼ãƒ«å…¥åŠ›ã‚’ä¸€è¦§æ“ä½œã¨ã—ã¦å‡¦ç†ã™ã‚‹
     function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean;
-    // ƒtƒH[ƒ€Œo—R‚Å“Í‚¢‚½ƒL[“ü—Í‚ğˆê——‘€ì‚Æ‚µ‚Äˆ—‚·‚é
+    // ãƒ•ã‚©ãƒ¼ãƒ çµŒç”±ã§å±Šã„ãŸã‚­ãƒ¼å…¥åŠ›ã‚’ä¸€è¦§æ“ä½œã¨ã—ã¦å‡¦ç†ã™ã‚‹
     function HandleKeyDown(var Key: Word; Shift: TShiftState): Boolean;
-    // ˆê——ƒ‚[ƒh‚ğŠJ‚­
+    // ä¸€è¦§ãƒ¢ãƒ¼ãƒ‰ã‚’é–‹ã
     procedure Open;
-    // ˆê——ƒ‚[ƒh‚ğ•Â‚¶‚é
+    // ä¸€è¦§ãƒ¢ãƒ¼ãƒ‰ã‚’é–‰ã˜ã‚‹
     procedure Close;
-    // ˆê——ƒ‚[ƒh‚Ì•\¦/”ñ•\¦‚ğØ‚è‘Ö‚¦‚é
+    // ä¸€è¦§ãƒ¢ãƒ¼ãƒ‰ã®è¡¨ç¤º/éè¡¨ç¤ºã‚’åˆ‡ã‚Šæ›¿ãˆã‚‹
     procedure Toggle;
     property OnSelected: TVideoMinerThumbnailSelectedEvent
       read FOnSelected write FOnSelected;
@@ -150,35 +176,42 @@ type
 implementation
 
 const
-  BROWSER_BACKGROUND_COLOR  = $00111111; // ˆê——ƒ‚[ƒh‘S‘Ì‚Ì”wŒiF
-  TILE_BACKGROUND_COLOR     = $00202020; // ‰æ‘œ–¢¶¬ƒ^ƒCƒ‹‚Ì”wŒiF
-  TILE_HOVER_COLOR          = $00303030; // hover ’†ƒ^ƒCƒ‹‚Ì”wŒiF
-  TILE_CURRENT_BORDER_COLOR = $0000A5FF; // Œ»İÄ¶’†ƒ^ƒCƒ‹‚Ì‹­’²˜gF
-  TILE_SELECTED_BORDER_COLOR = $0046FF72; // ƒL[ƒ{[ƒh‘I‘ğ’†ƒ^ƒCƒ‹‚Ì‹­’²˜gF
-  TILE_HOVER_BORDER_COLOR   = $00FFCC66; // hover ’†ƒ^ƒCƒ‹‚Ì‹­’²˜gF
-  TILE_BORDER_COLOR         = $00404040; // ’Êíƒ^ƒCƒ‹‚Ì˜gF
-  TILE_WIDTH                = 220;       // ƒ^ƒCƒ‹‚ÌŠî–{• px
-  TILE_HEIGHT               = 132;       // ƒ^ƒCƒ‹‚ÌŠî–{‚‚³ px
-  TILE_MIN_WIDTH            = 150;       // ƒ^ƒCƒ‹‚ÌÅ¬• px
-  TILE_MAX_WIDTH            = 380;       // ƒ^ƒCƒ‹‚ÌÅ‘å• px
-  TILE_ZOOM_STEP            = 24;        // ƒzƒC[ƒ‹ 1 ƒmƒbƒ`‚ ‚½‚è‚ÌƒTƒCƒY•ÏX—Ê px
-  TILE_SCROLL_STEP          = 120;       // ƒzƒC[ƒ‹ 1 ƒmƒbƒ`‚ ‚½‚è‚ÌcƒXƒNƒ[ƒ‹—Ê px
-  ZOOM_BUTTON_SIZE          = 38;        // Šg‘åk¬ƒ{ƒ^ƒ“‚Ì’¼Œa px
-  ZOOM_BUTTON_GAP           = 10;        // Šg‘åk¬ƒ{ƒ^ƒ““¯m‚ÌŠÔŠu px
-  ZOOM_BUTTON_COLOR         = $00383838; // Šg‘åk¬ƒ{ƒ^ƒ“‚Ì”wŒiF
-  ZOOM_BUTTON_HOVER_COLOR   = $00585858; // hover ’†‚ÌŠg‘åk¬ƒ{ƒ^ƒ“”wŒiF
-  ZOOM_BUTTON_BORDER_COLOR  = $00C8C8C8; // Šg‘åk¬ƒ{ƒ^ƒ“‚Ì˜gF
-  TILE_GAP                  = 14;        // ƒ^ƒCƒ‹ŠÔ‚Ì—]”’ px
-  TILE_MARGIN               = 22;        // ˆê——ŠOü‚Ì—]”’ px
-  NAME_BAND_HEIGHT          = 28;        // ƒtƒ@ƒCƒ‹–¼‚ğd‚Ë‚é‘Ñ‚Ì‚‚³ px
-  THUMBNAIL_TIMER_INTERVAL  = 80;        // ƒTƒ€ƒlƒCƒ‹‚ğ 1 –‡‚¸‚Â¶¬‚·‚éŠÔŠu ms
-  THUMBNAIL_MAX_WIDTH       = 320;       // ¶¬ƒTƒ€ƒlƒCƒ‹‚ÌÅ‘å• px
-  THUMBNAIL_MAX_HEIGHT      = 180;       // ¶¬ƒTƒ€ƒlƒCƒ‹‚ÌÅ‘å‚‚³ px
-  THUMBNAIL_CACHE_BURST     = 24;        // 1 tick ‚Å“Ç‚İ‚ŞƒLƒƒƒbƒVƒ…Ï‚İƒTƒ€ƒlƒCƒ‹”
-  PREVIEW_START_DELAY_MS    = 0;         // hover Œã‚ÉƒvƒŒƒrƒ…[ŠJn‚ğ‘Ò‚ÂŠÔ ms
-  PREVIEW_FRAME_INTERVAL_MS = 40;        // hover –{ƒvƒŒƒrƒ…[‚ÌXVŠÔŠu ms
-  PREVIEW_START_PERCENT     = 10;        // hover –{ƒvƒŒƒrƒ…[‚ÌŠJnˆÊ’u %
-  HOVER_REAL_PREVIEW_ENABLED = True;     // False ‚É‚·‚é‚Æ“üŒû‚ğÇ‚¢‚Åƒzƒo[ƒvƒŒƒrƒ…[‚ğ~‚ß‚é
+  BROWSER_BACKGROUND_COLOR          = $00111111; // ä¸€è¦§ãƒ¢ãƒ¼ãƒ‰å…¨ä½“ã®èƒŒæ™¯è‰²
+  FOLDER_HISTORY_COLOR              = $001A211D; // ãƒ•ã‚©ãƒ«ãƒ€é–²è¦§å±¥æ­´è¡Œã®èƒŒæ™¯è‰²
+  FOLDER_HISTORY_TILE_COLOR         = $00233028; // ãƒ•ã‚©ãƒ«ãƒ€å±¥æ­´ã‚¿ã‚¤ãƒ«ã®èƒŒæ™¯è‰²
+  FOLDER_HISTORY_TILE_HOVER_COLOR   = $00304036; // hover ä¸­ãƒ•ã‚©ãƒ«ãƒ€å±¥æ­´ã‚¿ã‚¤ãƒ«ã®èƒŒæ™¯è‰²
+  FOLDER_HISTORY_BORDER_COLOR       = $003A5A48; // ãƒ•ã‚©ãƒ«ãƒ€é–²è¦§å±¥æ­´è¡Œã®æ è‰²
+  FOLDER_HISTORY_HOVER_BORDER_COLOR = $0090D8A8; // hover ä¸­ãƒ•ã‚©ãƒ«ãƒ€å±¥æ­´ã‚¿ã‚¤ãƒ«ã®æ è‰²
+  FOLDER_THUMBNAIL_BORDER_COLOR     = $00E0E0E0; // ä»£è¡¨ã‚µãƒ ãƒã‚¤ãƒ«ã®æ è‰²
+  TILE_BACKGROUND_COLOR             = $00202020; // ç”»åƒæœªç”Ÿæˆã‚¿ã‚¤ãƒ«ã®èƒŒæ™¯è‰²
+  TILE_HOVER_COLOR                  = $00303030; // hover ä¸­ã‚¿ã‚¤ãƒ«ã®èƒŒæ™¯è‰²
+  TILE_CURRENT_BORDER_COLOR         = $0000A5FF; // ç¾åœ¨å†ç”Ÿä¸­ã‚¿ã‚¤ãƒ«ã®å¼·èª¿æ è‰²
+  TILE_SELECTED_BORDER_COLOR        = $0046FF72; // ã‚­ãƒ¼ãƒœãƒ¼ãƒ‰é¸æŠä¸­ã‚¿ã‚¤ãƒ«ã®å¼·èª¿æ è‰²
+  TILE_HOVER_BORDER_COLOR           = $00FFCC66; // hover ä¸­ã‚¿ã‚¤ãƒ«ã®å¼·èª¿æ è‰²
+  TILE_BORDER_COLOR                 = $00404040; // é€šå¸¸ã‚¿ã‚¤ãƒ«ã®æ è‰²
+  TILE_WIDTH                     = 220;       // ã‚¿ã‚¤ãƒ«ã®åŸºæœ¬å¹… px
+  TILE_HEIGHT                    = 132;       // ã‚¿ã‚¤ãƒ«ã®åŸºæœ¬é«˜ã• px
+  TILE_MIN_WIDTH                 = 150;       // ã‚¿ã‚¤ãƒ«ã®æœ€å°å¹… px
+  TILE_MAX_WIDTH                 = 380;       // ã‚¿ã‚¤ãƒ«ã®æœ€å¤§å¹… px
+  TILE_ZOOM_STEP                 = 24;        // ãƒ›ã‚¤ãƒ¼ãƒ« 1 ãƒãƒƒãƒã‚ãŸã‚Šã®ã‚µã‚¤ã‚ºå¤‰æ›´é‡ px
+  TILE_SCROLL_STEP               = 120;       // ãƒ›ã‚¤ãƒ¼ãƒ« 1 ãƒãƒƒãƒã‚ãŸã‚Šã®ç¸¦ã‚¹ã‚¯ãƒ­ãƒ¼ãƒ«é‡ px
+  ZOOM_BUTTON_SIZE               = 38;        // æ‹¡å¤§ç¸®å°ãƒœã‚¿ãƒ³ã®ç›´å¾„ px
+  ZOOM_BUTTON_GAP                = 10;        // æ‹¡å¤§ç¸®å°ãƒœã‚¿ãƒ³åŒå£«ã®é–“éš” px
+  ZOOM_BUTTON_COLOR              = $00383838; // æ‹¡å¤§ç¸®å°ãƒœã‚¿ãƒ³ã®èƒŒæ™¯è‰²
+  ZOOM_BUTTON_HOVER_COLOR        = $00585858; // hover ä¸­ã®æ‹¡å¤§ç¸®å°ãƒœã‚¿ãƒ³èƒŒæ™¯è‰²
+  ZOOM_BUTTON_BORDER_COLOR       = $00C8C8C8; // æ‹¡å¤§ç¸®å°ãƒœã‚¿ãƒ³ã®æ è‰²
+  TILE_GAP                       = 14;        // ã‚¿ã‚¤ãƒ«é–“ã®ä½™ç™½ px
+  TILE_MARGIN                    = 22;        // ä¸€è¦§å¤–å‘¨ã®ä½™ç™½ px
+  NAME_BAND_HEIGHT               = 28;        // ãƒ•ã‚¡ã‚¤ãƒ«åã‚’é‡ã­ã‚‹å¸¯ã®é«˜ã• px
+  FOLDER_HISTORY_THUMB_COUNT     = 4;         // ãƒ•ã‚©ãƒ«ãƒ€å±¥æ­´ã«ä¸¦ã¹ã‚‹ä»£è¡¨ã‚µãƒ ãƒã‚¤ãƒ«æ•°
+  THUMBNAIL_TIMER_INTERVAL       = 80;        // ã‚µãƒ ãƒã‚¤ãƒ«ã‚’ 1 æšãšã¤ç”Ÿæˆã™ã‚‹é–“éš” ms
+  THUMBNAIL_MAX_WIDTH            = 320;       // ç”Ÿæˆã‚µãƒ ãƒã‚¤ãƒ«ã®æœ€å¤§å¹… px
+  THUMBNAIL_MAX_HEIGHT           = 180;       // ç”Ÿæˆã‚µãƒ ãƒã‚¤ãƒ«ã®æœ€å¤§é«˜ã• px
+  THUMBNAIL_CACHE_BURST          = 24;        // 1 tick ã§èª­ã¿è¾¼ã‚€ã‚­ãƒ£ãƒƒã‚·ãƒ¥æ¸ˆã¿ã‚µãƒ ãƒã‚¤ãƒ«æ•°
+  PREVIEW_START_DELAY_MS         = 0;         // hover å¾Œã«ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼é–‹å§‹ã‚’å¾…ã¤æ™‚é–“ ms
+  PREVIEW_FRAME_INTERVAL_MS      = 40;        // hover æœ¬ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã®æ›´æ–°é–“éš” ms
+  PREVIEW_START_PERCENT          = 10;        // hover æœ¬ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã®é–‹å§‹ä½ç½® %
+  HOVER_REAL_PREVIEW_ENABLED     = True;      // False ã«ã™ã‚‹ã¨å…¥å£ã‚’å¡ã„ã§ãƒ›ãƒãƒ¼ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã‚’æ­¢ã‚ã‚‹
 
 constructor TVideoMinerThumbnailBrowser.Create(AOwner: TComponent);
 begin
@@ -189,9 +222,11 @@ begin
   Visible := False;
   FCurrentIndex := -1;
   FHoverIndex := -1;
+  FFolderHistorySelectedIndex := -1;
   FPreviewIndex := -1;
   FPreviewStarted := False;
   FPreviewStep := -1;
+  FFolderHistoryHoverIndex := -1;
   FSelectedIndex := -1;
   FZoomButtonHover := 0;
   FTileWidth := LoadThumbnailTileWidth(TILE_WIDTH, TILE_MIN_WIDTH,
@@ -211,7 +246,26 @@ destructor TVideoMinerThumbnailBrowser.Destroy;
 begin
   StopPreview;
   ClearThumbnails;
+  FOwnedMediaList.Free;
   inherited Destroy;
+end;
+
+function TVideoMinerThumbnailBrowser.ActiveFileIndexInMediaList: Integer;
+var
+  I: Integer;
+begin
+  Result := -1;
+  if (FActiveFileName = '') or (FMediaList = nil) then
+    Exit;
+
+  for I := 0 to FMediaList.Count - 1 do
+  begin
+    if SameText(FMediaList.FileAt(I), FActiveFileName) then
+    begin
+      Result := I;
+      Exit;
+    end;
+  end;
 end;
 
 function TVideoMinerThumbnailBrowser.ColumnCount: Integer;
@@ -226,12 +280,27 @@ var
 begin
   if (FMediaList = nil) or (FMediaList.Count <= 0) then
   begin
-    Result := 0;
+    Result := FolderHistoryRowHeight + TILE_MARGIN;
     Exit;
   end;
 
   Rows := Ceil(FMediaList.Count / ColumnCount);
-  Result := TILE_MARGIN * 2 + Rows * FTileHeight + Max(0, Rows - 1) * TILE_GAP;
+  Result := FolderHistoryRowHeight + Rows * FTileHeight +
+    Max(0, Rows - 1) * TILE_GAP + TILE_MARGIN;
+end;
+
+function TVideoMinerThumbnailBrowser.FolderHistoryRowHeight: Integer;
+begin
+  Result := TILE_MARGIN + FTileHeight + TILE_GAP;
+end;
+
+function TVideoMinerThumbnailBrowser.FolderHistoryTileRect(Index: Integer): TRect;
+var
+  Left: Integer;
+begin
+  Left := TILE_MARGIN + 8 + Index * (FTileWidth + TILE_GAP);
+  Result := Rect(Left, TILE_MARGIN + 8, Left + FTileWidth,
+    TILE_MARGIN + FTileHeight - 8);
 end;
 
 procedure TVideoMinerThumbnailBrowser.ClampScrollOffset;
@@ -806,6 +875,240 @@ begin
   end;
 end;
 
+procedure TVideoMinerThumbnailBrowser.DrawFolderHistoryThumbnail(Canvas: TCanvas;
+  const FileName: string; const Bounds: TRect; QueueIfMissing: Boolean);
+var
+  Bitmap: TBitmap;
+  DestRect: TRect;
+  MediaIndex: Integer;
+  Scale: Double;
+  ThumbHeight: Integer;
+  ThumbWidth: Integer;
+begin
+  Canvas.Brush.Color := FOLDER_HISTORY_COLOR;
+  Canvas.FillRect(Bounds);
+  Canvas.Pen.Color := FOLDER_THUMBNAIL_BORDER_COLOR;
+  Canvas.Pen.Width := 1;
+  Canvas.Rectangle(Bounds);
+
+  if FileName = '' then
+    Exit;
+
+  EnsureThumbnailSlots;
+  Bitmap := nil;
+  MediaIndex := -1;
+  if FMediaList <> nil then
+  begin
+    for MediaIndex := 0 to FMediaList.Count - 1 do
+    begin
+      if SameText(FMediaList.FileAt(MediaIndex), FileName) then
+        Break;
+    end;
+    if (MediaIndex >= FMediaList.Count) or
+       (not SameText(FMediaList.FileAt(MediaIndex), FileName)) then
+      MediaIndex := -1;
+  end;
+
+  if (MediaIndex >= 0) and (MediaIndex < Length(FThumbnailStates)) then
+  begin
+    if FThumbnailStates[MediaIndex] = tsReady then
+      Bitmap := FThumbnails[MediaIndex]
+    else if QueueIfMissing and (FThumbnailStates[MediaIndex] = tsNone) then
+      QueueThumbnail(MediaIndex);
+  end;
+
+  if (Bitmap = nil) and (not QueueIfMissing) then
+  begin
+    Bitmap := TBitmap.Create;
+    try
+      if not LoadVideoMinerThumbnailCache(FileName, Bitmap) then
+      begin
+        Bitmap.Free;
+        Bitmap := nil;
+      end;
+    except
+      Bitmap.Free;
+      raise;
+    end;
+  end;
+
+  if (Bitmap <> nil) and (Bitmap.Width > 0) and (Bitmap.Height > 0) then
+  begin
+    Scale := Min((Bounds.Width - 4) / Bitmap.Width,
+      (Bounds.Height - 4) / Bitmap.Height);
+    ThumbWidth := Max(1, Round(Bitmap.Width * Scale));
+    ThumbHeight := Max(1, Round(Bitmap.Height * Scale));
+    DestRect := Rect(
+      Bounds.Left + (Bounds.Width - ThumbWidth) div 2,
+      Bounds.Top + (Bounds.Height - ThumbHeight) div 2,
+      Bounds.Left + (Bounds.Width - ThumbWidth) div 2 + ThumbWidth,
+      Bounds.Top + (Bounds.Height - ThumbHeight) div 2 + ThumbHeight);
+    Canvas.StretchDraw(DestRect, Bitmap);
+  end;
+
+  if (Bitmap <> nil) and (MediaIndex < 0) then
+    Bitmap.Free;
+end;
+
+procedure TVideoMinerThumbnailBrowser.DrawFolderHistoryTile(Canvas: TCanvas;
+  Index: Integer; const Bounds: TRect);
+var
+  CurrentFolder: string;
+  FolderName: string;
+  FolderPath: string;
+  I: Integer;
+  IsCurrentFolder: Boolean;
+  PreviewRect: TRect;
+  RepresentativeFile: string;
+  RepresentativeList: TVideoMinerMediaList;
+  RepIndex: Integer;
+  SmallGap: Integer;
+  SmallHeight: Integer;
+  SmallStartLeft: Integer;
+  SmallTop: Integer;
+  SmallWidth: Integer;
+  StepIndex: Integer;
+  TextRect: TRect;
+  ThumbRect: TRect;
+begin
+  if (Index < 0) or (Index >= Length(FFolderHistory)) then
+    Exit;
+
+  FolderPath := ExcludeTrailingPathDelimiter(FFolderHistory[Index]);
+  CurrentFolder := '';
+  if (FMediaList <> nil) and (FMediaList.CurrentFile <> '') then
+    CurrentFolder := IncludeTrailingPathDelimiter(
+      ExtractFilePath(FMediaList.CurrentFile));
+  IsCurrentFolder := SameText(IncludeTrailingPathDelimiter(FolderPath),
+    CurrentFolder);
+
+  if Index = FFolderHistoryHoverIndex then
+  begin
+    Canvas.Brush.Color := FOLDER_HISTORY_TILE_HOVER_COLOR;
+    Canvas.Pen.Color := FOLDER_HISTORY_HOVER_BORDER_COLOR;
+    Canvas.Pen.Width := 3;
+  end
+  else
+  begin
+    Canvas.Brush.Color := FOLDER_HISTORY_TILE_COLOR;
+    Canvas.Pen.Color := FOLDER_HISTORY_BORDER_COLOR;
+    Canvas.Pen.Width := 2;
+  end;
+  Canvas.Rectangle(Bounds);
+
+  if Index = FFolderHistorySelectedIndex then
+  begin
+    Canvas.Brush.Style := bsClear;
+    Canvas.Pen.Color := TILE_SELECTED_BORDER_COLOR;
+    Canvas.Pen.Width := 3;
+    Canvas.Rectangle(Bounds);
+    Canvas.Brush.Style := bsSolid;
+  end;
+
+  PreviewRect := Rect(Bounds.Left + 8, Bounds.Top + 8, Bounds.Right - 8,
+    Bounds.Bottom - NAME_BAND_HEIGHT - 8);
+  Canvas.Brush.Color := FOLDER_HISTORY_COLOR;
+  Canvas.FillRect(PreviewRect);
+
+  RepresentativeList := nil;
+  if IsCurrentFolder then
+    RepresentativeList := FMediaList
+  else
+  begin
+    RepresentativeFile := TVideoMinerMediaList.FirstMediaFileInFolder(FolderPath);
+    if RepresentativeFile <> '' then
+    begin
+      RepresentativeList := TVideoMinerMediaList.Create;
+      RepresentativeList.BuildForFile(RepresentativeFile);
+    end;
+  end;
+
+  if RepresentativeList <> nil then
+  try
+    SmallGap := 4;
+    SmallWidth := Max(24, PreviewRect.Width div 4);
+    SmallHeight := Max(18, PreviewRect.Height div 3);
+    SmallStartLeft := PreviewRect.Left + (PreviewRect.Width -
+      (SmallWidth * 3 + SmallGap * 2)) div 2;
+    SmallTop := PreviewRect.Bottom - SmallHeight - SmallGap;
+    for I := 0 to FOLDER_HISTORY_THUMB_COUNT - 1 do
+    begin
+      if RepresentativeList.Count <= 1 then
+        RepIndex := 0
+      else
+      begin
+        StepIndex := Round(I * (RepresentativeList.Count - 1) /
+          Max(1, FOLDER_HISTORY_THUMB_COUNT - 1));
+        RepIndex := Max(0, Min(RepresentativeList.Count - 1, StepIndex));
+      end;
+      if I = 0 then
+        ThumbRect := PreviewRect
+      else
+        ThumbRect := Rect(SmallStartLeft + (I - 1) * (SmallWidth + SmallGap),
+          SmallTop, SmallStartLeft + (I - 1) * (SmallWidth + SmallGap) +
+          SmallWidth, SmallTop + SmallHeight);
+      DrawFolderHistoryThumbnail(Canvas, RepresentativeList.FileAt(RepIndex),
+        ThumbRect, IsCurrentFolder);
+    end;
+  finally
+    if (RepresentativeList <> nil) and (RepresentativeList <> FMediaList) then
+      RepresentativeList.Free;
+  end;
+
+  FolderName := ExtractFileName(FolderPath);
+  if FolderName = '' then
+    FolderName := FolderPath;
+  TextRect := Rect(Bounds.Left + 1, Bounds.Bottom - NAME_BAND_HEIGHT,
+    Bounds.Right - 1, Bounds.Bottom - 1);
+  Canvas.Brush.Color := clBlack;
+  Canvas.FillRect(TextRect);
+  InflateRect(TextRect, -8, 0);
+  Canvas.Font.Color := clWhite;
+  Canvas.Font.Size := 9;
+  Canvas.Font.Style := [fsBold];
+  DrawText(Canvas.Handle, PChar(FolderName), -1, TextRect,
+    DT_SINGLELINE or DT_VCENTER or DT_END_ELLIPSIS);
+  Canvas.Font.Style := [];
+end;
+
+procedure TVideoMinerThumbnailBrowser.DrawFolderHistoryRow(Canvas: TCanvas);
+var
+  BandRect: TRect;
+  I: Integer;
+  TextRect: TRect;
+  TileRect: TRect;
+begin
+  BandRect := Rect(TILE_MARGIN, TILE_MARGIN, ClientWidth - TILE_MARGIN,
+    TILE_MARGIN + FTileHeight);
+  if BandRect.Right <= BandRect.Left then
+    Exit;
+
+  Canvas.Brush.Color := FOLDER_HISTORY_COLOR;
+  Canvas.Pen.Color := FOLDER_HISTORY_BORDER_COLOR;
+  Canvas.Pen.Width := 1;
+  Canvas.Rectangle(BandRect);
+
+  if Length(FFolderHistory) <= 0 then
+  begin
+    TextRect := BandRect;
+    InflateRect(TextRect, -14, 0);
+    Canvas.Font.Color := $00B8C8BE;
+    Canvas.Font.Size := 10;
+    Canvas.Font.Style := [];
+    DrawText(Canvas.Handle, PChar('Folder history'), -1, TextRect,
+      DT_SINGLELINE or DT_VCENTER or DT_END_ELLIPSIS);
+    Exit;
+  end;
+
+  for I := 0 to High(FFolderHistory) do
+  begin
+    TileRect := FolderHistoryTileRect(I);
+    if TileRect.Left >= BandRect.Right then
+      Break;
+    DrawFolderHistoryTile(Canvas, I, TileRect);
+  end;
+end;
+
 procedure TVideoMinerThumbnailBrowser.DrawZoomButtons(Canvas: TCanvas);
 var
   Direction: Integer;
@@ -874,6 +1177,10 @@ begin
       MoveSelection(Cols);
     VK_RETURN:
       ActivateSelectedTile;
+    VK_DELETE:
+      DeleteSelectedFolderHistory;
+    VK_F5:
+      RefreshFolderHistory;
   else
     Exit;
   end;
@@ -882,11 +1189,30 @@ begin
   Result := True;
 end;
 
+function TVideoMinerThumbnailBrowser.HitFolderHistoryTile(
+  const Point: TPoint): Integer;
+var
+  I: Integer;
+begin
+  Result := -1;
+  for I := 0 to High(FFolderHistory) do
+  begin
+    if PtInRect(FolderHistoryTileRect(I), Point) then
+    begin
+      Result := I;
+      Exit;
+    end;
+  end;
+end;
+
 function TVideoMinerThumbnailBrowser.HitTile(const Point: TPoint): Integer;
 var
   I: Integer;
 begin
   Result := -1;
+  if Point.Y < FolderHistoryRowHeight then
+    Exit;
+
   for I := 0 to Length(FTileRects) - 1 do
   begin
     if PtInRect(FTileRects[I], Point) then
@@ -964,19 +1290,21 @@ begin
     Col := I mod Cols;
     FTileRects[I] := Rect(
       LeftStart + Col * (FTileWidth + TILE_GAP),
-      TILE_MARGIN + Row * (FTileHeight + TILE_GAP) - FScrollOffset,
+      FolderHistoryRowHeight + Row * (FTileHeight + TILE_GAP) - FScrollOffset,
       LeftStart + Col * (FTileWidth + TILE_GAP) + FTileWidth,
-      TILE_MARGIN + Row * (FTileHeight + TILE_GAP) + FTileHeight -
-        FScrollOffset);
+      FolderHistoryRowHeight + Row * (FTileHeight + TILE_GAP) +
+        FTileHeight - FScrollOffset);
   end;
 end;
 
 procedure TVideoMinerThumbnailBrowser.CMMouseLeave(var Message: TMessage);
 begin
   inherited;
-  if (FHoverIndex >= 0) or (FZoomButtonHover <> 0) then
+  if (FHoverIndex >= 0) or (FFolderHistoryHoverIndex >= 0) or
+     (FZoomButtonHover <> 0) then
   begin
     FHoverIndex := -1;
+    FFolderHistoryHoverIndex := -1;
     FZoomButtonHover := 0;
     StopPreview;
     Cursor := crDefault;
@@ -994,25 +1322,33 @@ end;
 procedure TVideoMinerThumbnailBrowser.MouseMove(Shift: TShiftState; X,
   Y: Integer);
 var
+  NewFolderHistoryHoverIndex: Integer;
   NewHoverIndex: Integer;
   NewZoomButtonHover: Integer;
 begin
   inherited MouseMove(Shift, X, Y);
   NewZoomButtonHover := HitZoomButton(Point(X, Y));
-  if NewZoomButtonHover <> 0 then
+  if NewZoomButtonHover = 0 then
+    NewFolderHistoryHoverIndex := HitFolderHistoryTile(Point(X, Y))
+  else
+    NewFolderHistoryHoverIndex := -1;
+  if (NewZoomButtonHover <> 0) or (NewFolderHistoryHoverIndex >= 0) then
     NewHoverIndex := -1
   else
     NewHoverIndex := HitTile(Point(X, Y));
 
-  if (NewHoverIndex >= 0) or (NewZoomButtonHover <> 0) then
+  if (NewHoverIndex >= 0) or (NewFolderHistoryHoverIndex >= 0) or
+     (NewZoomButtonHover <> 0) then
     Cursor := crHandPoint
   else
     Cursor := crDefault;
 
   if (FHoverIndex <> NewHoverIndex) or
+     (FFolderHistoryHoverIndex <> NewFolderHistoryHoverIndex) or
      (FZoomButtonHover <> NewZoomButtonHover) then
   begin
     FHoverIndex := NewHoverIndex;
+    FFolderHistoryHoverIndex := NewFolderHistoryHoverIndex;
     FZoomButtonHover := NewZoomButtonHover;
     Invalidate;
     Update;
@@ -1046,6 +1382,14 @@ begin
     Exit;
   end;
 
+  Index := HitFolderHistoryTile(Point(X, Y));
+  if Index >= 0 then
+  begin
+    FFolderHistorySelectedIndex := Index;
+    ShowFolderHistory(Index);
+    Exit;
+  end;
+
   if FMediaList = nil then
     Exit;
 
@@ -1054,6 +1398,7 @@ begin
     Exit;
 
   SelectTile(Index, False);
+  FFolderHistorySelectedIndex := -1;
   FileName := FMediaList.FileAt(Index);
   if (FileName <> '') and Assigned(FOnSelected) then
     FOnSelected(Self, Index, FileName);
@@ -1082,12 +1427,13 @@ var
 begin
   Canvas.Brush.Color := BROWSER_BACKGROUND_COLOR;
   Canvas.FillRect(ClientRect);
+  DrawFolderHistoryRow(Canvas);
 
   EnsureThumbnailSlots;
   LayoutTiles;
   if Length(FTileRects) <= 0 then
   begin
-    TextRect := ClientRect;
+    TextRect := Rect(0, FolderHistoryRowHeight, ClientWidth, ClientHeight);
     Canvas.Font.Color := $00A0A0A0;
     Canvas.Font.Size := 11;
     DrawText(Canvas.Handle, PChar('No videos'), -1, TextRect,
@@ -1098,10 +1444,12 @@ begin
 
   for I := 0 to Length(FTileRects) - 1 do
   begin
-    if (FTileRects[I].Bottom < 0) or (FTileRects[I].Top > ClientHeight) then
+    if (FTileRects[I].Bottom < FolderHistoryRowHeight) or
+       (FTileRects[I].Top > ClientHeight) then
       Continue;
     DrawTile(Canvas, I, FTileRects[I]);
   end;
+  DrawFolderHistoryRow(Canvas);
   DrawZoomButtons(Canvas);
 end;
 
@@ -1125,6 +1473,88 @@ begin
     FOnSelected(Self, FSelectedIndex, FileName);
 end;
 
+procedure TVideoMinerThumbnailBrowser.DeleteSelectedFolderHistory;
+var
+  DeleteIndex: Integer;
+  Folder: string;
+begin
+  DeleteIndex := FFolderHistorySelectedIndex;
+  if (DeleteIndex < 0) or (DeleteIndex >= Length(FFolderHistory)) then
+    Exit;
+
+  Folder := FFolderHistory[DeleteIndex];
+  DeleteFolderHistory(Folder);
+  FFolderHistory := LoadFolderHistory;
+
+  if Length(FFolderHistory) <= 0 then
+    FFolderHistorySelectedIndex := -1
+  else if DeleteIndex < Length(FFolderHistory) then
+    FFolderHistorySelectedIndex := DeleteIndex
+  else
+    FFolderHistorySelectedIndex := Length(FFolderHistory) - 1;
+
+  if FFolderHistoryHoverIndex >= Length(FFolderHistory) then
+    FFolderHistoryHoverIndex := -1;
+  Invalidate;
+end;
+
+procedure TVideoMinerThumbnailBrowser.RefreshFolderHistory;
+var
+  FileName: string;
+  Folder: string;
+  I: Integer;
+  NewSelectedIndex: Integer;
+begin
+  Folder := '';
+  if (FFolderHistorySelectedIndex >= 0) and
+     (FFolderHistorySelectedIndex < Length(FFolderHistory)) then
+    Folder := FFolderHistory[FFolderHistorySelectedIndex];
+
+  FFolderHistory := LoadFolderHistory;
+  NewSelectedIndex := -1;
+  if Folder <> '' then
+  begin
+    for I := 0 to High(FFolderHistory) do
+    begin
+      if SameText(IncludeTrailingPathDelimiter(FFolderHistory[I]),
+        IncludeTrailingPathDelimiter(Folder)) then
+      begin
+        NewSelectedIndex := I;
+        Break;
+      end;
+    end;
+  end;
+
+  FFolderHistorySelectedIndex := NewSelectedIndex;
+  if FFolderHistoryHoverIndex >= Length(FFolderHistory) then
+    FFolderHistoryHoverIndex := -1;
+
+  if FFolderHistorySelectedIndex >= 0 then
+  begin
+    FileName := TVideoMinerMediaList.FirstMediaFileInFolder(
+      FFolderHistory[FFolderHistorySelectedIndex]);
+    if FileName <> '' then
+    begin
+      ShowFolderHistory(FFolderHistorySelectedIndex);
+      Exit;
+    end;
+
+    StopPreview;
+    ClearThumbnails;
+    FreeAndNil(FOwnedMediaList);
+    FMediaList := nil;
+    FCurrentIndex := -1;
+    FSelectedIndex := -1;
+  end;
+
+  StopPreview;
+  ClearThumbnails;
+  EnsureThumbnailSlots;
+  ClampScrollOffset;
+  LayoutTiles;
+  Invalidate;
+end;
+
 procedure TVideoMinerThumbnailBrowser.MoveSelection(Delta: Integer);
 var
   NewIndex: Integer;
@@ -1132,6 +1562,7 @@ begin
   if (FMediaList = nil) or (FMediaList.Count <= 0) then
     Exit;
 
+  FFolderHistorySelectedIndex := -1;
   NewIndex := FSelectedIndex;
   if NewIndex < 0 then
     NewIndex := FCurrentIndex;
@@ -1153,10 +1584,10 @@ begin
 
   Cols := ColumnCount;
   Row := FSelectedIndex div Cols;
-  TileTop := TILE_MARGIN + Row * (FTileHeight + TILE_GAP);
+  TileTop := FolderHistoryRowHeight + Row * (FTileHeight + TILE_GAP);
   TileBottom := TileTop + FTileHeight;
-  if TileTop < FScrollOffset + TILE_MARGIN then
-    FScrollOffset := TileTop - TILE_MARGIN
+  if TileTop < FScrollOffset + FolderHistoryRowHeight then
+    FScrollOffset := TileTop - FolderHistoryRowHeight
   else if TileBottom > FScrollOffset + ClientHeight - TILE_MARGIN then
     FScrollOffset := TileBottom - ClientHeight + TILE_MARGIN;
   ClampScrollOffset;
@@ -1179,6 +1610,7 @@ begin
     ScrollToSelected;
   Invalidate;
 end;
+
 procedure TVideoMinerThumbnailBrowser.ScrollToCurrent;
 var
   Cols: Integer;
@@ -1192,7 +1624,7 @@ begin
 
   Cols := ColumnCount;
   Row := FCurrentIndex div Cols;
-  TileTop := TILE_MARGIN + Row * (FTileHeight + TILE_GAP);
+  TileTop := FolderHistoryRowHeight + Row * (FTileHeight + TILE_GAP);
   TileBottom := TileTop + FTileHeight;
   if TileBottom > ClientHeight - TILE_MARGIN then
     FScrollOffset := TileBottom - ClientHeight + TILE_MARGIN;
@@ -1202,11 +1634,18 @@ end;
 
 procedure TVideoMinerThumbnailBrowser.SetMediaList(
   MediaList: TVideoMinerMediaList);
+var
+  CurrentFolder: string;
 begin
   StopPreview;
+  FreeAndNil(FOwnedMediaList);
   FMediaList := MediaList;
   if FMediaList <> nil then
-    FCurrentIndex := FMediaList.CurrentIndex
+    FActiveFileName := FMediaList.CurrentFile
+  else
+    FActiveFileName := '';
+  if FMediaList <> nil then
+    FCurrentIndex := ActiveFileIndexInMediaList
   else
     FCurrentIndex := -1;
   if FMediaList = nil then
@@ -1215,6 +1654,49 @@ begin
     FSelectedIndex := FCurrentIndex
   else if FSelectedIndex >= FMediaList.Count then
     FSelectedIndex := FMediaList.Count - 1;
+  CurrentFolder := '';
+  if (FMediaList <> nil) and (FMediaList.CurrentFile <> '') then
+    CurrentFolder := ExtractFilePath(FMediaList.CurrentFile);
+  if CurrentFolder <> '' then
+    TouchFolderHistory(CurrentFolder);
+  FFolderHistory := LoadFolderHistory;
+  if FFolderHistoryHoverIndex >= Length(FFolderHistory) then
+    FFolderHistoryHoverIndex := -1;
+  if FFolderHistorySelectedIndex >= Length(FFolderHistory) then
+    FFolderHistorySelectedIndex := -1;
+  EnsureThumbnailSlots;
+  ClampScrollOffset;
+  LayoutTiles;
+  Invalidate;
+end;
+
+procedure TVideoMinerThumbnailBrowser.ShowFolderHistory(Index: Integer);
+var
+  FileName: string;
+  Folder: string;
+begin
+  if (Index < 0) or (Index >= Length(FFolderHistory)) then
+    Exit;
+
+  Folder := FFolderHistory[Index];
+  FileName := TVideoMinerMediaList.FirstMediaFileInFolder(Folder);
+  if FileName = '' then
+    Exit;
+
+  StopPreview;
+  ClearThumbnails;
+  FreeAndNil(FOwnedMediaList);
+  FOwnedMediaList := TVideoMinerMediaList.Create;
+  FOwnedMediaList.BuildForFile(FileName);
+  FMediaList := FOwnedMediaList;
+  FCurrentIndex := ActiveFileIndexInMediaList;
+  if FCurrentIndex >= 0 then
+    FSelectedIndex := FCurrentIndex
+  else if FMediaList.Count > 0 then
+    FSelectedIndex := 0
+  else
+    FSelectedIndex := -1;
+  FScrollOffset := 0;
   EnsureThumbnailSlots;
   ClampScrollOffset;
   LayoutTiles;
@@ -1294,8 +1776,8 @@ begin
   if AnchorIndex >= 0 then
   begin
     AnchorRow := AnchorIndex div ColumnCount;
-    FScrollOffset := TILE_MARGIN + AnchorRow * (FTileHeight + TILE_GAP) -
-      AnchorClient.Y + AnchorOffset;
+    FScrollOffset := FolderHistoryRowHeight + AnchorRow *
+      (FTileHeight + TILE_GAP) - AnchorClient.Y + AnchorOffset;
   end;
 
   ClampScrollOffset;
