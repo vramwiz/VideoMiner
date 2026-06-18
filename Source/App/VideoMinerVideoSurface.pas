@@ -21,6 +21,7 @@ type
     FAlphaPixelCount        : Int64;                             // 現在フレームで alpha が 255 未満のピクセル数
     FBossExitButtonRect     : TRect;                             // 偽装画面の解除ボタン位置
     FBossGestureDetector    : TVideoMinerBossGestureDetector;    // ボスが来たモード発動用のマウスジェスチャー検出器
+    FBossHelpPageIndex      : Integer;                           // ボスが来たモード中に表示するヘルプページ
     FBossMode               : Boolean;                           // 動画を隠して偽装画面を表示中か
     FPaintBuffer            : TBitmap;                           // overlay 表示時のちらつきを抑える描画用バッファ
     FFirstFrameButton       : TVideoMinerOverlayEdgeButton;      // 先頭フレームへ移動する中央ボタン
@@ -198,6 +199,8 @@ type
     destructor Destroy; override;
     // 表示フレームと overlay 状態を空にする
     procedure Clear;
+    // ボスが来たモード中のヘルプページを前後へ切り替える
+    procedure ChangeBossHelpPage(Delta: Integer);
     // 外部から渡されたホイール操作をこの表示面で処理する
     function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean;
     // 現在表示中フレームの四隅が暗いか返す
@@ -345,6 +348,23 @@ begin
     FSurfaceClickTimer.Enabled := False;
 end;
 
+procedure TVideoMinerVideoSurface.ChangeBossHelpPage(Delta: Integer);
+var
+  PageCount: Integer;
+begin
+  if Delta = 0 then
+    Exit;
+
+  PageCount := VideoMinerBossHelpPageCount;
+  if PageCount <= 0 then
+    Exit;
+
+  FBossHelpPageIndex := (FBossHelpPageIndex + Delta) mod PageCount;
+  if FBossHelpPageIndex < 0 then
+    Inc(FBossHelpPageIndex, PageCount);
+  if FBossMode then
+    Invalidate;
+end;
 procedure TVideoMinerVideoSurface.Clear;
 begin
   CancelPendingSurfaceClick;
@@ -845,6 +865,8 @@ begin
     Exit;
 
   FBossMode := Value;
+  if Value then
+    FBossHelpPageIndex := 0;
   CancelPendingSurfaceClick;
   if FBossGestureDetector <> nil then
     FBossGestureDetector.Reset;
@@ -1196,7 +1218,7 @@ begin
 
   if FBossMode then
   begin
-    DrawVideoMinerBossOverlay(Canvas, ClientRect, FBossExitButtonRect);
+    DrawVideoMinerBossOverlay(Canvas, ClientRect, FBossHelpPageIndex, FBossExitButtonRect);
     Exit;
   end;
 

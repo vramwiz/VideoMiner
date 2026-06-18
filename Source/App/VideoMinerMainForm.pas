@@ -188,6 +188,8 @@ type
     procedure BossExitClick(Sender: TObject);
     // マウス往復ジェスチャー成立時にボスが来たモードへ入る
     procedure BossGesture(Sender: TObject);
+    // ヘルプキーからヘルプ兼用画面を表示する
+    procedure ShowHelpOverlay;
     // 再生中または再生再開待ちか返す
     function PlaybackActiveOrPending: Boolean;
     // controller と UI 状態から現在再生位置を返す
@@ -334,6 +336,7 @@ begin
   FCommandController.OnSeekByMs := SeekByMs;
   FCommandController.OnSeekToFirstFrame := SeekToFirstFrame;
   FCommandController.OnSeekToLastFrame := SeekToLastFrame;
+  FCommandController.OnShowHelp := ShowHelpOverlay;
   FCommandController.OnSeekToMs := SeekToMs;
   FCommandController.OnStopPlayback := StopPlayback;
   FCommandController.OnToggleSafeArea := ToggleSafeArea;
@@ -1177,6 +1180,11 @@ begin
   FWindowModeController.EnterBossMode;
 end;
 
+procedure TVideoMinerMainForm.ShowHelpOverlay;
+begin
+  FWindowModeController.EnterBossMode;
+end;
+
 procedure TVideoMinerMainForm.BossExitClick(Sender: TObject);
 begin
   FWindowModeController.ExitBossMode;
@@ -1373,15 +1381,20 @@ begin
   if FWindowModeController = nil then
     Exit;
 
-  if (Key = VK_ESCAPE) and FWindowModeController.BossMode then
-  begin
-    FWindowModeController.ExitBossMode;
-    Key := 0;
-    Exit;
-  end;
-
   if FWindowModeController.BossMode then
   begin
+    if (Key = VK_ESCAPE) or (Key = VK_RETURN) then
+      FWindowModeController.ExitBossMode
+    else if (Key = VK_DOWN) or (Key = VK_NEXT) then
+    begin
+      if FVideoView <> nil then
+        FVideoView.ChangeBossHelpPage(1);
+    end
+    else if (Key = VK_UP) or (Key = VK_PRIOR) then
+    begin
+      if FVideoView <> nil then
+        FVideoView.ChangeBossHelpPage(-1);
+    end;
     Key := 0;
     Exit;
   end;

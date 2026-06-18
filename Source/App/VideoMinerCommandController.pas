@@ -36,6 +36,7 @@ type
     FOnSeekByMs                : TVideoMinerCommandDeltaProc;   // 相対時間シークの委譲先
     FOnSeekToFirstFrame        : TVideoMinerCommandProc;        // 先頭フレーム移動の委譲先
     FOnSeekToLastFrame         : TVideoMinerCommandProc;        // 最終フレーム移動の委譲先
+    FOnShowHelp                : TVideoMinerCommandProc;        // show help overlay delegate
     FOnSeekToMs                : TVideoMinerCommandSeekProc;    // 絶対位置シークの委譲先
     FOnStopPlayback            : TVideoMinerCommandProc;        // 再生停止の委譲先
     FOnToggleSafeArea          : TVideoMinerCommandProc;        // 90% セーフエリア確認枠切り替えの委譲先
@@ -82,6 +83,8 @@ type
     procedure SeekToFirstFrame;
     // 最終フレームへの移動をアプリ側へ委譲する
     procedure SeekToLastFrame;
+    // ヘルプ表示をアプリ側へ委譲する
+    procedure ShowHelp;
     // 次チャプターへのショートカット処理を実行する
     procedure ShortcutChapterNext;
     // 前チャプターへのショートカット処理を実行する
@@ -122,6 +125,7 @@ type
     property OnSeekByMs: TVideoMinerCommandDeltaProc read FOnSeekByMs write FOnSeekByMs;
     property OnSeekToFirstFrame: TVideoMinerCommandProc read FOnSeekToFirstFrame write FOnSeekToFirstFrame;
     property OnSeekToLastFrame: TVideoMinerCommandProc read FOnSeekToLastFrame write FOnSeekToLastFrame;
+    property OnShowHelp: TVideoMinerCommandProc read FOnShowHelp write FOnShowHelp;
     property OnSeekToMs: TVideoMinerCommandSeekProc read FOnSeekToMs write FOnSeekToMs;
     property OnStopPlayback: TVideoMinerCommandProc read FOnStopPlayback write FOnStopPlayback;
     property OnToggleSafeArea: TVideoMinerCommandProc read FOnToggleSafeArea write FOnToggleSafeArea;
@@ -174,6 +178,7 @@ begin
   Handlers.NavigateNext := ShortcutNavigateNext;
   Handlers.SeekToFirstFrame := SeekToFirstFrame;
   Handlers.SeekToLastFrame := SeekToLastFrame;
+  Handlers.ShowHelp := ShowHelp;
   Handlers.ToggleFullScreen := ToggleFullScreen;
   Handlers.ToggleSafeArea := ToggleSafeArea;
   Handlers.ToggleMute := ToggleMute;
@@ -291,6 +296,12 @@ procedure TVideoMinerCommandController.SeekToLastFrame;
 begin
   if Assigned(FOnSeekToLastFrame) then
     FOnSeekToLastFrame;
+end;
+
+procedure TVideoMinerCommandController.ShowHelp;
+begin
+  if Assigned(FOnShowHelp) then
+    FOnShowHelp;
 end;
 
 procedure TVideoMinerCommandController.ShortcutChapterNext;

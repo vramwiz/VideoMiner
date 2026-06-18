@@ -1,7 +1,7 @@
 ﻿unit VideoMinerBossOverlay;
 
-// ボスが来たモード中に動画を隠すための偽装画面描画を担当する
-// 実在するエディタ画面ではなく、仕事中に見える程度の静的な VSCode 風表示だけを描く。
+// ボスが来たモード中に動画を隠すための偽装ヘルプ画面描画を担当する。
+// VSCode 風の静的な画面に VideoMiner の操作方法を表示し、簡易ヘルプとしても使う。
 // マウスジェスチャー検出や再生停止などの状態制御は、このユニットへ持ち込まない。
 
 interface
@@ -9,21 +9,24 @@ interface
 uses
   System.Types, Vcl.Graphics;
 
-// 動画面全体へ偽装画面を描き、解除ボタンの矩形を返す
+// ボスが来たモード中に切り替えられるヘルプページ数を返す
+function VideoMinerBossHelpPageCount: Integer;
+
+// 動画面全体へ偽装ヘルプ画面を描き、解除ボタンの矩形を返す
 procedure DrawVideoMinerBossOverlay(Canvas: TCanvas; const Bounds: TRect;
-  out ExitButtonRect: TRect);
+  PageIndex: Integer; out ExitButtonRect: TRect);
 
 implementation
 
 uses
-  System.SysUtils, Winapi.Windows;
+  System.Math, System.SysUtils, Winapi.Windows;
 
 type
-  TBossCodePattern = record
+  TBossHelpPage = record
     TabName    : string;                 // 上部タブに表示するファイル名
-    HeaderText : string;                 // 右上に置くビルド/実行状態風テキスト
-    StartLine  : Integer;                // ダミーコードの開始行番号
-    Lines      : array[0..15] of string; // エディタ本文として描く固定行
+    HeaderText : string;                 // 右上に置く状態表示風テキスト
+    StartLine  : Integer;                // ヘルプ本文の開始行番号
+    Lines      : array[0..17] of string; // エディタ本文として描く操作説明
     StatusText : string;                 // 下側ステータスバーの左側テキスト
   end;
 
@@ -39,100 +42,113 @@ const
   COLOR_BUTTON        = $00413B34; // Return ボタン背景
   COLOR_BUTTON_BORDER = $00665D52; // Return ボタン枠線
 
-  PATTERNS: array[0..3] of TBossCodePattern = ( // 偽装表示で切り替える固定エディタ画面パターン
+  HELP_PAGES: array[0..3] of TBossHelpPage = ( // VSCode 風画面に表示するヘルプページ
     (
-      TabName: 'VideoMinerOverlay.pas';
-      HeaderText: 'Debug  Win64  VideoMiner';
-      StartLine: 118;
+      TabName: 'basic-shortcuts.md';
+      HeaderText: 'Help  Basic controls';
+      StartLine: 1;
       Lines: (
-        'procedure TVideoMinerOverlaySeekBar.PaintControl(Canvas: TCanvas);',
-        'var',
-        '  TrackRect: TRect;',
-        '  PositionRatio: Double;',
-        'begin',
-        '  if Bounds.IsEmpty then',
-        '    Exit;',
+        '# Basic controls',
         '',
-        '  TrackRect := CalculateTrackRect;',
-        '  DrawStatusControls(Canvas, TrackRect);',
-        '  DrawTimeline(Canvas, TrackRect);',
-        '  DrawButtons(Canvas);',
-        'end;',
+        '| Ctrl+O | Open a video file |',
+        '| Space | Play / stop |',
+        '| Left / Right | Previous / next video |',
+        '| PageUp / PageDown | Previous / next video |',
+        '| Ctrl+Left / Ctrl+Right | Previous / next chapter |',
+        '| Home / End | First / last frame area |',
+        '| Up / Down | Volume |',
+        '| M | Mute |',
+        '| F1 / F11 | Help screen / full screen |',
+        '| Esc | Exit full screen or boss mode |',
         '',
-        'procedure TVideoMinerOverlaySeekBar.SetProgress(PositionMs, MaxMs: Integer);',
-        'begin');
-      StatusText: 'main  Ln 128, Col 17  UTF-8  Delphi'
+        'Mouse:',
+        '- Click video: play / stop',
+        '- Double click: full screen',
+        '- Wheel: zoom',
+        '- Drag while zoomed: pan');
+      StatusText: 'help/basic  Ln 1, Col 1  Markdown  UTF-8'
     ),
     (
-      TabName: 'VideoMinerMainForm.pas';
-      HeaderText: 'Run  Debug  Win64';
-      StartLine: 642;
+      TabName: 'review-tools.md';
+      HeaderText: 'Help  Review tools';
+      StartLine: 21;
       Lines: (
-        'procedure TVideoMinerMainForm.UpdatePlaybackProgress(PositionMs: Integer);',
-        'begin',
-        '  if FUpdatingSeek then',
-        '    Exit;',
+        '# Review and inspection',
         '',
-        '  FSeekPositionMs := Max(0, Min(FSeekMaxMs, PositionMs));',
-        '  FVideoView.SetSeekProgress(FSeekPositionMs, FSeekMaxMs);',
-        '  UpdateInfoLabel;',
-        'end;',
+        '| Ctrl+C | Copy current paused frame to clipboard |',
+        '| Ctrl+G | Toggle 90% safe area guide |',
+        '| Check | Toggle lightweight video/audio checks |',
+        '| + | Add a manual chapter at current position |',
+        '| - | Delete a nearby manual chapter |',
         '',
-        'procedure TVideoMinerMainForm.SeekByMs(DeltaMs: Integer);',
-        'var',
-        '  TargetMs: Integer;',
-        'begin',
-        '  TargetMs := CurrentPlaybackPositionMs + DeltaMs;',
-        '  SeekToMs(TargetMs);');
-      StatusText: 'feature/boss-mode  Ln 651, Col 23  CRLF  Delphi'
-    ),
-    (
-      TabName: 'VideoMinerSettings.pas';
-      HeaderText: 'Settings  VideoMiner.ini';
-      StartLine: 34;
-      Lines: (
-        'function SettingsFileName: string;',
-        'var',
-        '  Folder: string;',
-        'begin',
-        '  Folder := IncludeTrailingPathDelimiter(GetAppDataPath) + ''VideoMiner'';',
-        '  ForceDirectories(Folder);',
-        '  Result := IncludeTrailingPathDelimiter(Folder) + ''VideoMiner.ini'';',
-        'end;',
+        'Detected check candidates:',
+        '- Black frame',
+        '- Silence',
+        '- Left / right channel issue',
+        '- Single-frame difference',
+        '- Sudden volume change',
+        '- Audio clipping',
         '',
-        'procedure SaveEndAction(Value: TVideoMinerEndAction);',
-        'begin',
-        '  WritePrivateProfileString(''Playback'', ''EndAction'',',
-        '    PChar(EndActionToString(Value)), PChar(SettingsFileName));',
-        'end;',
-        '',
-        'function LoadEndAction: TVideoMinerEndAction;');
-      StatusText: 'settings  Ln 42, Col 11  UTF-8  Delphi'
-    ),
-    (
-      TabName: 'note.md';
-      HeaderText: 'Preview  Markdown';
-      StartLine: 201;
-      Lines: (
-        '# VideoMiner development notes',
-        '',
-        '- Keep the main form thin.',
-        '- Route overlay actions through the video view.',
-        '- Avoid decoder changes unless sync logs point there.',
-        '- Prefer AppData for user settings.',
-        '',
-        '## Next checks',
-        '',
-        '- Seek display should update immediately.',
-        '- Loop restart should avoid visible dead time.',
-        '- Boss mode must not resume playback by accident.',
-        '',
-        'Implementation note:',
-        'Use small units when behavior can stand alone.',
+        'Manual chapters are restored per video file.',
         '');
-      StatusText: 'notes  Ln 214, Col 5  Markdown  UTF-8'
+      StatusText: 'help/review  Ln 21, Col 1  Markdown  UTF-8'
+    ),
+    (
+      TabName: 'thumbnail-browser.md';
+      HeaderText: 'Help  Thumbnail browser';
+      StartLine: 41;
+      Lines: (
+        '# Thumbnail browser',
+        '',
+        '| Tab | Show / hide thumbnail browser |',
+        '| Esc | Close thumbnail browser |',
+        '| Arrow keys | Move selected tile |',
+        '| Enter | Open selected video |',
+        '| Right click | Close thumbnail browser |',
+        '| Mouse wheel | Scroll list |',
+        '| + / - buttons | Resize thumbnails |',
+        '| Middle button + wheel | Resize thumbnails |',
+        '',
+        'Folder history:',
+        '- First row shows recent folders',
+        '- Click a folder to browse its videos',
+        '- Del removes selected history item only',
+        '- F5 reloads history and selected folder',
+        '',
+        'Hover a tile to preview it without sound.');
+      StatusText: 'help/thumbnails  Ln 41, Col 1  Markdown  UTF-8'
+    ),
+    (
+      TabName: 'playback-notes.md';
+      HeaderText: 'Help  Playback notes';
+      StartLine: 61;
+      Lines: (
+        '# Playback workflow',
+        '',
+        '- Files in the same folder are navigated by creation time.',
+        '- End action can be Stop, Loop, or Next.',
+        '- Loop repeats the current chapter segment.',
+        '- External file updates are detected and reloaded.',
+        '- Alpha MOV is previewed over a checkerboard.',
+        '- PNG frame copy preserves alpha when the source has alpha.',
+        '',
+        'Boss/help screen:',
+        '- Fast mouse return gesture opens this screen.',
+        '- Up / Down changes help page.',
+        '- PageUp / PageDown also changes help page.',
+        '- Return button or Esc goes back.',
+        '',
+        'This screen hides the video while keeping useful help visible.',
+        '',
+        '');
+      StatusText: 'help/playback  Ln 61, Col 1  Markdown  UTF-8'
     )
   );
+
+function VideoMinerBossHelpPageCount: Integer;
+begin
+  Result := Length(HELP_PAGES);
+end;
 
 // 指定矩形を単色で塗る
 procedure Fill(Canvas: TCanvas; const Rect: TRect; Color: TColor);
@@ -194,59 +210,66 @@ begin
     LineRect.Bottom), Value, COLOR_TEXT, 9);
 end;
 
-// 発動タイミングごとに固定パターンの見え方を少し変える
-function PatternIndex: Integer;
-begin
-  Result := Integer((GetTickCount64 div 577) mod UInt64(Length(PATTERNS)));
-end;
-
 // 左側のファイルツリー風表示を描く
-procedure DrawExplorer(Canvas: TCanvas; const SidebarRect: TRect);
+procedure DrawExplorer(Canvas: TCanvas; const SidebarRect: TRect;
+  PageIndex: Integer);
+const
+  FILE_NAMES: array[0..3] of string = (
+    'basic-shortcuts.md',
+    'review-tools.md',
+    'thumbnail-browser.md',
+    'playback-notes.md'
+  );
 var
+  I: Integer;
   Row: TRect;
   Y: Integer;
 begin
   Text(Canvas, SidebarRect.Left + 14, SidebarRect.Top + 14, 'EXPLORER',
     COLOR_DIM_TEXT, 8, True);
-  Text(Canvas, SidebarRect.Left + 14, SidebarRect.Top + 42, 'VideoMiner',
+  Text(Canvas, SidebarRect.Left + 14, SidebarRect.Top + 42, 'VideoMiner Help',
     COLOR_TEXT, 9, True);
 
   Y := SidebarRect.Top + 70;
   Row := Rect(SidebarRect.Left + 16, Y, SidebarRect.Right - 10, Y + 18);
-  ClipText(Canvas, Row, 'Source', COLOR_TEXT, 9);
-  Inc(Y, 20);
-  Row := Rect(SidebarRect.Left + 30, Y, SidebarRect.Right - 10, Y + 18);
-  ClipText(Canvas, Row, 'App', COLOR_TEXT, 9);
-  Inc(Y, 20);
-  Row := Rect(SidebarRect.Left + 44, Y, SidebarRect.Right - 10, Y + 18);
-  ClipText(Canvas, Row, 'VideoMinerMainForm.pas', COLOR_DIM_TEXT, 8);
-  Inc(Y, 19);
-  Row := Rect(SidebarRect.Left + 44, Y, SidebarRect.Right - 10, Y + 18);
-  Fill(Canvas, Rect(SidebarRect.Left, Y - 1, SidebarRect.Right, Y + 19),
-    COLOR_TAB);
-  ClipText(Canvas, Row, 'VideoMinerOverlay.pas', COLOR_TEXT, 8);
-  Inc(Y, 19);
-  Row := Rect(SidebarRect.Left + 44, Y, SidebarRect.Right - 10, Y + 18);
-  ClipText(Canvas, Row, 'VideoMinerSettings.pas', COLOR_DIM_TEXT, 8);
-  Inc(Y, 28);
-  Row := Rect(SidebarRect.Left + 30, Y, SidebarRect.Right - 10, Y + 18);
-  ClipText(Canvas, Row, 'Decode', COLOR_DIM_TEXT, 9);
-  Inc(Y, 20);
-  Row := Rect(SidebarRect.Left + 44, Y, SidebarRect.Right - 10, Y + 18);
-  ClipText(Canvas, Row, 'FFmpegDecoder.pas', COLOR_DIM_TEXT, 8);
-  Inc(Y, 28);
+  ClipText(Canvas, Row, 'docs', COLOR_TEXT, 9);
+  Inc(Y, 22);
+
+  for I := Low(FILE_NAMES) to High(FILE_NAMES) do
+  begin
+    Row := Rect(SidebarRect.Left + 34, Y, SidebarRect.Right - 10, Y + 18);
+    if I = PageIndex then
+    begin
+      Fill(Canvas, Rect(SidebarRect.Left, Y - 1, SidebarRect.Right, Y + 19),
+        COLOR_TAB);
+      ClipText(Canvas, Row, FILE_NAMES[I], COLOR_TEXT, 8);
+    end
+    else
+      ClipText(Canvas, Row, FILE_NAMES[I], COLOR_DIM_TEXT, 8);
+    Inc(Y, 20);
+  end;
+
+  Inc(Y, 18);
   Row := Rect(SidebarRect.Left + 16, Y, SidebarRect.Right - 10, Y + 18);
-  ClipText(Canvas, Row, 'note.md', COLOR_DIM_TEXT, 9);
+  ClipText(Canvas, Row, 'Source', COLOR_DIM_TEXT, 9);
+  Inc(Y, 20);
+  Row := Rect(SidebarRect.Left + 34, Y, SidebarRect.Right - 10, Y + 18);
+  ClipText(Canvas, Row, 'VideoMinerMainForm.pas', COLOR_DIM_TEXT, 8);
+  Inc(Y, 20);
+  Row := Rect(SidebarRect.Left + 34, Y, SidebarRect.Right - 10, Y + 18);
+  ClipText(Canvas, Row, 'VideoMinerBossOverlay.pas', COLOR_DIM_TEXT, 8);
 end;
 
 procedure DrawVideoMinerBossOverlay(Canvas: TCanvas; const Bounds: TRect;
-  out ExitButtonRect: TRect);
+  PageIndex: Integer; out ExitButtonRect: TRect);
 var
   ActivityRect: TRect;
   CodeLineRect: TRect;
   EditorRect: TRect;
   I: Integer;
-  Pattern: TBossCodePattern;
+  Page: TBossHelpPage;
+  PageText: string;
+  SafePageIndex: Integer;
   SidebarWidth: Integer;
   SidebarRect: TRect;
   StatusRect: TRect;
@@ -257,21 +280,22 @@ begin
   if Bounds.IsEmpty then
     Exit;
 
-  Pattern := PATTERNS[PatternIndex];
+  SafePageIndex := EnsureRange(PageIndex, Low(HELP_PAGES), High(HELP_PAGES));
+  Page := HELP_PAGES[SafePageIndex];
   Fill(Canvas, Bounds, COLOR_EDITOR);
 
   ActivityRect := Rect(Bounds.Left, Bounds.Top, Bounds.Left + 48,
     Bounds.Bottom);
-  SidebarWidth := 220;
+  SidebarWidth := 240;
   if Bounds.Width < 900 then
-    SidebarWidth := 190;
+    SidebarWidth := 200;
   SidebarRect := Rect(ActivityRect.Right, Bounds.Top,
     ActivityRect.Right + SidebarWidth, Bounds.Bottom);
   StatusRect := Rect(Bounds.Left, Bounds.Bottom - 28, Bounds.Right,
     Bounds.Bottom);
   TopBarRect := Rect(SidebarRect.Right, Bounds.Top, Bounds.Right,
     Bounds.Top + 34);
-  TabRect := Rect(SidebarRect.Right, TopBarRect.Bottom, SidebarRect.Right + 230,
+  TabRect := Rect(SidebarRect.Right, TopBarRect.Bottom, SidebarRect.Right + 260,
     TopBarRect.Bottom + 34);
   EditorRect := Rect(SidebarRect.Right, TabRect.Bottom, Bounds.Right,
     StatusRect.Top);
@@ -289,24 +313,24 @@ begin
     COLOR_TEXT, 13, True);
   Text(Canvas, ActivityRect.Left + 17, ActivityRect.Top + 56, 'S',
     COLOR_DIM_TEXT, 13, True);
-  Text(Canvas, ActivityRect.Left + 17, ActivityRect.Top + 96, 'G',
+  Text(Canvas, ActivityRect.Left + 17, ActivityRect.Top + 96, '?',
     COLOR_DIM_TEXT, 13, True);
 
-  DrawExplorer(Canvas, SidebarRect);
+  DrawExplorer(Canvas, SidebarRect, SafePageIndex);
 
   ClipText(Canvas, Rect(TabRect.Left + 14, TabRect.Top, TabRect.Right - 10,
-    TabRect.Bottom), Pattern.TabName, COLOR_TEXT, 10);
-  ClipText(Canvas, Rect(TopBarRect.Right - 260, TopBarRect.Top,
-    TopBarRect.Right - 14, TopBarRect.Bottom), Pattern.HeaderText,
+    TabRect.Bottom), Page.TabName, COLOR_TEXT, 10);
+  ClipText(Canvas, Rect(TopBarRect.Right - 280, TopBarRect.Top,
+    TopBarRect.Right - 14, TopBarRect.Bottom), Page.HeaderText,
     COLOR_DIM_TEXT, 10);
 
   CodeLineRect := Rect(EditorRect.Left + 24, EditorRect.Top + 18,
     EditorRect.Right - 22, EditorRect.Top + 36);
-  for I := Low(Pattern.Lines) to High(Pattern.Lines) do
+  for I := Low(Page.Lines) to High(Page.Lines) do
   begin
     if CodeLineRect.Bottom > EditorRect.Bottom - 12 then
       Break;
-    DrawCodeLine(Canvas, Pattern.StartLine + I, CodeLineRect, Pattern.Lines[I]);
+    DrawCodeLine(Canvas, Page.StartLine + I, CodeLineRect, Page.Lines[I]);
     OffsetRect(CodeLineRect, 0, 19);
   end;
 
@@ -314,8 +338,8 @@ begin
   Canvas.Pen.Color := $00282724;
   for I := 0 to 7 do
   begin
-    Canvas.MoveTo(EditorRect.Left, EditorRect.Top + 350 + I * 26);
-    Canvas.LineTo(EditorRect.Right, EditorRect.Top + 350 + I * 26);
+    Canvas.MoveTo(EditorRect.Left, EditorRect.Top + 390 + I * 26);
+    Canvas.LineTo(EditorRect.Right, EditorRect.Top + 390 + I * 26);
   end;
 
   ExitButtonRect := Rect(Bounds.Right - 102, StatusRect.Top + 4,
@@ -330,8 +354,10 @@ begin
     ExitButtonRect.Right - 12, ExitButtonRect.Bottom), 'Return',
     COLOR_TEXT, 9);
 
+  PageText := Format('  Page %d/%d  -  Up/Down or PageUp/PageDown',
+    [SafePageIndex + 1, Length(HELP_PAGES)]);
   ClipText(Canvas, Rect(StatusRect.Left + 10, StatusRect.Top,
-    ExitButtonRect.Left - 12, StatusRect.Bottom), Pattern.StatusText,
+    ExitButtonRect.Left - 12, StatusRect.Bottom), Page.StatusText + PageText,
     clWhite, 9);
 end;
 

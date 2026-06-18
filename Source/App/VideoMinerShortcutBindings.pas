@@ -19,6 +19,7 @@ type
     CyclePlaybackRate: TShortcutActionProc; // 再生速度を切り替える
     SeekToFirstFrame : TShortcutActionProc; // 先頭フレームへ移動する
     SeekToLastFrame  : TShortcutActionProc; // 末尾フレームへ移動する
+    ShowHelp         : TShortcutActionProc; // ヘルプ表示を開く
     ToggleFullScreen : TShortcutActionProc; // 全画面表示を切り替える
     ToggleSafeArea   : TShortcutActionProc; // 90% セーフエリア確認枠を切り替える
     ToggleMute       : TShortcutActionProc; // ミュート状態を切り替える
@@ -47,6 +48,7 @@ begin
   Shortcuts.Add(VK_LEFT   , [ssCtrl], Handlers.ChapterPrevious);
   Shortcuts.Add(VK_RIGHT  , [ssCtrl], Handlers.ChapterNext);
   Shortcuts.Add(VK_F11    , []      , Handlers.ToggleFullScreen);
+  Shortcuts.Add(VK_F1     , []      , Handlers.ShowHelp);
   Shortcuts.Add(VK_SPACE  , []      , Handlers.TogglePlayPause);
   Shortcuts.Add(VK_LEFT   , []      , Handlers.NavigatePrevious);
   Shortcuts.Add(VK_RIGHT  , []      , Handlers.NavigateNext);

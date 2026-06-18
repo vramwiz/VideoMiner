@@ -100,6 +100,8 @@ type
     destructor Destroy; override;
     // 表示フレームと scratch frame を空にする
     procedure Clear;
+    // ボスが来たモード中のヘルプページを前後へ切り替える
+    procedure ChangeBossHelpPage(Delta: Integer);
     // 指定位置のフレームをデコードし、必要なら表示へ反映する
     function ShowFrameAt(Decoder: TFFmpegDecoder; PositionMs: Integer;
       out ErrorMessage: string; PresentFrame: Boolean = True;
@@ -263,6 +265,11 @@ begin
   inherited Destroy;
 end;
 
+procedure TVideoMinerVideoView.ChangeBossHelpPage(Delta: Integer);
+begin
+  if FSurface <> nil then
+    FSurface.ChangeBossHelpPage(Delta);
+end;
 procedure TVideoMinerVideoView.Clear;
 begin
   if FDecodeScratch <> nil then
