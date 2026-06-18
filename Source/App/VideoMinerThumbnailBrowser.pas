@@ -100,7 +100,7 @@ type
     // hover プレビューを停止する
     procedure StopPreview;
     // 指定履歴フォルダ内の動画一覧をサムネイル表示する
-    procedure ShowFolderHistory(Index: Integer);
+    procedure ShowFolderHistory(Index: Integer; PromoteHistory: Boolean);
     // タイマーでサムネイルを 1 枚ずつ生成する
     procedure ThumbnailTimer(Sender: TObject);
     // タイマーで hover プレビューを 1 フレーム進める
@@ -958,18 +958,64 @@ var
   FolderPath: string;
   I: Integer;
   IsCurrentFolder: Boolean;
+  MainIndex: Integer;
+  MiddleIndex: Integer;
   PreviewRect: TRect;
   RepresentativeFile: string;
   RepresentativeList: TVideoMinerMediaList;
-  RepIndex: Integer;
+  RepCount: Integer;
+  RepIndexes: array[0..FOLDER_HISTORY_THUMB_COUNT - 1] of Integer;
+  SmallCount: Integer;
   SmallGap: Integer;
   SmallHeight: Integer;
   SmallStartLeft: Integer;
   SmallTop: Integer;
   SmallWidth: Integer;
-  StepIndex: Integer;
   TextRect: TRect;
   ThumbRect: TRect;
+
+  function StableFolderHash(const Value: string): Cardinal;
+  var
+    C: Char;
+  begin
+    Result := $811C9DC5;
+    for C in LowerCase(Value) do
+      Result := (Result xor Cardinal(Ord(C))) * Cardinal($01000193);
+  end;
+
+  function StableMiddleIndex: Integer;
+  var
+    Span: Integer;
+  begin
+    if RepresentativeList.Count <= 1 then
+      Result := 0
+    else if RepresentativeList.Count <= 3 then
+      Result := RepresentativeList.Count div 2
+    else
+    begin
+      Span := RepresentativeList.Count - 2;
+      Result := 1 + Integer(StableFolderHash(FolderPath) mod Cardinal(Span));
+    end;
+  end;
+
+  procedure AddRepresentativeIndex(AIndex: Integer);
+  var
+    J: Integer;
+  begin
+    if (RepresentativeList = nil) or (RepresentativeList.Count <= 0) or
+       (RepCount >= FOLDER_HISTORY_THUMB_COUNT) then
+      Exit;
+
+    AIndex := Max(0, Min(RepresentativeList.Count - 1, AIndex));
+    for J := 0 to RepCount - 1 do
+    begin
+      if RepIndexes[J] = AIndex then
+        Exit;
+    end;
+
+    RepIndexes[RepCount] := AIndex;
+    Inc(RepCount);
+  end;
 begin
   if (Index < 0) or (Index >= Length(FFolderHistory)) then
     Exit;
@@ -1025,30 +1071,33 @@ begin
 
   if RepresentativeList <> nil then
   try
+    RepCount := 0;
+    MainIndex := StableMiddleIndex;
+    MiddleIndex := RepresentativeList.Count div 2;
+    AddRepresentativeIndex(MainIndex);
+    AddRepresentativeIndex(0);
+    AddRepresentativeIndex(MiddleIndex);
+    AddRepresentativeIndex(RepresentativeList.Count - 1);
+    for I := 0 to RepresentativeList.Count - 1 do
+      AddRepresentativeIndex((MainIndex + I) mod RepresentativeList.Count);
+
     SmallGap := 4;
     SmallWidth := Max(24, PreviewRect.Width div 4);
     SmallHeight := Max(18, PreviewRect.Height div 3);
+    SmallCount := Max(0, RepCount - 1);
     SmallStartLeft := PreviewRect.Left + (PreviewRect.Width -
-      (SmallWidth * 3 + SmallGap * 2)) div 2;
+      (SmallWidth * SmallCount + SmallGap * Max(0, SmallCount - 1))) div 2;
     SmallTop := PreviewRect.Bottom - SmallHeight - SmallGap;
-    for I := 0 to FOLDER_HISTORY_THUMB_COUNT - 1 do
+    for I := 0 to RepCount - 1 do
     begin
-      if RepresentativeList.Count <= 1 then
-        RepIndex := 0
-      else
-      begin
-        StepIndex := Round(I * (RepresentativeList.Count - 1) /
-          Max(1, FOLDER_HISTORY_THUMB_COUNT - 1));
-        RepIndex := Max(0, Min(RepresentativeList.Count - 1, StepIndex));
-      end;
       if I = 0 then
         ThumbRect := PreviewRect
       else
         ThumbRect := Rect(SmallStartLeft + (I - 1) * (SmallWidth + SmallGap),
           SmallTop, SmallStartLeft + (I - 1) * (SmallWidth + SmallGap) +
           SmallWidth, SmallTop + SmallHeight);
-      DrawFolderHistoryThumbnail(Canvas, RepresentativeList.FileAt(RepIndex),
-        ThumbRect, IsCurrentFolder);
+      DrawFolderHistoryThumbnail(Canvas,
+        RepresentativeList.FileAt(RepIndexes[I]), ThumbRect, IsCurrentFolder);
     end;
   finally
     if (RepresentativeList <> nil) and (RepresentativeList <> FMediaList) then
@@ -1386,7 +1435,7 @@ begin
   if Index >= 0 then
   begin
     FFolderHistorySelectedIndex := Index;
-    ShowFolderHistory(Index);
+    ShowFolderHistory(Index, True);
     Exit;
   end;
 
@@ -1535,7 +1584,7 @@ begin
       FFolderHistory[FFolderHistorySelectedIndex]);
     if FileName <> '' then
     begin
-      ShowFolderHistory(FFolderHistorySelectedIndex);
+      ShowFolderHistory(FFolderHistorySelectedIndex, False);
       Exit;
     end;
 
@@ -1670,7 +1719,8 @@ begin
   Invalidate;
 end;
 
-procedure TVideoMinerThumbnailBrowser.ShowFolderHistory(Index: Integer);
+procedure TVideoMinerThumbnailBrowser.ShowFolderHistory(Index: Integer;
+  PromoteHistory: Boolean);
 var
   FileName: string;
   Folder: string;
@@ -1679,9 +1729,28 @@ begin
     Exit;
 
   Folder := FFolderHistory[Index];
+  if PromoteHistory then
+  begin
+    TouchFolderHistory(Folder);
+    FFolderHistory := LoadFolderHistory;
+    FFolderHistorySelectedIndex := 0;
+    FFolderHistoryHoverIndex := -1;
+  end;
+
   FileName := TVideoMinerMediaList.FirstMediaFileInFolder(Folder);
   if FileName = '' then
+  begin
+    StopPreview;
+    ClearThumbnails;
+    FreeAndNil(FOwnedMediaList);
+    FMediaList := nil;
+    FCurrentIndex := -1;
+    FSelectedIndex := -1;
+    ClampScrollOffset;
+    LayoutTiles;
+    Invalidate;
     Exit;
+  end;
 
   StopPreview;
   ClearThumbnails;

@@ -97,7 +97,7 @@ const
   SECTION_FOLDER_HISTORY = 'FolderHistory';      // フォルダ閲覧履歴の INI セクション
   KEY_FOLDER_COUNT       = 'Count';              // フォルダ閲覧履歴件数の INI キー
   KEY_FOLDER_PREFIX      = 'Folder';             // フォルダ閲覧履歴キーの接頭辞
-  FOLDER_HISTORY_MAX     = 12;                   // 保存するフォルダ閲覧履歴の最大件数
+  FOLDER_HISTORY_MAX     = 16;                   // 保存するフォルダ閲覧履歴の最大件数
   SECTION_PLAYBACK       = 'Playback';           // 再生設定の INI セクション
   KEY_END_ACTION         = 'EndAction';          // 終端到達時動作の INI キー
   SECTION_AUDIO          = 'Audio';              // 音声設定の INI セクション
