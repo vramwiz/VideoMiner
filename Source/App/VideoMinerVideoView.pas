@@ -17,6 +17,8 @@ type
     FSurface       : TVideoMinerVideoSurface; // 実際の動画表示と overlay 描画を持つサーフェス
     // フォーム側で親子関係やフォーカス対象として扱うサーフェスを返す
     function GetSurfaceControl: TWinControl;
+    // 現在表示中の動画フレーム Bitmap を返す
+    function GetCurrentFrameBitmap: TBitmap;
     // Bitmap を BGRX32 デコード先として使える状態にする
     function PrepareBitmapFrameBuffer(Bitmap: TBitmap; Width, Height: Integer;
       out Buffer: Pointer; out BufferStride: Integer): Boolean;
@@ -153,6 +155,7 @@ type
     property PlaybackRateText: string write SetPlaybackRateText;
     property SourceHasAlpha: Boolean write SetSourceHasAlpha;
     property SeekWheelFrameStepMs: Integer write SetSeekWheelFrameStepMs;
+    property CurrentFrameBitmap: TBitmap read GetCurrentFrameBitmap;
     property SurfaceControl: TWinControl read GetSurfaceControl;
     property Muted: Boolean write SetMuted;
     property VolumePercent: Integer write SetVolumePercent;
@@ -163,6 +166,13 @@ implementation
 function TVideoMinerVideoView.GetSurfaceControl: TWinControl;
 begin
   Result := FSurface;
+end;
+
+function TVideoMinerVideoView.GetCurrentFrameBitmap: TBitmap;
+begin
+  Result := nil;
+  if FSurface <> nil then
+    Result := FSurface.Bitmap;
 end;
 
 function TVideoMinerVideoView.CurrentFrameCornersMostlyDark: Boolean;

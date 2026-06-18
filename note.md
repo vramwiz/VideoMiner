@@ -1380,3 +1380,20 @@ VideoMiner のチェック機能は、以下を主目的にする。
 - `README.md` の主な特徴、基本操作、開発状況、設定ファイル説明へフォルダ閲覧履歴の説明を追加した。
 - 「プレイリスト」ではなく「フォルダ閲覧履歴」として説明を揃えた。
 - `README.md` / `note.md` は UTF-8 BOM 付き、改行 CRLF で保存する。
+
+## 2026-06-18 一時停止中 Ctrl+C フレームコピー
+- 一時停止中に `Ctrl+C` で現在表示中フレームをクリップボードへコピーする機能を追加した。
+- 画面キャプチャではなく、`TVideoMinerVideoSurface` が保持するデコード済み動画フレーム `Bitmap` を使う。
+- コピー解像度は表示倍率やズーム状態ではなく、動画フレームそのものの解像度にする。
+- PNG は `RegisterClipboardFormat('PNG')` のクリップボード形式へ保存する。
+- PNG 非対応アプリ向けの fallback として `CF_DIB` / `CF_BITMAP` も同時に入れる。
+- `FVideoInfo.HasAlpha` が True の場合は BGRA の alpha を PNG の alpha channel へ保持する。
+- `FVideoInfo.HasAlpha` が False の場合は alpha を全ピクセル 255 に固定し、通常 MP4 が透明 PNG にならないようにした。
+- `ClipboardWatcher` の監視処理は使わず、PNG/DIB/BITMAP をクリップボードへ入れる最小処理を `VideoMinerFrameClipboard.pas` へ内包した。
+- 参照用に復活していた `Source\Lib\ClipboardWatcher` は、内包後に削除した。
+- `BitmapEx.pas` の alpha 付き PNG 書き出し方針を参考にしつつ、クリップボード用には専用の stream 生成処理を持たせた。
+- 作業前に `Add clipboard helper references` コミットを作り、復帰点を残した。
+- `Debug Win64` ビルド成功。
+- 2x2 の検証用 Bitmap でクリップボードへ PNG を入れて読み戻し、alpha 保持時は `0,128`、通常 PNG 固定時は `255,255` になることを確認した。
+- 実ファイルでも、通常 MP4 は不透明 PNG として、透明 MOV は透明 PNG としてクリップボードへ正しく入ることを確認した。
+- 透明 MOV の貼り付け確認では、模様画像の上へ作業員動画の透明 PNG を重ね、背景が透けることを確認した。

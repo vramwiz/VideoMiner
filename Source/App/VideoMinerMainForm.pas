@@ -13,7 +13,7 @@ uses
   FFmpegDecoderTypes, FolderWatch, ResizeEdges, ShortcutAction,
   VideoMinerAudioPlayback,
   VideoMinerChapterManager, VideoMinerCommandController, VideoMinerMediaList, VideoMinerDebugLog,
-  VideoMinerFrameCheck, VideoMinerMediaOpen, VideoMinerSettings,
+  VideoMinerFrameCheck, VideoMinerFrameClipboard, VideoMinerMediaOpen, VideoMinerSettings,
   VideoMinerThumbnailBrowser,
   VideoMinerPlaybackController, VideoMinerPlaybackTiming,
   VideoMinerVideoView, VideoMinerWindowChrome, VideoMinerWindowModeController;
@@ -121,6 +121,8 @@ type
     procedure DeleteChapterOverlayClick(Sender: TObject);
     // 動画終端時の動作を順に切り替える
     procedure CycleEndAction;
+    // 現在フレームをクリップボードへコピーする
+    procedure CopyCurrentFrameToClipboard;
     // 再生速度を順に切り替える
     procedure CyclePlaybackRate;
     // overlay の終端動作ボタンから切り替えを実行する
@@ -319,6 +321,7 @@ begin
   FCommandController := TVideoMinerCommandController.Create(FAudioPlayback,
     FVideoView);
   FCommandController.OnChapterNavigate := NavigateChapterBy;
+  FCommandController.OnCopyCurrentFrame := CopyCurrentFrameToClipboard;
   FCommandController.OnNavigate := NavigateBy;
   FCommandController.OnOpenDialog := OpenFromDialog;
   FCommandController.OnPlaybackActiveOrPending := PlaybackActiveOrPending;
@@ -592,6 +595,32 @@ end;
 procedure TVideoMinerMainForm.MinimizeButtonClick(Sender: TObject);
 begin
   WindowState := wsMinimized;
+end;
+
+procedure TVideoMinerMainForm.CopyCurrentFrameToClipboard;
+var
+  ErrorMessage: string;
+  FrameBitmap: TBitmap;
+begin
+  if PlaybackActiveOrPending then
+  begin
+    SetStatusCaption('Pause video before copying frame.');
+    Exit;
+  end;
+
+  FrameBitmap := nil;
+  if FVideoView <> nil then
+    FrameBitmap := FVideoView.CurrentFrameBitmap;
+  if (FrameBitmap = nil) or (FrameBitmap.Width <= 0) or (FrameBitmap.Height <= 0) then
+  begin
+    SetStatusCaption('No frame to copy.');
+    Exit;
+  end;
+
+  if CopyVideoFrameBitmapToClipboard(FrameBitmap, FVideoInfo.HasAlpha, ErrorMessage) then
+    SetStatusCaption('Copied current frame to clipboard.')
+  else
+    SetStatusCaption('Failed to copy frame: ' + ErrorMessage);
 end;
 
 procedure TVideoMinerMainForm.CycleEndAction;

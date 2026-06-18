@@ -12,6 +12,7 @@ type
   TVideoMinerShortcutHandlers = record
     ChapterPrevious  : TShortcutActionProc; // 前のチャプターへ移動する
     ChapterNext      : TShortcutActionProc; // 次のチャプターへ移動する
+    CopyCurrentFrame : TShortcutActionProc; // 現在フレームをクリップボードへコピーする
     OpenDialog       : TShortcutActionProc; // ファイルを開くダイアログを表示する
     NavigatePrevious : TShortcutActionProc; // フォルダ内の前の動画へ移動する
     NavigateNext     : TShortcutActionProc; // フォルダ内の次の動画へ移動する
@@ -40,6 +41,7 @@ begin
 
   Shortcuts.Clear;
   Shortcuts.Add(Ord('O')  , [ssCtrl], Handlers.OpenDialog);
+  Shortcuts.Add(Ord('C')  , [ssCtrl], Handlers.CopyCurrentFrame);
   Shortcuts.Add(VK_LEFT   , [ssCtrl], Handlers.ChapterPrevious);
   Shortcuts.Add(VK_RIGHT  , [ssCtrl], Handlers.ChapterNext);
   Shortcuts.Add(VK_F11    , []      , Handlers.ToggleFullScreen);

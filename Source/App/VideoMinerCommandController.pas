@@ -26,6 +26,7 @@ type
     FAudioPlayback             : TVideoMinerAudioPlayback;      // 音量とミュートを操作する再生ラッパ
     FVideoView                 : TVideoMinerVideoView;          // overlay イベントと表示状態を中継する動画ビュー
     FOnChapterNavigate         : TVideoMinerCommandDeltaProc;   // 前後チャプター移動の委譲先
+    FOnCopyCurrentFrame        : TVideoMinerCommandProc;        // 現在フレームコピーの委譲先
     FOnNavigate                : TVideoMinerCommandDeltaProc;   // 前後ファイル移動の委譲先
     FOnOpenDialog              : TVideoMinerCommandProc;        // ファイル選択ダイアログ表示の委譲先
     FOnPlaybackActiveOrPending : TVideoMinerCommandBoolFunc;    // 再生中または再開待ちかを問い合わせる委譲先
@@ -50,6 +51,8 @@ type
     procedure RegisterShortcuts(Shortcuts: TShortcutAction);
     // 現在音量を指定パーセントぶん増減し、ミュートを解除する
     procedure ChangeVolumeBy(DeltaPercent: Integer);
+    // 現在フレームコピーをアプリ側へ委譲する
+    procedure CopyCurrentFrame;
     // 再生速度の段階切り替えをアプリ側へ委譲する
     procedure CyclePlaybackRate;
     // overlay の先頭フレームボタンから先頭移動を実行する
@@ -103,6 +106,7 @@ type
     // 音量を 5% 上げる
     procedure VolumeUp;
     property OnChapterNavigate: TVideoMinerCommandDeltaProc read FOnChapterNavigate write FOnChapterNavigate;
+    property OnCopyCurrentFrame: TVideoMinerCommandProc read FOnCopyCurrentFrame write FOnCopyCurrentFrame;
     property OnNavigate: TVideoMinerCommandDeltaProc read FOnNavigate write FOnNavigate;
     property OnOpenDialog: TVideoMinerCommandProc read FOnOpenDialog write FOnOpenDialog;
     property OnPlaybackActiveOrPending: TVideoMinerCommandBoolFunc
@@ -160,6 +164,7 @@ var
 begin
   Handlers.ChapterPrevious := ShortcutChapterPrevious;
   Handlers.ChapterNext := ShortcutChapterNext;
+  Handlers.CopyCurrentFrame := CopyCurrentFrame;
   Handlers.OpenDialog := OpenDialog;
   Handlers.NavigatePrevious := ShortcutNavigatePrevious;
   Handlers.NavigateNext := ShortcutNavigateNext;
@@ -197,6 +202,12 @@ begin
   SyncVolumeToView;
   if Assigned(FOnSaveAudioSettings) then
     FOnSaveAudioSettings;
+end;
+
+procedure TVideoMinerCommandController.CopyCurrentFrame;
+begin
+  if Assigned(FOnCopyCurrentFrame) then
+    FOnCopyCurrentFrame;
 end;
 
 procedure TVideoMinerCommandController.CyclePlaybackRate;

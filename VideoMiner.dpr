@@ -9,6 +9,7 @@ uses
   VideoMinerCommandController in 'Source\App\VideoMinerCommandController.pas',
   VideoMinerDebugLog in 'Source\App\VideoMinerDebugLog.pas',
   VideoMinerFrameCheck in 'Source\App\VideoMinerFrameCheck.pas',
+  VideoMinerFrameClipboard in 'Source\App\VideoMinerFrameClipboard.pas',
   VideoMinerMediaOpen in 'Source\App\VideoMinerMediaOpen.pas',
   VideoMinerPlaybackController in 'Source\App\VideoMinerPlaybackController.pas',
   VideoMinerPlaybackTiming in 'Source\App\VideoMinerPlaybackTiming.pas',
