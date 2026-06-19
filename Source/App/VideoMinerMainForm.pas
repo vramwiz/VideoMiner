@@ -1198,11 +1198,13 @@ begin
   if not ValidateVideoMinerMediaFile(FileName, ErrorMessage) then
   begin
     ValidateMs := StepWatch.Elapsed.TotalMilliseconds;
+{$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
       'open_failed step="validate" file="%s" drive="%s" autoplay=%s validate_ms=%.3f total_ms=%.3f err="%s"',
       [ExtractFileName(FileName), ExtractFileDrive(FileName),
        BoolToStr(AutoPlay, True), ValidateMs, TotalWatch.Elapsed.TotalMilliseconds,
        ErrorMessage]));
+{$ENDIF}
     SetStatusCaption(ErrorMessage);
     Exit;
   end;
@@ -1251,11 +1253,13 @@ begin
     SetTitleBarText(Caption);
     UpdateNavigationButtons;
     SetStatusCaption(OpenResult.ErrorMessage);
+{$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
       'open_failed step="decoder_open" file="%s" drive="%s" autoplay=%s validate_ms=%.3f cleanup_ms=%.3f open_ms=%.3f total_ms=%.3f err="%s"',
       [ExtractFileName(FileName), ExtractFileDrive(FileName),
        BoolToStr(AutoPlay, True), ValidateMs, CleanupMs, OpenMs,
        TotalWatch.Elapsed.TotalMilliseconds, OpenResult.ErrorMessage]));
+{$ENDIF}
     Exit;
   end;
   OpenMs := StepWatch.Elapsed.TotalMilliseconds;
@@ -1298,6 +1302,7 @@ begin
 
   RememberVideoMinerMediaFile(FileName);
   Result := True;
+{$IFDEF DEBUG}
   if (TotalWatch.Elapsed.TotalMilliseconds >= SLOW_OPEN_LOG_MS) or
      (OpenMs >= SLOW_OPEN_LOG_MS) or (FirstFrameMs >= SLOW_OPEN_LOG_MS) or
      (AutoPlayMs >= SLOW_OPEN_LOG_MS) then
@@ -1307,6 +1312,7 @@ begin
        BoolToStr(AutoPlay, True), BoolToStr(RestoreLoopPosition, True),
        ValidateMs, CleanupMs, OpenMs, FirstFrameMs, AutoPlayMs,
        TotalWatch.Elapsed.TotalMilliseconds, FSeekMaxMs, FVideoInfo.Fps]));
+{$ENDIF}
 end;
 
 function TVideoMinerMainForm.OpenAndPlayFile(const FileName: string): Boolean;
@@ -1507,16 +1513,42 @@ end;
 procedure TVideoMinerMainForm.SeekPlaybackTickToMs(PositionMs: Integer);
 var
   FrameShown: Boolean;
+{$IFDEF DEBUG}
+  PreviewMs: Double;
+  RestartMs: Double;
+  StepWatch: TStopwatch;
+  TotalWatch: TStopwatch;
+{$ENDIF}
 begin
+{$IFDEF DEBUG}
+  TotalWatch := TStopwatch.StartNew;
+{$ENDIF}
   FUpdatingSeek := True;
   try
     FSeekPositionMs := PositionMs;
   finally
     FUpdatingSeek := False;
   end;
+  UpdatePlaybackProgress(PositionMs);
 
+{$IFDEF DEBUG}
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   FrameShown := ShowFrameAtMs(PositionMs);
+{$IFDEF DEBUG}
+  PreviewMs := StepWatch.Elapsed.TotalMilliseconds;
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   StartPlaybackAtMs(PositionMs, FrameShown);
+{$IFDEF DEBUG}
+  RestartMs := StepWatch.Elapsed.TotalMilliseconds;
+  WriteVideoMinerSlowLog(Format(
+    'loop_tick_seek file="%s" target_ms=%d frame_shown=%s preview_ms=%.3f restart_ms=%.3f total_ms=%.3f current_ms=%d seek_ms=%d guard_target_ms=%d guard_remaining=%d',
+    [ExtractFileName(FVideoFile), PositionMs, BoolToStr(FrameShown, True),
+     PreviewMs, RestartMs, TotalWatch.Elapsed.TotalMilliseconds,
+     FCurrentVideoPositionMs, FSeekPositionMs, FSeekGuardTargetMs,
+     FSeekGuardRemaining]));
+{$ENDIF}
 end;
 
 procedure TVideoMinerMainForm.SeekToFirstFrame;

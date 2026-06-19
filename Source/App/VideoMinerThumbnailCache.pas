@@ -18,9 +18,16 @@ procedure SaveVideoMinerThumbnailCache(const FileName: string;
 
 implementation
 
+// Smart App Control 対策のため、通常リリースでは BMP キャッシュ保存を使わない。
+// 従来どおり使う場合は次の行を {$DEFINE THUMBNAIL_DISK_CACHE_ENABLED} に戻す。
+{.$DEFINE THUMBNAIL_DISK_CACHE_ENABLED}
+
+{$IFDEF THUMBNAIL_DISK_CACHE_ENABLED}
 uses
   System.IOUtils, System.SysUtils, Winapi.ShlObj, Winapi.Windows;
+{$ENDIF}
 
+{$IFDEF THUMBNAIL_DISK_CACHE_ENABLED}
 const
   THUMBNAIL_CACHE_DIR = 'ThumbnailCache';
 
@@ -76,13 +83,17 @@ begin
     Result := '';
   end;
 end;
+{$ENDIF}
 
 function LoadVideoMinerThumbnailCache(const FileName: string;
   Bitmap: Vcl.Graphics.TBitmap): Boolean;
+{$IFDEF THUMBNAIL_DISK_CACHE_ENABLED}
 var
   CacheName: string;
+{$ENDIF}
 begin
   Result := False;
+{$IFDEF THUMBNAIL_DISK_CACHE_ENABLED}
   if Bitmap = nil then
     Exit;
 
@@ -96,13 +107,17 @@ begin
   except
     Result := False;
   end;
+{$ENDIF}
 end;
 
 procedure SaveVideoMinerThumbnailCache(const FileName: string;
   Bitmap: Vcl.Graphics.TBitmap);
+{$IFDEF THUMBNAIL_DISK_CACHE_ENABLED}
 var
   CacheName: string;
+{$ENDIF}
 begin
+{$IFDEF THUMBNAIL_DISK_CACHE_ENABLED}
   if (Bitmap = nil) or (Bitmap.Width <= 0) or (Bitmap.Height <= 0) then
     Exit;
 
@@ -115,6 +130,7 @@ begin
   except
     // キャッシュ保存失敗は一覧表示の本体機能を止めない。
   end;
+{$ENDIF}
 end;
 
 end.

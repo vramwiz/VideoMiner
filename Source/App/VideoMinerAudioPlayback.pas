@@ -137,11 +137,13 @@ begin
   if (FileName = '') or (not VideoInfo.Audio.Present) or
      (VideoInfo.Audio.OpenError <> '') then
   begin
+{$IFDEF DEBUG}
     if DebugLogEnabled then
       WriteVideoMinerDebugLog(Format(
         'audio_start_skip pos_ms=%d present=%s open_error="%s" stop_ms=%.3f total_ms=%.3f',
         [PositionMs, BoolToStr(VideoInfo.Audio.Present, True),
          VideoInfo.Audio.OpenError, StopMs, TotalWatch.Elapsed.TotalMilliseconds]));
+{$ENDIF}
     Exit;
   end;
 
@@ -154,11 +156,13 @@ begin
     if not FDecoder.Open(FileName, AudioInfo, ErrorMessage) then
     begin
       OpenMs := StepWatch.Elapsed.TotalMilliseconds;
+{$IFDEF DEBUG}
       if DebugLogEnabled then
         WriteVideoMinerDebugLog(Format(
           'audio_start_failed step="open" pos_ms=%d stop_ms=%.3f open_ms=%.3f total_ms=%.3f err="%s"',
           [PositionMs, StopMs, OpenMs, TotalWatch.Elapsed.TotalMilliseconds,
            ErrorMessage]));
+{$ENDIF}
       Result := False;
       Exit;
     end;
@@ -169,11 +173,13 @@ begin
   if not FDecoder.SeekAudioToMs(PositionMs, ErrorMessage) then
   begin
     SeekMs := StepWatch.Elapsed.TotalMilliseconds;
+{$IFDEF DEBUG}
     if DebugLogEnabled then
       WriteVideoMinerDebugLog(Format(
         'audio_start_failed step="seek" pos_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f total_ms=%.3f err="%s"',
         [PositionMs, StopMs, OpenMs, SeekMs,
          TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+{$ENDIF}
     FDecoder.Close;
     FOpenFileName := '';
     Result := False;
@@ -198,11 +204,13 @@ begin
     SampleCount, Finished, ErrorMessage) then
   begin
     DecodeMs := StepWatch.Elapsed.TotalMilliseconds;
+{$IFDEF DEBUG}
     if DebugLogEnabled then
       WriteVideoMinerDebugLog(Format(
         'audio_start_failed step="decode" pos_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f decode_ms=%.3f total_ms=%.3f err="%s"',
         [PositionMs, StopMs, OpenMs, SeekMs, DecodeMs,
          TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+{$ENDIF}
     FDecoder.Close;
     FOpenFileName := '';
     FFinished := True;
@@ -219,10 +227,12 @@ begin
   if not TransformPcmForPlaybackRate(Pcm, OutputPcm, OutputSampleCount) then
   begin
     TransformMs := StepWatch.Elapsed.TotalMilliseconds;
+{$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
       'audio_start_failed step="tempo" pos_ms=%d rate=%.3f stop_ms=%.3f open_ms=%.3f seek_ms=%.3f decode_ms=%.3f transform_ms=%.3f total_ms=%.3f',
       [PositionMs, FPlaybackRate, StopMs, OpenMs, SeekMs, DecodeMs,
        TransformMs, TotalWatch.Elapsed.TotalMilliseconds]));
+{$ENDIF}
     ErrorMessage := 'Failed to convert audio playback rate.';
     FDecoder.Close;
     FOpenFileName := '';
@@ -238,11 +248,13 @@ begin
   if not FDecoder.StartAudioPlayback(ErrorMessage) then
   begin
     OutputStartMs := StepWatch.Elapsed.TotalMilliseconds;
+{$IFDEF DEBUG}
     if DebugLogEnabled then
       WriteVideoMinerDebugLog(Format(
         'audio_start_failed step="output_start" pos_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f decode_ms=%.3f output_start_ms=%.3f total_ms=%.3f err="%s"',
         [PositionMs, StopMs, OpenMs, SeekMs, DecodeMs, OutputStartMs,
          TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+{$ENDIF}
     FDecoder.Close;
     FOpenFileName := '';
     FFinished := True;
@@ -257,11 +269,13 @@ begin
      (not FDecoder.QueueAudioPcm16Stereo48k(OutputPcm, ErrorMessage)) then
   begin
     QueueMs := StepWatch.Elapsed.TotalMilliseconds;
+{$IFDEF DEBUG}
     if DebugLogEnabled then
       WriteVideoMinerDebugLog(Format(
         'audio_start_failed step="queue" pos_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f decode_ms=%.3f output_start_ms=%.3f queue_ms=%.3f total_ms=%.3f err="%s"',
         [PositionMs, StopMs, OpenMs, SeekMs, DecodeMs, OutputStartMs, QueueMs,
          TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+{$ENDIF}
     Stop;
     Result := False;
   end;
@@ -271,6 +285,7 @@ begin
   begin
     FPlaybackClock := TStopwatch.StartNew;
     FPlaybackClockActive := True;
+{$IFDEF DEBUG}
     if DebugLogEnabled then
       WriteVideoMinerDebugLog(Format(
         'audio_start pos_ms=%d rate=%.3f start_samples=%d queued_samples=%d queued_output_samples=%d initial_pcm_bytes=%d start_queue_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f decode_ms=%.3f output_start_ms=%.3f queue_ms=%.3f total_ms=%.3f finished=%s',
@@ -278,6 +293,8 @@ begin
          FQueuedOutputSamples, Length(OutputPcm),
          START_QUEUE_MS, StopMs, OpenMs, SeekMs, DecodeMs, OutputStartMs,
          QueueMs, TotalWatch.Elapsed.TotalMilliseconds, BoolToStr(FFinished, True)]));
+{$ENDIF}
+{$IFDEF DEBUG}
     if (TotalWatch.Elapsed.TotalMilliseconds >= SLOW_START_LOG_MS) or
        (OpenMs >= SLOW_START_LOG_MS) or
        (SeekMs >= SLOW_START_LOG_MS) or
@@ -290,6 +307,7 @@ begin
          FQueuedOutputSamples, Length(Pcm), Length(OutputPcm), StopMs, OpenMs,
          SeekMs, DecodeMs, TransformMs, OutputStartMs, QueueMs,
          TotalWatch.Elapsed.TotalMilliseconds, BoolToStr(FFinished, True)]));
+{$ENDIF}
   end;
 end;
 
@@ -470,10 +488,12 @@ begin
     Exit;
   end;
 
+{$IFDEF DEBUG}
   if (TempoErrorMessage <> '') and VideoMinerDebugLogEnabled then
     WriteVideoMinerDebugLog(Format(
       'audio_tempo_fallback rate=%.3f input_bytes=%d err="%s"',
       [FPlaybackRate, Length(InputPcm), TempoErrorMessage]));
+{$ENDIF}
 
   OutputFrameCount := Floor(InputFrameCount / FPlaybackRate);
   if OutputFrameCount <= 0 then
@@ -563,11 +583,13 @@ begin
       SkipReason := 'decoder_nil'
     else
       SkipReason := 'finished';
+{$IFDEF DEBUG}
     if VideoMinerDebugLogEnabled then
       WriteVideoMinerDebugLog(Format(
         'audio_pump_skip reason="%s" playback_ms=%d queued_samples=%d start_samples=%d finished=%s',
         [SkipReason, PlaybackPositionMs,
          FQueuedSamples, FStartSamples, BoolToStr(FFinished, True)]));
+{$ENDIF}
     Exit;
   end;
 
@@ -583,11 +605,13 @@ begin
   TargetQueuedSampleCount := Round(TARGET_QUEUE_MS * OUTPUT_SAMPLE_RATE / 1000);
   if QueuedSampleCount >= TargetQueuedSampleCount then
   begin
+{$IFDEF DEBUG}
     if VideoMinerDebugLogEnabled then
       WriteVideoMinerDebugLog(Format(
         'audio_pump_skip reason="queue_full" playback_ms=%d raw_queued_samples=%d queued_ms=%d target_ms=%d queued_samples=%d',
         [PlaybackPositionMs, RawQueuedSampleCount, QueuedBeforeMs,
          TARGET_QUEUE_MS, FQueuedSamples]));
+{$ENDIF}
     Exit;
   end;
 
@@ -600,11 +624,13 @@ begin
     SampleCount, Finished, ErrorMessage) then
   begin
     DecodeMs := StepWatch.Elapsed.TotalMilliseconds;
+{$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
       'audio_pump_failed step="decode" playback_ms=%d rate=%.3f queued_before_ms=%d target_input_samples=%d decode_ms=%.3f total_ms=%.3f err="%s"',
       [PlaybackPositionMs, FPlaybackRate, QueuedBeforeMs,
        TargetInputSampleCount, DecodeMs, TotalWatch.Elapsed.TotalMilliseconds,
        ErrorMessage]));
+{$ENDIF}
     Stop;
     Result := False;
     Exit;
@@ -620,10 +646,12 @@ begin
   if not TransformPcmForPlaybackRate(Pcm, OutputPcm, OutputSampleCount) then
   begin
     TransformMs := StepWatch.Elapsed.TotalMilliseconds;
+{$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
       'audio_pump_failed step="tempo" playback_ms=%d rate=%.3f queued_before_ms=%d decode_ms=%.3f transform_ms=%.3f total_ms=%.3f',
       [PlaybackPositionMs, FPlaybackRate, QueuedBeforeMs, DecodeMs,
        TransformMs, TotalWatch.Elapsed.TotalMilliseconds]));
+{$ENDIF}
     Stop;
     ErrorMessage := 'Failed to convert audio playback rate.';
     Result := False;
@@ -638,16 +666,19 @@ begin
      (not FDecoder.QueueAudioPcm16Stereo48k(OutputPcm, ErrorMessage)) then
   begin
     QueueMs := StepWatch.Elapsed.TotalMilliseconds;
+{$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
       'audio_pump_failed step="queue" playback_ms=%d rate=%.3f queued_before_ms=%d decode_ms=%.3f transform_ms=%.3f queue_ms=%.3f total_ms=%.3f err="%s"',
       [PlaybackPositionMs, FPlaybackRate, QueuedBeforeMs, DecodeMs,
        TransformMs, QueueMs, TotalWatch.Elapsed.TotalMilliseconds,
        ErrorMessage]));
+{$ENDIF}
     Stop;
     Result := False;
   end;
   QueueMs := StepWatch.Elapsed.TotalMilliseconds;
 
+{$IFDEF DEBUG}
   if VideoMinerDebugLogEnabled then
     WriteVideoMinerDebugLog(Format(
       'audio_pump playback_ms=%d rate=%.3f raw_queued_before_samples=%d queued_before_ms=%d queued_after_ms=%d pcm_bytes=%d output_pcm_bytes=%d sample_count=%d queued_output_samples=%d finished=%s result=%s err="%s"',
@@ -656,6 +687,8 @@ begin
        Length(Pcm), Length(OutputPcm), FQueuedSamples, FQueuedOutputSamples,
        BoolToStr(FFinished, True),
        BoolToStr(Result, True), ErrorMessage]));
+{$ENDIF}
+{$IFDEF DEBUG}
   if (TotalWatch.Elapsed.TotalMilliseconds >= SLOW_PUMP_LOG_MS) or
      (DecodeMs >= SLOW_PUMP_LOG_MS) or
      (TransformMs >= SLOW_PUMP_LOG_MS) or
@@ -667,6 +700,7 @@ begin
        Length(Pcm), Length(OutputPcm), DecodeMs, TransformMs, QueueMs,
        TotalWatch.Elapsed.TotalMilliseconds, BoolToStr(FFinished, True),
        BoolToStr(Result, True)]));
+{$ENDIF}
 end;
 
 function TVideoMinerAudioPlayback.PlaybackPositionMs: Integer;

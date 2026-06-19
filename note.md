@@ -1798,3 +1798,51 @@ seek 自体は速くても、そこから目的フレームまで再デコード
   - `D:\DelphiProg\VideoMiner\Setup\Output\VideoMiner_Setup.exe`
   - `D:\DelphiProg\VideoMiner\Setup\Output\VideoMiner_Setup.zip`
   - `D:\DelphiProg\VideoMiner\Setup\Output\VideoMiner_Portable.zip`
+
+## 2026-06-19 ループシーク計測ログ追加
+- ループ終端から戻り先へ移動する経路を確認するため、Debug/slow log に以下を追加した。
+  - `loop_restart_request`: 再生 tick がループ終端到達を判定した時点の位置、戻り先、区間、tick 内訳。
+  - `loop_tick_seek`: `SeekPlaybackTickToMs` 内のプレビュー表示時間、再生再開時間、合計時間、seek guard 状態。
+- `SeekPlaybackTickToMs` で `FSeekPositionMs` を戻した直後に `UpdatePlaybackProgress(PositionMs)` を呼び、シークバー表示だけは先にループ開始位置へ戻すようにした。
+- ローカル短尺 mp4 の全体ループでは、例として `loop_tick_seek total_ms=27ms` 程度だった。
+  - `preview_ms` と `restart_ms` がそれぞれ約 13ms で、プレビュー用デコーダと再生用デコーダの二重 seek になっていることを確認した。
+  - ローカル全体ループでは大きな詰まりではないが、チャプター戻りやネットワーク上の動画ではこの二重 seek が効きやすい可能性がある。
+- ネットワーク上の動画を自動起動してログ取得しようとしたところ、環境側で大量のエラーダイアログが出たため、以後の自動 GUI 実行は控える。
+- 次に確認する場合は、ユーザー操作で対象動画を開いてループを数回発生させ、`%TEMP%\VideoMiner_playback_debug.log` の `loop_restart_request` / `loop_tick_seek` / `start_playback_done` を見る。
+
+## 2026-06-19 Release から調査ログ文字列を除去
+- Smart App Control 対策の一環として、Release 版 `VideoMiner.exe` に調査ログ用の文字列が残らないよう、ログ呼び出しを `{$IFDEF DEBUG}` 側へ寄せた。
+- Release 版バイナリ内に以下が残らないことを確認した。
+  - `VideoMiner_playback_debug.log`
+  - `VIDEOMINER_DEBUG_LOG`
+  - `VIDEOMINER_SLOW_LOG`
+  - `loop_restart_request`
+  - `loop_tick_seek`
+  - `start_playback_done`
+  - `playback_tick`
+  - `audio_pump`
+  - `seek_slow`
+  - `open_done`
+  - `audio_start`
+  - `OutputDebugString`
+- Debug ビルドでは従来どおり調査ログを出せる。
+- ただし Smart App Control の主因は未署名・低 reputation の可能性が高く、ログ文字列除去は「疑われにくくする」ための整理に留まる。
+
+## 2026-06-19 サムネイルのディスクキャッシュ
+- Smart App Control 対策として、サムネイルの BMP ディスクキャッシュは無効に戻した。
+- 現在の設定:
+  - `Source\App\VideoMinerThumbnailCache.pas`
+  - `{.$DEFINE THUMBNAIL_DISK_CACHE_ENABLED}`
+- `マイドキュメント\VideoMiner\ThumbnailCache` へ保存する形でディスクキャッシュを有効化したところ、Smart App Control の状況が悪化した。
+- そのため、キャッシュはメモリ上のみとし、起動をまたいだサムネイル再利用は行わない。
+- 無効時は `System.IOUtils` / `Winapi.ShlObj` / `CSIDL_APPDATA` を含むキャッシュ実装をコンパイル対象から外す。
+
+## 2026-06-19 データ保存先を Documents へ切り替える検証フラグ
+- Smart App Control が `%APPDATA%` 配下への書き込みを嫌っている可能性を切り分けるため、VideoMiner のデータ保存先をマイドキュメントへ切り替えるフラグを追加した。
+- 現在の検証設定:
+  - `Source\App\VideoMinerSettings.pas`
+  - `VIDEOMINER_DATA_DIR_USES_DOCUMENTS = True`
+- `True` の間、設定ファイルは `マイドキュメント\VideoMiner\VideoMiner.ini` に保存する。
+- `False` に戻すと、従来どおり `%APPDATA%\VideoMiner\VideoMiner.ini` に保存する。
+- この変更で Smart App Control 回避に効果があったため、`%APPDATA%` 書き込みを避ける方針にする。
+- サムネイルディスクキャッシュの再有効化は悪化したため、設定ファイルのみ Documents 保存を維持する。
