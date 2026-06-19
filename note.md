@@ -455,6 +455,14 @@ powershell -ExecutionPolicy Bypass -File tools\EnsureUtf8Bom.ps1
 powershell -ExecutionPolicy Bypass -File tools\InstallGitHooks.ps1
 ```
 
+- インストーラー関連ファイルのルール:
+  - `Setup\*.iss` / `Setup\*.txt` / `Setup\*.bat` も UTF-8 BOM 付き、改行 CRLF で保存する。
+  - `Version.inc` は UTF-8 BOM 付きなので、バッチから `findstr` で読む場合は `^#define` のような先頭一致にしない。BOM で一致しないことがある。
+  - バージョン取得は `findstr /c:"VM_APP_VERSION"` のように、行頭に依存しない検索にする。
+  - `.bat` では日本語表示やパス文字化けを避けるため、必要以上に Shift-JIS 前提の処理へ戻さない。
+  - Inno Setup の `Setup.iss` は日本語文字列が文字化けしやすいので、編集後は `Setup\InstallSetup.bat nopause` で実際にコンパイル確認する。
+  - `Setup\Output` の生成物は配布物であり、ソース管理対象ではない。
+
 - `note.md` は UTF-8 BOM 付き、改行は CRLF で保存する。ANSI / Shift-JIS へ変換しない。
 - PowerShell で `note.md` を編集する場合は、`[System.Text.UTF8Encoding]::new($true)` などで UTF-8 BOM を明示して読み書きする。
 - Delphi ソースを修正する場合も、UTF-8 BOM 付き、改行 CRLF で保存する。
@@ -1779,3 +1787,14 @@ seek 自体は速くても、そこから目的フレームまで再デコード
 | 描画が遅い | 描画バッファ維持、描画優先 |
 | 音声待ちしている | 音声同期方式見直し |
 | キャッシュが重い | 全体キャッシュ廃止、小規模化 |
+
+## 2026-06-19 インストーラー作成バッチ修正
+- `Setup\InstallSetup.bat` が `[2] Read version from Version.inc` で `VM_APP_VERSION was not found` になり、インストーラー作成まで進まない問題を修正した。
+- 原因は `Version.inc` が UTF-8 BOM 付きで、`findstr /r /c:"^#define VM_APP_VERSION "` の先頭一致が BOM に阻まれていたこと。
+- `findstr /c:"VM_APP_VERSION"` で検索し、`tokens=3` からバージョン文字列を取得するようにした。
+- 追加で、ファイル存在確認用の `call :RequireFile` が `LICENSE` の確認時だけ `The system cannot find the batch label specified - RequireFile` を出すことがあったため、サブルーチン呼び出しをやめて `for` ループ内の直接チェックへ変更した。
+- `cmd /c "D:\DelphiProg\VideoMiner\Setup\InstallSetup.bat" nopause` で成功を確認した。
+- 生成物:
+  - `D:\DelphiProg\VideoMiner\Setup\Output\VideoMiner_Setup.exe`
+  - `D:\DelphiProg\VideoMiner\Setup\Output\VideoMiner_Setup.zip`
+  - `D:\DelphiProg\VideoMiner\Setup\Output\VideoMiner_Portable.zip`
