@@ -1,14 +1,14 @@
-unit FFmpegDecoderSeekBgrx32;
+ï»¿unit FFmpegDecoderSeekBgrx32;
 
-// w’è‚ÖƒV[ƒN‚µA“®‰æƒtƒŒ[ƒ€‚ğ BGRX32 ƒoƒbƒtƒ@‚Ö•ÏŠ·‚·‚éB
-// ’ÊíƒV[ƒN‚Æ‚‘¬ƒV[ƒN‚Ì“üŒû‚ğ‚¿AVideoMiner ‚Ì•\¦XV‚Åå‚Ég‚¤B
+// æŒ‡å®šæ™‚åˆ»ã¸ã‚·ãƒ¼ã‚¯ã—ã€å‹•ç”»ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ BGRX32 ãƒãƒƒãƒ•ã‚¡ã¸å¤‰æ›ã™ã‚‹ã€‚
+// é€šå¸¸ã‚·ãƒ¼ã‚¯ã¨é«˜é€Ÿã‚·ãƒ¼ã‚¯ã®å…¥å£ã‚’æŒã¡ã€VideoMiner ã®è¡¨ç¤ºæ›´æ–°ã§ä¸»ã«ä½¿ã†ã€‚
 
 interface
 
 uses
   FFmpegDecoderContext;
 
-// w’è‚Ì“®‰æƒtƒŒ[ƒ€‚ğ BGRX32 ƒoƒbƒtƒ@‚Öæ“¾‚·‚éB
+// æŒ‡å®šæ™‚åˆ»ã®å‹•ç”»ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ BGRX32 ãƒãƒƒãƒ•ã‚¡ã¸å–å¾—ã™ã‚‹ã€‚
 function DecodeFrameToBgrx32(
   Context: TFFmpegDecoderContext;
   PositionMs: Integer;
@@ -17,7 +17,7 @@ function DecodeFrameToBgrx32(
   out ErrorMessage: string
 ): Boolean;
 
-// ƒL[ƒtƒŒ[ƒ€—Dæ‚Ì‚‘¬ƒV[ƒN‚Å BGRX32 ƒtƒŒ[ƒ€‚ğæ“¾‚·‚éB
+// ã‚­ãƒ¼ãƒ•ãƒ¬ãƒ¼ãƒ å„ªå…ˆã®é«˜é€Ÿã‚·ãƒ¼ã‚¯ã§ BGRX32 ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’å–å¾—ã™ã‚‹ã€‚
 function DecodeFrameToBgrx32Fast(
   Context: TFFmpegDecoderContext;
   PositionMs: Integer;
@@ -32,7 +32,7 @@ uses
   System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo;
 
 
-// ’ÊíƒV[ƒN‚Æ‚‘¬ƒV[ƒN‚É‹¤’Ê‚·‚é BGRX32 æ“¾ˆ—‚ğÀs‚·‚éB
+// é€šå¸¸ã‚·ãƒ¼ã‚¯ã¨é«˜é€Ÿã‚·ãƒ¼ã‚¯ã«å…±é€šã™ã‚‹ BGRX32 å–å¾—å‡¦ç†ã‚’å®Ÿè¡Œã™ã‚‹ã€‚
 function DecodeFrameToBgrx32Internal(
   Context: TFFmpegDecoderContext;
   PositionMs: Integer;
@@ -144,7 +144,7 @@ begin
   end;
 end;
 
-// w’è‚Ì“®‰æƒtƒŒ[ƒ€‚ğ BGRX32 ƒoƒbƒtƒ@‚Öæ“¾‚·‚éB
+// æŒ‡å®šæ™‚åˆ»ã®å‹•ç”»ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ BGRX32 ãƒãƒƒãƒ•ã‚¡ã¸å–å¾—ã™ã‚‹ã€‚
 function DecodeFrameToBgrx32(
   Context: TFFmpegDecoderContext;
   PositionMs: Integer;
@@ -157,7 +157,7 @@ begin
     BufferStride, False, ErrorMessage);
 end;
 
-// ƒL[ƒtƒŒ[ƒ€—Dæ‚Ì‚‘¬ƒV[ƒN‚Å BGRX32 ƒtƒŒ[ƒ€‚ğæ“¾‚·‚éB
+// ã‚­ãƒ¼ãƒ•ãƒ¬ãƒ¼ãƒ å„ªå…ˆã®é«˜é€Ÿã‚·ãƒ¼ã‚¯ã§ BGRX32 ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’å–å¾—ã™ã‚‹ã€‚
 function DecodeFrameToBgrx32Fast(
   Context: TFFmpegDecoderContext;
   PositionMs: Integer;

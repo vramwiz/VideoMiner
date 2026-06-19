@@ -1,7 +1,7 @@
-unit FFmpegDecoderContext;
+ï»¿unit FFmpegDecoderContext;
 
-// FFmpeg ƒfƒR[ƒ_ˆ—‚Å‹¤—L‚·‚éÀsó‘Ô‚ğ•Û‚·‚éB
-// Œ^•t‚« FFmpeg ƒ|ƒCƒ“ƒ^‚ÍŠeˆ—ƒ†ƒjƒbƒg‘¤‚Å•K—v‚ÈŒ^‚Ö–ß‚µ‚Äg‚¤B
+// FFmpeg ãƒ‡ã‚³ãƒ¼ãƒ€å‡¦ç†ã§å…±æœ‰ã™ã‚‹å®Ÿè¡Œæ™‚çŠ¶æ…‹ã‚’ä¿æŒã™ã‚‹ã€‚
+// å‹ä»˜ã FFmpeg ãƒã‚¤ãƒ³ã‚¿ã¯å„å‡¦ç†ãƒ¦ãƒ‹ãƒƒãƒˆå´ã§å¿…è¦ãªå‹ã¸æˆ»ã—ã¦ä½¿ã†ã€‚
 
 interface
 
@@ -11,29 +11,29 @@ uses
 type
   TFFmpegDecoderContext = class
   public
-    FileName                : string;     // Œ»İŠJ‚¢‚Ä‚¢‚é“ü—Íƒtƒ@ƒCƒ‹
-    FormatContext           : Pointer;    // “ü—ÍƒRƒ“ƒeƒi‚ğ“Ç‚Ş AVFormatContext
-    CodecContext            : Pointer;    // “®‰æƒXƒgƒŠ[ƒ€—p‚Ì AVCodecContext
-    Stream                  : Pointer;    // ‘I‘ğ‚³‚ê‚½“®‰æ AVStream
-    StreamIndex             : Integer;    // ‘I‘ğ‚³‚ê‚½“®‰æƒXƒgƒŠ[ƒ€”Ô†
-    AudioCodecContext       : Pointer;    // ‰¹ºƒXƒgƒŠ[ƒ€—p‚Ì AVCodecContext
-    AudioStream             : Pointer;    // ‘I‘ğ‚³‚ê‚½‰¹º AVStream
-    AudioStreamIndex        : Integer;    // ‘I‘ğ‚³‚ê‚½‰¹ºƒXƒgƒŠ[ƒ€”Ô†
-    AudioFrame              : Pointer;    // ‰¹ºƒfƒR[ƒhŒ‹‰Ê‚ğó‚¯æ‚é AVFrame
-    AudioDiscardUntilSample : Integer;    // ƒV[ƒN’¼Œã‚É”jŠü‚·‚é‰¹ºƒTƒ“ƒvƒ‹ˆÊ’u
-    SwrContext              : Pointer;    // ‰¹º‚ğ PCM16 stereo 48kHz ‚Ö•ÏŠ·‚·‚é SwrContext
-    Packet                  : Pointer;    // “Ç‚İæ‚Á‚½ AVPacket ‚ğg‚¢‰ñ‚·—Ìˆæ
-    Frame                   : Pointer;    // “®‰æƒfƒR[ƒhŒ‹‰Ê‚ğó‚¯æ‚é AVFrame
-    TransferFrame           : Pointer;    // QSV ‚È‚Ç‚©‚ç CPU ‘¤‚Ö“]‘—‚µ‚½ AVFrame
-    QsvDeviceContext        : Pointer;    // QSV ƒfƒR[ƒh‚Åg‚¤ƒn[ƒhƒEƒFƒA device context
-    DirectSwsContext        : Pointer;    // •\¦—pƒoƒbƒtƒ@‚Ö’¼Ú•ÏŠ·‚·‚é SwsContext
-    DirectSwsSrcWidth       : Integer;    // DirectSwsContext ‚ğì‚Á‚½Œ³ƒtƒŒ[ƒ€•
-    DirectSwsSrcHeight      : Integer;    // DirectSwsContext ‚ğì‚Á‚½Œ³ƒtƒŒ[ƒ€‚‚³
-    DirectSwsSrcFormat      : Integer;    // DirectSwsContext ‚ğì‚Á‚½Œ³ƒsƒNƒZƒ‹Œ`®
-    DirectSwsDstFormat      : Integer;    // DirectSwsContext ‚ğì‚Á‚½o—ÍƒsƒNƒZƒ‹Œ`®
-    VideoDecoderName        : string;     // ÀÛ‚ÉŠJ‚¢‚½“®‰æƒfƒR[ƒ_–¼
-    VideoUsesQsv            : Boolean;    // “®‰æƒfƒR[ƒh‚É QSV ‚ğg‚Á‚Ä‚¢‚é‚©
-    Info                    : TVideoInfo; // UI ‘w‚Ö•Ô‚·“®‰æ/‰¹ºî•ñ
+    FileName                : string;     // ç¾åœ¨é–‹ã„ã¦ã„ã‚‹å…¥åŠ›ãƒ•ã‚¡ã‚¤ãƒ«
+    FormatContext           : Pointer;    // å…¥åŠ›ã‚³ãƒ³ãƒ†ãƒŠã‚’èª­ã‚€ AVFormatContext
+    CodecContext            : Pointer;    // å‹•ç”»ã‚¹ãƒˆãƒªãƒ¼ãƒ ç”¨ã® AVCodecContext
+    Stream                  : Pointer;    // é¸æŠã•ã‚ŒãŸå‹•ç”» AVStream
+    StreamIndex             : Integer;    // é¸æŠã•ã‚ŒãŸå‹•ç”»ã‚¹ãƒˆãƒªãƒ¼ãƒ ç•ªå·
+    AudioCodecContext       : Pointer;    // éŸ³å£°ã‚¹ãƒˆãƒªãƒ¼ãƒ ç”¨ã® AVCodecContext
+    AudioStream             : Pointer;    // é¸æŠã•ã‚ŒãŸéŸ³å£° AVStream
+    AudioStreamIndex        : Integer;    // é¸æŠã•ã‚ŒãŸéŸ³å£°ã‚¹ãƒˆãƒªãƒ¼ãƒ ç•ªå·
+    AudioFrame              : Pointer;    // éŸ³å£°ãƒ‡ã‚³ãƒ¼ãƒ‰çµæœã‚’å—ã‘å–ã‚‹ AVFrame
+    AudioDiscardUntilSample : Integer;    // ã‚·ãƒ¼ã‚¯ç›´å¾Œã«ç ´æ£„ã™ã‚‹éŸ³å£°ã‚µãƒ³ãƒ—ãƒ«ä½ç½®
+    SwrContext              : Pointer;    // éŸ³å£°ã‚’ PCM16 stereo 48kHz ã¸å¤‰æ›ã™ã‚‹ SwrContext
+    Packet                  : Pointer;    // èª­ã¿å–ã£ãŸ AVPacket ã‚’ä½¿ã„å›ã™é ˜åŸŸ
+    Frame                   : Pointer;    // å‹•ç”»ãƒ‡ã‚³ãƒ¼ãƒ‰çµæœã‚’å—ã‘å–ã‚‹ AVFrame
+    TransferFrame           : Pointer;    // QSV ãªã©ã‹ã‚‰ CPU å´ã¸è»¢é€ã—ãŸ AVFrame
+    QsvDeviceContext        : Pointer;    // QSV ãƒ‡ã‚³ãƒ¼ãƒ‰ã§ä½¿ã†ãƒãƒ¼ãƒ‰ã‚¦ã‚§ã‚¢ device context
+    DirectSwsContext        : Pointer;    // è¡¨ç¤ºç”¨ãƒãƒƒãƒ•ã‚¡ã¸ç›´æ¥å¤‰æ›ã™ã‚‹ SwsContext
+    DirectSwsSrcWidth       : Integer;    // DirectSwsContext ã‚’ä½œã£ãŸå…ƒãƒ•ãƒ¬ãƒ¼ãƒ å¹…
+    DirectSwsSrcHeight      : Integer;    // DirectSwsContext ã‚’ä½œã£ãŸå…ƒãƒ•ãƒ¬ãƒ¼ãƒ é«˜ã•
+    DirectSwsSrcFormat      : Integer;    // DirectSwsContext ã‚’ä½œã£ãŸå…ƒãƒ”ã‚¯ã‚»ãƒ«å½¢å¼
+    DirectSwsDstFormat      : Integer;    // DirectSwsContext ã‚’ä½œã£ãŸå‡ºåŠ›ãƒ”ã‚¯ã‚»ãƒ«å½¢å¼
+    VideoDecoderName        : string;     // å®Ÿéš›ã«é–‹ã„ãŸå‹•ç”»ãƒ‡ã‚³ãƒ¼ãƒ€å
+    VideoUsesQsv            : Boolean;    // å‹•ç”»ãƒ‡ã‚³ãƒ¼ãƒ‰ã« QSV ã‚’ä½¿ã£ã¦ã„ã‚‹ã‹
+    Info                    : TVideoInfo; // UI å±¤ã¸è¿”ã™å‹•ç”»/éŸ³å£°æƒ…å ±
   end;
 
 implementation

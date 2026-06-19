@@ -1,14 +1,14 @@
-unit FFmpegAudioTempo;
+ï»¿unit FFmpegAudioTempo;
 
-// FFmpeg avfilter ‚Ì atempo ‚ğg‚Á‚Ä PCM ‰¹º‚ÌÄ¶‘¬“x‚ğ•ÏŠ·‚·‚éB
-// “üo—Í‚Í VideoMiner ‚Ì waveOut Œo˜H‚Æ“¯‚¶ PCM16 stereo 48kHz ‚ÉŒÅ’è‚·‚éB
+// FFmpeg avfilter ã® atempo ã‚’ä½¿ã£ã¦ PCM éŸ³å£°ã®å†ç”Ÿé€Ÿåº¦ã‚’å¤‰æ›ã™ã‚‹ã€‚
+// å…¥å‡ºåŠ›ã¯ VideoMiner ã® waveOut çµŒè·¯ã¨åŒã˜ PCM16 stereo 48kHz ã«å›ºå®šã™ã‚‹ã€‚
 
 interface
 
 uses
   System.SysUtils;
 
-// PCM16 stereo 48kHz ‚Ì“ü—Í‰¹º‚ğw’è”{—¦‚Ì’·‚³‚Ö•ÏŠ·‚·‚éB
+// PCM16 stereo 48kHz ã®å…¥åŠ›éŸ³å£°ã‚’æŒ‡å®šå€ç‡ã®é•·ã•ã¸å¤‰æ›ã™ã‚‹ã€‚
 function TempoPcm16Stereo48k(const InputPcm: TBytes; Rate: Double;
   out OutputPcm: TBytes; out OutputSampleCount: Integer;
   out ErrorMessage: string): Boolean;
@@ -19,16 +19,16 @@ uses
   System.Math, FFmpegApi;
 
 const
-  TEMPO_SAMPLE_RATE      = 48000;             // atempo graph ‚É“n‚·ŒÅ’èƒTƒ“ƒvƒ‹ƒŒ[ƒg Hz
-  TEMPO_CHANNELS         = 2;                 // atempo graph ‚É“n‚·ŒÅ’èƒ`ƒƒƒ“ƒlƒ‹”
-  TEMPO_BYTES_PER_SAMPLE = SizeOf(SmallInt);  // PCM16 1 ƒTƒ“ƒvƒ‹‚ ‚½‚è‚ÌƒoƒCƒg”
+  TEMPO_SAMPLE_RATE      = 48000;             // atempo graph ã«æ¸¡ã™å›ºå®šã‚µãƒ³ãƒ—ãƒ«ãƒ¬ãƒ¼ãƒˆ Hz
+  TEMPO_CHANNELS         = 2;                 // atempo graph ã«æ¸¡ã™å›ºå®šãƒãƒ£ãƒ³ãƒãƒ«æ•°
+  TEMPO_BYTES_PER_SAMPLE = SizeOf(SmallInt);  // PCM16 1 ã‚µãƒ³ãƒ—ãƒ«ã‚ãŸã‚Šã®ãƒã‚¤ãƒˆæ•°
 
-// filter sink ‚©‚çæ‚èo‚µ‚½ƒtƒŒ[ƒ€‚Ì PCM ‚ğo—Íƒoƒbƒtƒ@‚Ö’Ç‰Á‚·‚éB
+// filter sink ã‹ã‚‰å–ã‚Šå‡ºã—ãŸãƒ•ãƒ¬ãƒ¼ãƒ ã® PCM ã‚’å‡ºåŠ›ãƒãƒƒãƒ•ã‚¡ã¸è¿½åŠ ã™ã‚‹ã€‚
 procedure AppendFramePcm(Frame: PAVFrame; var OutputPcm: TBytes;
   var OutputSampleCount: Integer);
 var
-  ByteCount : Integer; // ’Ç‰Á‚·‚é PCM ƒf[ƒ^‚ÌƒoƒCƒg”
-  OldBytes  : Integer; // ’Ç‰Á‘O‚Ìo—Íƒoƒbƒtƒ@’·
+  ByteCount : Integer; // è¿½åŠ ã™ã‚‹ PCM ãƒ‡ãƒ¼ã‚¿ã®ãƒã‚¤ãƒˆæ•°
+  OldBytes  : Integer; // è¿½åŠ å‰ã®å‡ºåŠ›ãƒãƒƒãƒ•ã‚¡é•·
 begin
   if (Frame = nil) or (Frame.data[0] = nil) or (Frame.nb_samples <= 0) then
     Exit;
@@ -40,12 +40,12 @@ begin
   Inc(OutputSampleCount, Frame.nb_samples);
 end;
 
-// “ü—Í PCM ‚ğ FFmpeg filter graph ‚Ö“n‚· AVFrame ‚É‹l‚ß‚éB
+// å…¥åŠ› PCM ã‚’ FFmpeg filter graph ã¸æ¸¡ã™ AVFrame ã«è©°ã‚ã‚‹ã€‚
 function NewAudioFrame(const Pcm: TBytes; SampleCount: Integer;
   out Frame: PAVFrame; out ErrorMessage: string): Boolean;
 var
-  ByteCount : Integer; // Frame ‚ÖƒRƒs[‚·‚é PCM ƒf[ƒ^‚ÌƒoƒCƒg”
-  Ret       : Integer; // FFmpeg API ‚Ì–ß‚è’l
+  ByteCount : Integer; // Frame ã¸ã‚³ãƒ”ãƒ¼ã™ã‚‹ PCM ãƒ‡ãƒ¼ã‚¿ã®ãƒã‚¤ãƒˆæ•°
+  Ret       : Integer; // FFmpeg API ã®æˆ»ã‚Šå€¤
 begin
   Result := False;
   Frame := nil;
@@ -86,21 +86,21 @@ begin
   Result := True;
 end;
 
-// abuffer -> atempo -> abuffersink ‚Ì‰¹º filter graph ‚ğì¬‚·‚éB
+// abuffer -> atempo -> abuffersink ã®éŸ³å£° filter graph ã‚’ä½œæˆã™ã‚‹ã€‚
 function CreateTempoGraph(Rate: Double; out Graph: PAVFilterGraph;
   out SourceContext, SinkContext: PAVFilterContext;
   out ErrorMessage: string): Boolean;
 var
-  Args         : AnsiString;       // abuffer ‚É“n‚·“ü—Í‰¹ºŒ`®
-  Ret          : Integer;          // FFmpeg API ‚Ì–ß‚è’l
-  SourceFilter : PAVFilter;        // abuffer filter ’è‹`
-  SinkFilter   : PAVFilter;        // abuffersink filter ’è‹`
-  SinkName     : AnsiString;       // abuffersink filter –¼
-  SourceName   : AnsiString;       // abuffer filter –¼
+  Args         : AnsiString;       // abuffer ã«æ¸¡ã™å…¥åŠ›éŸ³å£°å½¢å¼
+  Ret          : Integer;          // FFmpeg API ã®æˆ»ã‚Šå€¤
+  SourceFilter : PAVFilter;        // abuffer filter å®šç¾©
+  SinkFilter   : PAVFilter;        // abuffersink filter å®šç¾©
+  SinkName     : AnsiString;       // abuffersink filter å
+  SourceName   : AnsiString;       // abuffer filter å
   TempoContext : PAVFilterContext; // atempo filter context
-  TempoFilter  : PAVFilter;        // atempo filter ’è‹`
-  TempoName    : AnsiString;       // atempo filter –¼
-  TempoText    : AnsiString;       // atempo ‚É“n‚·”{—¦•¶š—ñ
+  TempoFilter  : PAVFilter;        // atempo filter å®šç¾©
+  TempoName    : AnsiString;       // atempo filter å
+  TempoText    : AnsiString;       // atempo ã«æ¸¡ã™å€ç‡æ–‡å­—åˆ—
 begin
   Result := False;
   Graph := nil;
@@ -179,16 +179,16 @@ begin
   Result := True;
 end;
 
-// PCM16 stereo 48kHz ‚Ì“ü—Í‰¹º‚ğw’è”{—¦‚Ì’·‚³‚Ö•ÏŠ·‚·‚éB
+// PCM16 stereo 48kHz ã®å…¥åŠ›éŸ³å£°ã‚’æŒ‡å®šå€ç‡ã®é•·ã•ã¸å¤‰æ›ã™ã‚‹ã€‚
 function TempoPcm16Stereo48k(const InputPcm: TBytes; Rate: Double;
   out OutputPcm: TBytes; out OutputSampleCount: Integer;
   out ErrorMessage: string): Boolean;
 var
-  Graph         : PAVFilterGraph;   // atempo •ÏŠ·‚Ég‚¤ filter graph
-  InputFrame    : PAVFrame;         // “ü—Í PCM ‚ğ•ï‚Ş AVFrame
-  OutputFrame   : PAVFrame;         // filter sink ‚©‚çó‚¯æ‚é AVFrame
-  Ret           : Integer;          // FFmpeg API ‚Ì–ß‚è’l
-  SampleCount   : Integer;          // “ü—Í PCM ‚ÌƒTƒ“ƒvƒ‹”
+  Graph         : PAVFilterGraph;   // atempo å¤‰æ›ã«ä½¿ã† filter graph
+  InputFrame    : PAVFrame;         // å…¥åŠ› PCM ã‚’åŒ…ã‚€ AVFrame
+  OutputFrame   : PAVFrame;         // filter sink ã‹ã‚‰å—ã‘å–ã‚‹ AVFrame
+  Ret           : Integer;          // FFmpeg API ã®æˆ»ã‚Šå€¤
+  SampleCount   : Integer;          // å…¥åŠ› PCM ã®ã‚µãƒ³ãƒ—ãƒ«æ•°
   SinkContext   : PAVFilterContext; // abuffersink filter context
   SourceContext : PAVFilterContext; // abuffer filter context
 begin

@@ -1,7 +1,7 @@
-unit FFmpegDecoderTypes;
+ï»¿unit FFmpegDecoderTypes;
 
-// FFmpeg ƒfƒR[ƒ_‘w‚Å‹¤—L‚·‚éŠî–{Œ^‚ğ’è‹`‚·‚éB
-// UI ‚â‹ï‘Ì“I‚È“Ç‚İæ‚èˆ—‚É‚ÍˆË‘¶‚³‚¹‚¸A“®‰æ/‰¹ºî•ñ‚Æ waveOut ƒoƒbƒtƒ@‚Ìó‚¯“n‚µ‚ÉW’†‚·‚éB
+// FFmpeg ãƒ‡ã‚³ãƒ¼ãƒ€å±¤ã§å…±æœ‰ã™ã‚‹åŸºæœ¬å‹ã‚’å®šç¾©ã™ã‚‹ã€‚
+// UI ã‚„å…·ä½“çš„ãªèª­ã¿å–ã‚Šå‡¦ç†ã«ã¯ä¾å­˜ã•ã›ãšã€å‹•ç”»/éŸ³å£°æƒ…å ±ã¨ waveOut ãƒãƒƒãƒ•ã‚¡ã®å—ã‘æ¸¡ã—ã«é›†ä¸­ã™ã‚‹ã€‚
 
 interface
 
@@ -11,32 +11,32 @@ uses
 type
   PAudioWaveBuffer = ^TAudioWaveBuffer;
   TAudioWaveBuffer = record
-    Header : TWaveHdr; // waveOut ‚É“n‚·ƒoƒbƒtƒ@ƒwƒbƒ_
-    Data   : Pointer;  // PCM ƒf[ƒ^‚ğ•Û‚·‚éƒƒ‚ƒŠ
-    Size   : Integer;  // Data ‚ÌƒoƒCƒg”
+    Header : TWaveHdr; // waveOut ã«æ¸¡ã™ãƒãƒƒãƒ•ã‚¡ãƒ˜ãƒƒãƒ€
+    Data   : Pointer;  // PCM ãƒ‡ãƒ¼ã‚¿ã‚’ä¿æŒã™ã‚‹ãƒ¡ãƒ¢ãƒª
+    Size   : Integer;  // Data ã®ãƒã‚¤ãƒˆæ•°
   end;
 
   TAudioInfo = record
-    Present          : Boolean; // “ü—Íƒtƒ@ƒCƒ‹‚É‰¹ºƒXƒgƒŠ[ƒ€‚ª‚ ‚é‚©
-    StreamIndex      : Integer; // FFmpeg ‚ª‘I‘ğ‚µ‚½‰¹ºƒXƒgƒŠ[ƒ€”Ô†
-    SampleRate       : Integer; // “ü—Í‰¹º‚ÌƒTƒ“ƒvƒ‹ƒŒ[ƒg Hz
-    Channels         : Integer; // “ü—Í‰¹º‚Ìƒ`ƒƒƒ“ƒlƒ‹”
-    SampleFormat     : Integer; // FFmpeg ‚Ì‰¹ºƒTƒ“ƒvƒ‹Œ`®
-    SampleFormatName : string;  // ’²¸•\¦—p‚ÌƒTƒ“ƒvƒ‹Œ`®–¼
-    DurationSec      : Double;  // ‰¹ºƒXƒgƒŠ[ƒ€‚Ì’·‚³ •b
-    OpenError        : string;  // ‰¹ºƒfƒR[ƒ_‰Šú‰»‚Ì¸”s——R
+    Present          : Boolean; // å…¥åŠ›ãƒ•ã‚¡ã‚¤ãƒ«ã«éŸ³å£°ã‚¹ãƒˆãƒªãƒ¼ãƒ ãŒã‚ã‚‹ã‹
+    StreamIndex      : Integer; // FFmpeg ãŒé¸æŠã—ãŸéŸ³å£°ã‚¹ãƒˆãƒªãƒ¼ãƒ ç•ªå·
+    SampleRate       : Integer; // å…¥åŠ›éŸ³å£°ã®ã‚µãƒ³ãƒ—ãƒ«ãƒ¬ãƒ¼ãƒˆ Hz
+    Channels         : Integer; // å…¥åŠ›éŸ³å£°ã®ãƒãƒ£ãƒ³ãƒãƒ«æ•°
+    SampleFormat     : Integer; // FFmpeg ã®éŸ³å£°ã‚µãƒ³ãƒ—ãƒ«å½¢å¼
+    SampleFormatName : string;  // èª¿æŸ»è¡¨ç¤ºç”¨ã®ã‚µãƒ³ãƒ—ãƒ«å½¢å¼å
+    DurationSec      : Double;  // éŸ³å£°ã‚¹ãƒˆãƒªãƒ¼ãƒ ã®é•·ã• ç§’
+    OpenError        : string;  // éŸ³å£°ãƒ‡ã‚³ãƒ¼ãƒ€åˆæœŸåŒ–æ™‚ã®å¤±æ•—ç†ç”±
   end;
 
   TVideoInfo = record
-    Width           : Integer;    // “®‰æƒtƒŒ[ƒ€‚Ì• px
-    Height          : Integer;    // “®‰æƒtƒŒ[ƒ€‚Ì‚‚³ px
-    DurationSec     : Double;     // “®‰æ‘S‘Ì‚Ì’·‚³ •b
-    FpsText         : string;     // UI •\¦—p‚Ì FPS •¶š—ñ
-    Fps             : Double;     // Ä¶§Œä‚Ég‚¤ FPS ’l
-    PixelFormat     : Integer;    // “ü—Í‰f‘œƒXƒgƒŠ[ƒ€‚Ì FFmpeg pixel format
-    PixelFormatName : string;     // ’²¸•\¦—p‚Ì pixel format –¼
-    HasAlpha        : Boolean;    // “ü—Í‰f‘œ‚ª alpha plane/channel ‚ğ‚Â‚©
-    Audio           : TAudioInfo; // “¯‚¶“ü—Íƒtƒ@ƒCƒ‹‚©‚ç“Ç‚ñ‚¾‰¹ºî•ñ
+    Width           : Integer;    // å‹•ç”»ãƒ•ãƒ¬ãƒ¼ãƒ ã®å¹… px
+    Height          : Integer;    // å‹•ç”»ãƒ•ãƒ¬ãƒ¼ãƒ ã®é«˜ã• px
+    DurationSec     : Double;     // å‹•ç”»å…¨ä½“ã®é•·ã• ç§’
+    FpsText         : string;     // UI è¡¨ç¤ºç”¨ã® FPS æ–‡å­—åˆ—
+    Fps             : Double;     // å†ç”Ÿåˆ¶å¾¡ã«ä½¿ã† FPS å€¤
+    PixelFormat     : Integer;    // å…¥åŠ›æ˜ åƒã‚¹ãƒˆãƒªãƒ¼ãƒ ã® FFmpeg pixel format
+    PixelFormatName : string;     // èª¿æŸ»è¡¨ç¤ºç”¨ã® pixel format å
+    HasAlpha        : Boolean;    // å…¥åŠ›æ˜ åƒãŒ alpha plane/channel ã‚’æŒã¤ã‹
+    Audio           : TAudioInfo; // åŒã˜å…¥åŠ›ãƒ•ã‚¡ã‚¤ãƒ«ã‹ã‚‰èª­ã‚“ã éŸ³å£°æƒ…å ±
   end;
 implementation
 

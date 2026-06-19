@@ -1,14 +1,14 @@
-unit FFmpegDecoderNextYuy2;
+﻿unit FFmpegDecoderNextYuy2;
 
-// ���݈ʒu���玟�̓���t���[����ǂ݁AYUY2 �o�b�t�@�֕ϊ�����B
-// �`���ʂ̏������f�R�[�h�����Ƃ��� BGRX32 �n���番������B
+// 現在位置から次の動画フレームを読み、YUY2 バッファへ変換する。
+// 形式別の順方向デコード処理として BGRX32 系から分離する。
 
 interface
 
 uses
   FFmpegDecoderContext;
 
-// ���̓���t���[����ǂ݁A�K�v�Ȃ� YUY2 �o�b�t�@�֕ϊ�����B
+// 次の動画フレームを読み、必要なら YUY2 バッファへ変換する。
 function DecodeNextFrameToYuy2Optional(
   Context: TFFmpegDecoderContext;
   Buffer: Pointer;
@@ -24,7 +24,7 @@ uses
   System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo;
 
 
-// ���̓���t���[����ǂ݁A�K�v�Ȃ� YUY2 �o�b�t�@�֕ϊ�����B
+// 次の動画フレームを読み、必要なら YUY2 バッファへ変換する。
 function DecodeNextFrameToYuy2Optional(
   Context: TFFmpegDecoderContext;
   Buffer: Pointer;

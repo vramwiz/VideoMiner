@@ -1,0 +1,16 @@
+﻿root = true
+
+[*]
+end_of_line = crlf
+insert_final_newline = true
+
+[*.{pas,dfm,dpr,dproj,inc,rc,md,txt}]
+charset = utf-8-bom
+
+[*.{bat,cmd}]
+charset = utf-8-bom
+end_of_line = crlf
+
+[*.ps1]
+charset = utf-8-bom
+end_of_line = crlf

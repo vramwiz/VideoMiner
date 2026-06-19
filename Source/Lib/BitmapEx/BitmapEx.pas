@@ -1,7 +1,7 @@
-unit BitmapEx;
+ï»¿unit BitmapEx;
 
-// ƒtƒ@ƒCƒ‹‚ğ“Ç‚İ‚ñ‚Åƒrƒbƒgƒ}ƒbƒv‚Å•Ô‚·
-// PNG GIF‚Ì“§‰ß‚ğˆ—
+// ãƒ•ã‚¡ã‚¤ãƒ«ã‚’èª­ã¿è¾¼ã‚“ã§ãƒ“ãƒƒãƒˆãƒãƒƒãƒ—ã§è¿”ã™
+// PNG GIFã®é€éã‚’å‡¦ç†
 interface
 
 uses
@@ -14,9 +14,9 @@ type  TFourth = packed record
 TFourthArray = array[0..40000000] of TFourth;
 PFourthArray = ^TFourthArray;
 
-type TBitmapExStretch = (bsNormal,        // •W€
-                         bsLockHeight,    // ‚‚³ŒÅ’è
-                         bsLockWidth      // •ŒÅ’è
+type TBitmapExStretch = (bsNormal,        // æ¨™æº–
+                         bsLockHeight,    // é«˜ã•å›ºå®š
+                         bsLockWidth      // å¹…å›ºå®š
                          );
 
 type TBitmapExFileExt = ( bfNil,
@@ -29,50 +29,50 @@ type TBitmapExFileExt = ( bfNil,
 type
   TBitmapEx = class(TBitmap)
   private
-    { Private éŒ¾ }
+    { Private å®£è¨€ }
     FBackgroundColor: TColor;
     FTransparentColor: TColor;
     FTransparencyMode: TPNGTransparencyMode;
     FTransparent: Boolean;
 
-    // Šg’£q‚©‚ç‰æ‘œŒ`®‚ğ”»’f
+    // æ‹¡å¼µå­ã‹ã‚‰ç”»åƒå½¢å¼ã‚’åˆ¤æ–­
     function CheckFileExt(const FileName : string) : TBitmapExFileExt;
 
-    // GIF ƒtƒ@ƒCƒ‹“Ç‚İ‚İ
+    // GIF ãƒ•ã‚¡ã‚¤ãƒ«èª­ã¿è¾¼ã¿
     procedure LoadFromFileGif(const Filename: string);
-    // Jpeg ƒtƒ@ƒCƒ‹“Ç‚İ‚İ
+    // Jpeg ãƒ•ã‚¡ã‚¤ãƒ«èª­ã¿è¾¼ã¿
     procedure LoadFromFileJpg(const Filename: string);
-    // PNG ƒtƒ@ƒCƒ‹“Ç‚İ‚İ
+    // PNG ãƒ•ã‚¡ã‚¤ãƒ«èª­ã¿è¾¼ã¿
     procedure LoadFromFilePng(const Filename: string);
 
-    // GIF ƒtƒ@ƒCƒ‹‘‚«‚İ
+    // GIF ãƒ•ã‚¡ã‚¤ãƒ«æ›¸ãè¾¼ã¿
     procedure SaveToFileGif(const Filename: string);
-    // Jpeg ƒtƒ@ƒCƒ‹‘‚«‚İ
+    // Jpeg ãƒ•ã‚¡ã‚¤ãƒ«æ›¸ãè¾¼ã¿
     procedure SaveToFileJpg(const Filename: string);
-    // PNG ƒtƒ@ƒCƒ‹‘‚«‚İ
+    // PNG ãƒ•ã‚¡ã‚¤ãƒ«æ›¸ãè¾¼ã¿
     procedure SaveToFilePng(const Filename: string);
 
 
   public
-    { Public éŒ¾ }
+    { Public å®£è¨€ }
     constructor Create();override;
     procedure Clear();
 
     procedure AssignJpeg(jpeg : TJPEGImage);
     procedure AssignTransparent(Source : TBitmapEx);
-    // ƒtƒ@ƒCƒ‹‚ğ“Ç‚İ‚İ
+    // ãƒ•ã‚¡ã‚¤ãƒ«ã‚’èª­ã¿è¾¼ã¿
     procedure LoadFromFile(const Filename: string); override;
-    // ƒtƒ@ƒCƒ‹‚ğ“Ç‚İ‚İ
+    // ãƒ•ã‚¡ã‚¤ãƒ«ã‚’èª­ã¿è¾¼ã¿
     procedure SaveToFile(const Filename: string); override;
-    // w’è‚³‚ê‚½ƒrƒbƒgƒ}ƒbƒv‚ğƒAƒXƒyƒNƒg”ä‚ğˆÛ‚µ‚Äw’è‚³‚ê‚½ƒTƒCƒYˆÈ“à‚Å•`‰æ
+    // æŒ‡å®šã•ã‚ŒãŸãƒ“ãƒƒãƒˆãƒãƒƒãƒ—ã‚’ã‚¢ã‚¹ãƒšã‚¯ãƒˆæ¯”ã‚’ç¶­æŒã—ã¦æŒ‡å®šã•ã‚ŒãŸã‚µã‚¤ã‚ºä»¥å†…ã§æç”»
     procedure StretchDraw(const aWidth,aHeight : Integer;bmp : TBitmap);
-    // w’è‚³‚ê‚½ƒrƒbƒgƒ}ƒbƒv‚ğƒAƒXƒyƒNƒg”ä‚ğˆÛ‚µ‚Äw’è‚³‚ê‚½ƒTƒCƒY‚Å’†‰›‚É•`‰æ
+    // æŒ‡å®šã•ã‚ŒãŸãƒ“ãƒƒãƒˆãƒãƒƒãƒ—ã‚’ã‚¢ã‚¹ãƒšã‚¯ãƒˆæ¯”ã‚’ç¶­æŒã—ã¦æŒ‡å®šã•ã‚ŒãŸã‚µã‚¤ã‚ºã§ä¸­å¤®ã«æç”»
     procedure CenterDraw(const aWidth,aHeight : Integer;bmp : TBitmap);
 
-    // ”½“]‚µ‚Ä•`‰æ 0:”½“]–³‚µ 1: ¶‰E”½“]A2:ã‰º”½“] 3:ã‰º¶‰E”½“]
+    // åè»¢ã—ã¦æç”» 0:åè»¢ç„¡ã— 1: å·¦å³åè»¢ã€2:ä¸Šä¸‹åè»¢ 3:ä¸Šä¸‹å·¦å³åè»¢
     procedure DrawInvert(bmp : TBitmap;Mode : Integer=0);
 
-    // ”wŒiF‚Ég—p‚·‚éF
+    // èƒŒæ™¯è‰²ã«ä½¿ç”¨ã™ã‚‹è‰²
     property BackgroundColor : TColor read FBackgroundColor write FBackgroundColor;
 
     property Transparent : Boolean read FTransparent write FTransparent;
@@ -115,8 +115,8 @@ begin
     slFrom[y1] := bmp.ScanLine[y1];
     slTo[y1]   := ScanLine[y1];
   end;
-  for y1 := 0 to Height-1 do begin                // ‚‚³•ªƒ‹[ƒv
-    for x1 := 0 to Width-1 do begin               // ‰¡••ªƒ‹[ƒv
+  for y1 := 0 to Height-1 do begin                // é«˜ã•åˆ†ãƒ«ãƒ¼ãƒ—
+    for x1 := 0 to Width-1 do begin               // æ¨ªå¹…åˆ†ãƒ«ãƒ¼ãƒ—
       x2 := GetX(x1,Width,Mode);
       y2 := GetY(y1,Height,Mode);
       PFourthArray(slTo[y2])^[x2].R := PFourthArray(slFrom[y1])^[x1].R;
@@ -136,13 +136,13 @@ begin
   for y := 0 to Height-1 do begin
     Lines[y] := ScanLine[y];
   end;
-  for y := 0 to Height-1 do begin                // ‚‚³•ªƒ‹[ƒv
-    for x := 0 to Width-1 do begin               // ‰¡••ªƒ‹[ƒv
+  for y := 0 to Height-1 do begin                // é«˜ã•åˆ†ãƒ«ãƒ¼ãƒ—
+    for x := 0 to Width-1 do begin               // æ¨ªå¹…åˆ†ãƒ«ãƒ¼ãƒ—
 
-      PFourthArray(Lines[y])^[x].R := 0; // •`‰ææRGB‰æ‘fƒf[ƒ^‚ğæ“¾
+      PFourthArray(Lines[y])^[x].R := 0; // æç”»å…ˆRGBç”»ç´ ãƒ‡ãƒ¼ã‚¿ã‚’å–å¾—
       PFourthArray(Lines[y])^[x].G := 0;
       PFourthArray(Lines[y])^[x].B := 0;
-      PFourthArray(Lines[y])^[x].A := 0;  // ƒ¿ƒ`ƒƒƒ“ƒlƒ‹‚Íè“®ˆ—‚Ì‚½‚ß‚È‚¢‚à‚Ì‚Æ‚·‚é
+      PFourthArray(Lines[y])^[x].A := 0;  // Î±ãƒãƒ£ãƒ³ãƒãƒ«ã¯æ‰‹å‹•å‡¦ç†ã®ãŸã‚ãªã„ã‚‚ã®ã¨ã™ã‚‹
     end;
   end;
   AlphaFormat := afDefined;
@@ -312,7 +312,7 @@ begin
   }
 end;
 
-// ƒAƒXƒyƒNƒgƒ‹”ä‚ğ‡‚í‚¹‚½”ÍˆÍ‚ğæ“¾ r : •ÏŒ`æ‚Æ‚µ‚Ä‚Ì”ÍˆÍ aWidth,aHeight:Œ³‰æ‘œƒtƒ@ƒCƒ‹
+// ã‚¢ã‚¹ãƒšã‚¯ãƒˆãƒ«æ¯”ã‚’åˆã‚ã›ãŸç¯„å›²ã‚’å–å¾— r : å¤‰å½¢å…ˆã¨ã—ã¦ã®ç¯„å›² aWidth,aHeight:å…ƒç”»åƒãƒ•ã‚¡ã‚¤ãƒ«
 procedure RectToStreachRect(var r : TRect;const aWidth,aHeight : Integer);
 //var
 //  xh,yh : Integer;

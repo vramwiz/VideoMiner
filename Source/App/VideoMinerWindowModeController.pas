@@ -1,8 +1,8 @@
-unit VideoMinerWindowModeController;
+﻿unit VideoMinerWindowModeController;
 
-// �g�Ȃ����C���t�H�[���̕\�����[�h�ƃT�C�Y�L����S������B
-// fullscreen / boss mode / �ʏ�E�B���h�E bounds ������ controller �����L���A
-// ���C���t�H�[�����ɂ� Windows ���b�Z�[�W�� UI �C�x���g�̓����������c���B
+// 枠なしメインフォームの表示モードとサイズ記憶を担当する。
+// fullscreen / boss mode / 通常ウィンドウ bounds をこの controller が所有し、
+// メインフォーム側には Windows メッセージや UI イベントの入口だけを残す。
 
 interface
 
@@ -12,46 +12,46 @@ uses
   VideoMinerVideoView;
 
 type
-  // �E�B���h�E���[�h�ύX���ɕK�v�ȃA�v�����������Ăі߂�
+  // ウィンドウモード変更時に必要なアプリ側処理を呼び戻す
   TVideoMinerWindowModeAction = procedure of object;
 
   TVideoMinerWindowModeController = class
   private
-    FBossMode           : Boolean;                       // �U����ʂœ�����B���Ă��邩
-    FForm               : TCustomForm;                   // �\�����[�h��؂�ւ���Ώۃt�H�[��
-    FFullScreen         : Boolean;                       // �Ǝ��S��ʕ\������
-    FMaximizeLabel      : TLabel;                        // �ő剻�{�^���\���p���x��
-    FNormalWindowBounds : TVideoMinerWindowBounds;       // �S��ʉ�������I�����Ɏg���ʏ�E�B���h�E�ʒu
-    FStopPlayback       : TVideoMinerWindowModeAction;   // boss mode �֓���O�ɍĐ����~�߂鏈��
-    FTitleBar           : TPanel;                        // �S��ʂ� boss mode �ŕ\����؂�ւ���Ǝ��^�C�g���o�[
-    FVideoView          : TVideoMinerVideoView;          // �\�����[�h�𓮉�T�[�t�F�X�֓`���鑋��
+    FBossMode           : Boolean;                       // 偽装画面で動画を隠しているか
+    FForm               : TCustomForm;                   // 表示モードを切り替える対象フォーム
+    FFullScreen         : Boolean;                       // 独自全画面表示中か
+    FMaximizeLabel      : TLabel;                        // 最大化ボタン表示用ラベル
+    FNormalWindowBounds : TVideoMinerWindowBounds;       // 全画面解除時や終了時に使う通常ウィンドウ位置
+    FStopPlayback       : TVideoMinerWindowModeAction;   // boss mode へ入る前に再生を止める処理
+    FTitleBar           : TPanel;                        // 全画面や boss mode で表示を切り替える独自タイトルバー
+    FVideoView          : TVideoMinerVideoView;          // 表示モードを動画サーフェスへ伝える窓口
   public
-    // ����ΏۃR���g���[���ƁA�K�v�ȃA�v���� callback ���󂯎��
+    // 操作対象コントロールと、必要なアプリ側 callback を受け取る
     constructor Create(Form: TCustomForm; TitleBar: TPanel;
       MaximizeLabel: TLabel; VideoView: TVideoMinerVideoView;
       StopPlayback: TVideoMinerWindowModeAction);
-    // �ۑ��ς݂̒ʏ�E�B���h�E�ʒu���N�����̃t�H�[���֔��f����
+    // 保存済みの通常ウィンドウ位置を起動時のフォームへ反映する
     procedure ApplySavedWindowBounds;
-    // �Đ����~�߂ē���ʂ��U���\���֐؂�ւ���
+    // 再生を止めて動画面を偽装表示へ切り替える
     procedure EnterBossMode;
-    // ���݂̒ʏ�E�B���h�E�ʒu���L�����A�Ώۃ��j�^�����ς��֍L����
+    // 現在の通常ウィンドウ位置を記憶し、対象モニタいっぱいへ広げる
     procedure EnterFullScreen;
-    // �U���\�����������A���݂̉�ʃ��[�h�ɍ����^�C�g���o�[��Ԃ֖߂�
+    // 偽装表示を解除し、現在の画面モードに合うタイトルバー状態へ戻す
     procedure ExitBossMode;
-    // �S��ʂ��������A�L�����Ă����ʏ�E�B���h�E�ʒu�֖߂�
+    // 全画面を解除し、記憶していた通常ウィンドウ位置へ戻す
     procedure ExitFullScreen;
-    // �t�H�[���ړ����ɒʏ�E�B���h�E�ʒu���X�V����
+    // フォーム移動時に通常ウィンドウ位置を更新する
     procedure HandleMove;
-    // �t�H�[���T�C�Y�ύX���Ƀ{�^���\���A���T�C�Y�G�b�W�A�ʒu�L�����X�V����
+    // フォームサイズ変更時にボタン表示、リサイズエッジ、位置記憶を更新する
     procedure HandleSize;
-    // �g�Ȃ��t�H�[���̒[/�p���T�C�Y�p hit-test ��⊮����
+    // 枠なしフォームの端/角リサイズ用 hit-test を補完する
     procedure HitTestBorderlessResize(const ScreenPoint: TPoint;
       var HitTestResult: LRESULT);
-    // �I�����ɕۑ����ׂ��ʏ�E�B���h�E�ʒu���m�肵�Đݒ�֏�������
+    // 終了時に保存すべき通常ウィンドウ位置を確定して設定へ書き込む
     procedure SaveWindowBounds;
-    // �Ǝ��S��ʕ\����؂�ւ���
+    // 独自全画面表示を切り替える
     procedure ToggleFullScreen;
-    // ���݂̍ő剻��Ԃɍ��킹�ēƎ��ő剻�{�^���̌����ڂ��X�V����
+    // 現在の最大化状態に合わせて独自最大化ボタンの見た目を更新する
     procedure UpdateMaximizeButton;
     property BossMode: Boolean read FBossMode;
     property FullScreen: Boolean read FFullScreen;

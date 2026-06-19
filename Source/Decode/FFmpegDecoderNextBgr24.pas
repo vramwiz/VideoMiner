@@ -1,14 +1,14 @@
-unit FFmpegDecoderNextBgr24;
+﻿unit FFmpegDecoderNextBgr24;
 
-// ���݈ʒu���玟�̓���t���[����ǂ݁ABGR24 �o�b�t�@�֕ϊ�����B
-// �Đ����̏������f�R�[�h�p�ŁA�C�ӃV�[�N������ Seek �n���j�b�g�֕�����B
+// 現在位置から次の動画フレームを読み、BGR24 バッファへ変換する。
+// 再生中の順方向デコード用で、任意シーク処理は Seek 系ユニットへ分ける。
 
 interface
 
 uses
   FFmpegDecoderContext;
 
-// ���̓���t���[����ǂ݁A�K�v�Ȃ� BGR24 �o�b�t�@�֕ϊ�����B
+// 次の動画フレームを読み、必要なら BGR24 バッファへ変換する。
 function DecodeNextFrameToBgr24Optional(
   Context: TFFmpegDecoderContext;
   Buffer: Pointer;
@@ -24,7 +24,7 @@ uses
   System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegStreamInfo;
 
 
-// ���̓���t���[����ǂ݁A�K�v�Ȃ� BGR24 �o�b�t�@�֕ϊ�����B
+// 次の動画フレームを読み、必要なら BGR24 バッファへ変換する。
 function DecodeNextFrameToBgr24Optional(
   Context: TFFmpegDecoderContext;
   Buffer: Pointer;

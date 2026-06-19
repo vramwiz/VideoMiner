@@ -1,7 +1,7 @@
-unit VideoMinerWindowChrome;
+ï»¿unit VideoMinerWindowChrome;
 
-// ˜g‚È‚µƒtƒH[ƒ€‚ğ’ÊíƒEƒBƒ“ƒhƒE‚ç‚µ‚­ˆµ‚¤‚½‚ß‚Ì Windows ˜AŒg‚ğ‚Ü‚Æ‚ß‚éB
-// ì¬ƒpƒ‰ƒ[ƒ^A”ñƒNƒ‰ƒCƒAƒ“ƒg—ÌˆæAƒŠƒTƒCƒY”»’èA’ÊíÀ•W‚Ì‹L‰¯‚ğ’S“–‚·‚éB
+// æ ãªã—ãƒ•ã‚©ãƒ¼ãƒ ã‚’é€šå¸¸ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã‚‰ã—ãæ‰±ã†ãŸã‚ã® Windows é€£æºã‚’ã¾ã¨ã‚ã‚‹ã€‚
+// ä½œæˆãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ã€éã‚¯ãƒ©ã‚¤ã‚¢ãƒ³ãƒˆé ˜åŸŸã€ãƒªã‚µã‚¤ã‚ºåˆ¤å®šã€é€šå¸¸æ™‚åº§æ¨™ã®è¨˜æ†¶ã‚’æ‹…å½“ã™ã‚‹ã€‚
 
 interface
 
@@ -10,42 +10,42 @@ uses
   VideoMinerSettings;
 
 const
-  VIDEO_MINER_RESIZE_BORDER = 12; // ˜g‚È‚µƒtƒH[ƒ€’[‚ÅƒŠƒTƒCƒY”»’è‚·‚é• px
+  VIDEO_MINER_RESIZE_BORDER = 12; // æ ãªã—ãƒ•ã‚©ãƒ¼ãƒ ç«¯ã§ãƒªã‚µã‚¤ã‚ºåˆ¤å®šã™ã‚‹å¹… px
 
-// ˜g‚È‚µ‚Å‚àÅ¬‰»/Å‘å‰»‚ğ‚ÂƒgƒbƒvƒŒƒxƒ‹ƒEƒBƒ“ƒhƒE‚Æ‚µ‚Äì‚é
+// æ ãªã—ã§ã‚‚æœ€å°åŒ–/æœ€å¤§åŒ–ã‚’æŒã¤ãƒˆãƒƒãƒ—ãƒ¬ãƒ™ãƒ«ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã¨ã—ã¦ä½œã‚‹
 procedure ConfigureBorderlessCreateParams(var Params: TCreateParams);
-// •W€˜g‚Ì”ñƒNƒ‰ƒCƒAƒ“ƒg—Ìˆæ‚ğÁ‚µAƒNƒ‰ƒCƒAƒ“ƒg—Ìˆæ‚¾‚¯‚Å•`‰æ‚³‚¹‚é
+// æ¨™æº–æ ã®éã‚¯ãƒ©ã‚¤ã‚¢ãƒ³ãƒˆé ˜åŸŸã‚’æ¶ˆã—ã€ã‚¯ãƒ©ã‚¤ã‚¢ãƒ³ãƒˆé ˜åŸŸã ã‘ã§æç”»ã•ã›ã‚‹
 procedure HandleBorderlessNCCalcSize(var Message: TMessage);
-// ˜g‚È‚µƒtƒH[ƒ€‚Ì’[/Šp‚ğ Windows •W€ƒŠƒTƒCƒY‚ÌƒqƒbƒgƒeƒXƒg‚Ö•ÏŠ·‚·‚é
+// æ ãªã—ãƒ•ã‚©ãƒ¼ãƒ ã®ç«¯/è§’ã‚’ Windows æ¨™æº–ãƒªã‚µã‚¤ã‚ºã®ãƒ’ãƒƒãƒˆãƒ†ã‚¹ãƒˆã¸å¤‰æ›ã™ã‚‹
 procedure HitTestBorderlessResize(Form: TCustomForm; FullScreen: Boolean;
   BorderSize: Integer; const ScreenPoint: TPoint; var HitTestResult: LRESULT);
-// •Û‘¶Ï‚İ‚Ì’ÊíƒEƒBƒ“ƒhƒEÀ•W‚ğ‰æ–Ê“à‚Ö•â³‚µ‚Ä“K—p‚·‚é
+// ä¿å­˜æ¸ˆã¿ã®é€šå¸¸ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦åº§æ¨™ã‚’ç”»é¢å†…ã¸è£œæ­£ã—ã¦é©ç”¨ã™ã‚‹
 procedure ApplySavedWindowBounds(Form: TCustomForm;
   var NormalWindowBounds: TVideoMinerWindowBounds);
-// ’Êí•\¦‚¾‚¯AŸ‰ñ•œŒ³‚â•Û‘¶‚Ég‚¤ƒEƒBƒ“ƒhƒEÀ•W‚ğŠo‚¦‚é
+// é€šå¸¸è¡¨ç¤ºæ™‚ã ã‘ã€æ¬¡å›å¾©å…ƒã‚„ä¿å­˜ã«ä½¿ã†ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦åº§æ¨™ã‚’è¦šãˆã‚‹
 procedure RememberNormalWindowBounds(Form: TCustomForm; FullScreen: Boolean;
   var NormalWindowBounds: TVideoMinerWindowBounds);
-// I—¹‘O‚ÉÅ‘å‰»ó‘Ô‚ğ’Êí‰»‚µA•Û‘¶‚Ég‚¦‚éÀ•W‚ğŠm’è‚·‚é
+// çµ‚äº†å‰ã«æœ€å¤§åŒ–çŠ¶æ…‹ã‚’é€šå¸¸åŒ–ã—ã€ä¿å­˜ã«ä½¿ãˆã‚‹åº§æ¨™ã‚’ç¢ºå®šã™ã‚‹
 procedure RestoreAndRememberNormalWindowBoundsForSave(Form: TCustomForm;
   FullScreen: Boolean; var NormalWindowBounds: TVideoMinerWindowBounds);
 
 implementation
 
-// •W€ƒ^ƒCƒgƒ‹ƒo[‚Æ‘¾˜g‚ğŠO‚µ‚Â‚ÂAƒ^ƒXƒNƒo[‘€ì‚É•K—v‚ÈƒXƒ^ƒCƒ‹‚Íc‚·
+// æ¨™æº–ã‚¿ã‚¤ãƒˆãƒ«ãƒãƒ¼ã¨å¤ªæ ã‚’å¤–ã—ã¤ã¤ã€ã‚¿ã‚¹ã‚¯ãƒãƒ¼æ“ä½œã«å¿…è¦ãªã‚¹ã‚¿ã‚¤ãƒ«ã¯æ®‹ã™
 procedure ConfigureBorderlessCreateParams(var Params: TCreateParams);
 begin
   Params.Style := (Params.Style or WS_MINIMIZEBOX or WS_MAXIMIZEBOX) and
     not WS_CAPTION and not WS_THICKFRAME;
 end;
 
-// WM_NCCALCSIZE ‚É 0 ‚ğ•Ô‚µA•W€˜g•ª‚Ì—]”’‚ğì‚ç‚¹‚È‚¢
+// WM_NCCALCSIZE ã« 0 ã‚’è¿”ã—ã€æ¨™æº–æ åˆ†ã®ä½™ç™½ã‚’ä½œã‚‰ã›ãªã„
 procedure HandleBorderlessNCCalcSize(var Message: TMessage);
 begin
   if Message.WParam <> 0 then
     Message.Result := 0;
 end;
 
-// ƒNƒ‰ƒCƒAƒ“ƒgÀ•W‚Ì’[/Šp‚¾‚¯‚ğƒŠƒTƒCƒY‘ÎÛ‚É‚µA‘S‰æ–Ê’†‚Í–³Œø‰»‚·‚é
+// ã‚¯ãƒ©ã‚¤ã‚¢ãƒ³ãƒˆåº§æ¨™ã®ç«¯/è§’ã ã‘ã‚’ãƒªã‚µã‚¤ã‚ºå¯¾è±¡ã«ã—ã€å…¨ç”»é¢ä¸­ã¯ç„¡åŠ¹åŒ–ã™ã‚‹
 procedure HitTestBorderlessResize(Form: TCustomForm; FullScreen: Boolean;
   BorderSize: Integer; const ScreenPoint: TPoint; var HitTestResult: LRESULT);
 var
@@ -77,7 +77,7 @@ begin
     HitTestResult := HTRIGHT;
 end;
 
-// •Û‘¶À•W‚ªŒ»İ‚Ìƒ‚ƒjƒ^[ì‹Æ—Ìˆæ‚©‚çŠO‚ê‚Ä‚àŒ©¸‚í‚È‚¢‚æ‚¤‚É•â³‚·‚é
+// ä¿å­˜åº§æ¨™ãŒç¾åœ¨ã®ãƒ¢ãƒ‹ã‚¿ãƒ¼ä½œæ¥­é ˜åŸŸã‹ã‚‰å¤–ã‚Œã¦ã‚‚è¦‹å¤±ã‚ãªã„ã‚ˆã†ã«è£œæ­£ã™ã‚‹
 procedure ApplySavedWindowBounds(Form: TCustomForm;
   var NormalWindowBounds: TVideoMinerWindowBounds);
 var
@@ -124,7 +124,7 @@ begin
   RememberNormalWindowBounds(Form, False, NormalWindowBounds);
 end;
 
-// Å‘å‰»/Å¬‰»/‘S‰æ–Ê‚Ìˆê“I‚ÈÀ•W‚ğ•Û‘¶‚µ‚È‚¢‚æ‚¤’Êí•\¦‚¾‚¯‚ğÌ—p‚·‚é
+// æœ€å¤§åŒ–/æœ€å°åŒ–/å…¨ç”»é¢ã®ä¸€æ™‚çš„ãªåº§æ¨™ã‚’ä¿å­˜ã—ãªã„ã‚ˆã†é€šå¸¸è¡¨ç¤ºã ã‘ã‚’æ¡ç”¨ã™ã‚‹
 procedure RememberNormalWindowBounds(Form: TCustomForm; FullScreen: Boolean;
   var NormalWindowBounds: TVideoMinerWindowBounds);
 begin
@@ -142,7 +142,7 @@ begin
   NormalWindowBounds.Height := Form.Height;
 end;
 
-// I—¹•Û‘¶‚ÅÅ‘å‰»Œã‚Ì‰¼‘zƒTƒCƒY‚ğE‚í‚È‚¢‚æ‚¤A’Êí•\¦‚Ö–ß‚µ‚Ä‚©‚çŠo‚¦‚é
+// çµ‚äº†æ™‚ä¿å­˜ã§æœ€å¤§åŒ–å¾Œã®ä»®æƒ³ã‚µã‚¤ã‚ºã‚’æ‹¾ã‚ãªã„ã‚ˆã†ã€é€šå¸¸è¡¨ç¤ºã¸æˆ»ã—ã¦ã‹ã‚‰è¦šãˆã‚‹
 procedure RestoreAndRememberNormalWindowBoundsForSave(Form: TCustomForm;
   FullScreen: Boolean; var NormalWindowBounds: TVideoMinerWindowBounds);
 begin

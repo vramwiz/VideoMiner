@@ -1,21 +1,21 @@
-unit VideoMinerDebugLog;
+ï»¿unit VideoMinerDebugLog;
 
-// Debug ƒrƒ‹ƒhê—p‚Ì’²¸ƒƒOo—Í‚ğ’S“–‚·‚éB
-// ’ÊíƒƒO‚Æ slow log ‚ğ“¯‚¶ƒtƒ@ƒCƒ‹‚Öo‚µARelease ƒrƒ‹ƒh‚Å‚Í‰½‚à‚µ‚È‚¢B
+// Debug ãƒ“ãƒ«ãƒ‰å°‚ç”¨ã®èª¿æŸ»ãƒ­ã‚°å‡ºåŠ›ã‚’æ‹…å½“ã™ã‚‹ã€‚
+// é€šå¸¸ãƒ­ã‚°ã¨ slow log ã‚’åŒã˜ãƒ•ã‚¡ã‚¤ãƒ«ã¸å‡ºã—ã€Release ãƒ“ãƒ«ãƒ‰ã§ã¯ä½•ã‚‚ã—ãªã„ã€‚
 
 interface
 
-// ƒƒOƒtƒ@ƒCƒ‹‚ğíœ‚µAíœ——R‚ğæ“ªs‚Æ‚µ‚Ä‹L˜^‚·‚é
+// ãƒ­ã‚°ãƒ•ã‚¡ã‚¤ãƒ«ã‚’å‰Šé™¤ã—ã€å‰Šé™¤ç†ç”±ã‚’å…ˆé ­è¡Œã¨ã—ã¦è¨˜éŒ²ã™ã‚‹
 procedure ClearVideoMinerDebugLog(const Reason: string);
-// Ú×’²¸—pƒƒO‚ª—LŒø‚Èê‡‚¾‚¯ 1 so—Í‚·‚é
+// è©³ç´°èª¿æŸ»ç”¨ãƒ­ã‚°ãŒæœ‰åŠ¹ãªå ´åˆã ã‘ 1 è¡Œå‡ºåŠ›ã™ã‚‹
 procedure WriteVideoMinerDebugLog(const Msg: string);
-// ’x‚¢ˆ—‚Ì’²¸ƒƒO‚ª—LŒø‚Èê‡‚¾‚¯ 1 so—Í‚·‚é
+// é…ã„å‡¦ç†ã®èª¿æŸ»ãƒ­ã‚°ãŒæœ‰åŠ¹ãªå ´åˆã ã‘ 1 è¡Œå‡ºåŠ›ã™ã‚‹
 procedure WriteVideoMinerSlowLog(const Msg: string);
-// Ú×’²¸—pƒƒO‚ª—LŒø‚©•Ô‚·
+// è©³ç´°èª¿æŸ»ç”¨ãƒ­ã‚°ãŒæœ‰åŠ¹ã‹è¿”ã™
 function VideoMinerDebugLogEnabled: Boolean;
-// slow log ‚ª—LŒø‚©•Ô‚·
+// slow log ãŒæœ‰åŠ¹ã‹è¿”ã™
 function VideoMinerSlowLogEnabled: Boolean;
-// VideoMiner ‚Ì’²¸ƒƒOƒtƒ@ƒCƒ‹–¼‚ğ•Ô‚·
+// VideoMiner ã®èª¿æŸ»ãƒ­ã‚°ãƒ•ã‚¡ã‚¤ãƒ«åã‚’è¿”ã™
 function VideoMinerDebugLogFileName: string;
 
 implementation
@@ -24,13 +24,14 @@ uses
   Winapi.Windows, System.SysUtils;
 
 const
-  DEBUG_LOG_ENABLED = False; // –ˆ tick Œn‚ÌÚ×ƒƒO‚ğo‚·‚©
-  SLOW_LOG_ENABLED  = True;  // ’x‚¢ˆ—‚¾‚¯‚ğ slow log ‚Æ‚µ‚Äo‚·‚©
+  DEBUG_LOG_ENABLED = False; // æ¯ tick ç³»ã®è©³ç´°ãƒ­ã‚°ã‚’å‡ºã™ã‹
+  SLOW_LOG_ENABLED  = True;  // é…ã„å‡¦ç†ã ã‘ã‚’ slow log ã¨ã—ã¦å‡ºã™ã‹
 
 function VideoMinerDebugLogEnabled: Boolean;
 begin
 {$IFDEF DEBUG}
-  Result := DEBUG_LOG_ENABLED;
+  Result := DEBUG_LOG_ENABLED or SameText(GetEnvironmentVariable(
+    'VIDEOMINER_DEBUG_LOG'), '1');
 {$ELSE}
   Result := False;
 {$ENDIF}
@@ -39,20 +40,21 @@ end;
 function VideoMinerSlowLogEnabled: Boolean;
 begin
 {$IFDEF DEBUG}
-  Result := SLOW_LOG_ENABLED;
+  Result := SLOW_LOG_ENABLED or SameText(GetEnvironmentVariable(
+    'VIDEOMINER_SLOW_LOG'), '1') or VideoMinerDebugLogEnabled;
 {$ELSE}
   Result := False;
 {$ENDIF}
 end;
 
-// %TEMP% ”z‰º‚ÌŒÅ’èƒtƒ@ƒCƒ‹‚ÖÄ¶’²¸ƒƒO‚ğW–ñ‚·‚é
+// %TEMP% é…ä¸‹ã®å›ºå®šãƒ•ã‚¡ã‚¤ãƒ«ã¸å†ç”Ÿèª¿æŸ»ãƒ­ã‚°ã‚’é›†ç´„ã™ã‚‹
 function VideoMinerDebugLogFileName: string;
 begin
   Result := IncludeTrailingPathDelimiter(GetEnvironmentVariable('TEMP')) +
     'VideoMiner_playback_debug.log';
 end;
 
-// Debug ƒrƒ‹ƒh‚Å OutputDebugString ‚ÆƒƒOƒtƒ@ƒCƒ‹‚Ì—¼•û‚Ö 1 so—Í‚·‚é
+// Debug ãƒ“ãƒ«ãƒ‰ã§ OutputDebugString ã¨ãƒ­ã‚°ãƒ•ã‚¡ã‚¤ãƒ«ã®ä¸¡æ–¹ã¸ 1 è¡Œå‡ºåŠ›ã™ã‚‹
 procedure WriteVideoMinerLogLine(const Msg: string);
 {$IFDEF DEBUG}
 var

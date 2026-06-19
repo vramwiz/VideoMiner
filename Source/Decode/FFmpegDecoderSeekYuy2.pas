@@ -1,14 +1,14 @@
-unit FFmpegDecoderSeekYuy2;
+﻿unit FFmpegDecoderSeekYuy2;
 
-// �w�莞���փV�[�N���A����t���[���� YUY2 �o�b�t�@�֕ϊ�����B
-// QSV �]�����܂ތ`���ʂ̔C�ӈʒu�擾�����Ƃ��� BGRX32 �n���番������B
+// 指定時刻へシークし、動画フレームを YUY2 バッファへ変換する。
+// QSV 転送を含む形式別の任意位置取得処理として BGRX32 系から分離する。
 
 interface
 
 uses
   FFmpegDecoderContext;
 
-// �w�莞���̓���t���[���� YUY2 �o�b�t�@�֎擾����B
+// 指定時刻の動画フレームを YUY2 バッファへ取得する。
 function DecodeFrameToYuy2(
   Context: TFFmpegDecoderContext;
   PositionMs: Integer;
@@ -23,7 +23,7 @@ uses
   System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo;
 
 
-// �w�莞���̓���t���[���� YUY2 �o�b�t�@�֎擾����B
+// 指定時刻の動画フレームを YUY2 バッファへ取得する。
 function DecodeFrameToYuy2(
   Context: TFFmpegDecoderContext;
   PositionMs: Integer;

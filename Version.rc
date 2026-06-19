@@ -1,4 +1,4 @@
-#include "Version.inc"
+﻿#include "Version.inc"
 
 1 VERSIONINFO
 FILEVERSION VM_FILE_VERSION

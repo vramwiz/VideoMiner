@@ -1,35 +1,35 @@
-unit FolderWatch;
+ï»¿unit FolderWatch;
 
 {
   Unit Name  : FolderWatch
 
-  ŠT—v:
-    ‚±‚Ìƒ†ƒjƒbƒg‚Íw’è‚³‚ê‚½ƒtƒHƒ‹ƒ_‚ğŠÄ‹‚µAƒtƒ@ƒCƒ‹‚Ì’Ç‰ÁEíœEXV‚ğ
-    ©“®‚ÅŒŸo‚µ‚ÄƒCƒxƒ“ƒg‚Å’Ê’m‚·‚é‹@”\‚ğ’ñ‹Ÿ‚µ‚Ü‚·B
+  æ¦‚è¦:
+    ã“ã®ãƒ¦ãƒ‹ãƒƒãƒˆã¯æŒ‡å®šã•ã‚ŒãŸãƒ•ã‚©ãƒ«ãƒ€ã‚’ç›£è¦–ã—ã€ãƒ•ã‚¡ã‚¤ãƒ«ã®è¿½åŠ ãƒ»å‰Šé™¤ãƒ»æ›´æ–°ã‚’
+    è‡ªå‹•ã§æ¤œå‡ºã—ã¦ã‚¤ãƒ™ãƒ³ãƒˆã§é€šçŸ¥ã™ã‚‹æ©Ÿèƒ½ã‚’æä¾›ã—ã¾ã™ã€‚
 
-  å‚ÈƒNƒ‰ƒX:
+  ä¸»ãªã‚¯ãƒ©ã‚¹:
     - TFolderWatch
-        ƒtƒHƒ‹ƒ_ŠÄ‹‚ÌƒƒCƒ“ƒNƒ‰ƒXBƒvƒƒpƒeƒB‚ğ’Ê‚¶‚ÄŠÄ‹‘ÎÛƒtƒHƒ‹ƒ_‚â
-        ƒTƒuƒtƒHƒ‹ƒ_‚ÌŠÄ‹‰Â”ÛAŠeíƒCƒxƒ“ƒgƒnƒ“ƒhƒ‰‚ğİ’è‰Â”\‚Å‚·B
+        ãƒ•ã‚©ãƒ«ãƒ€ç›£è¦–ã®ãƒ¡ã‚¤ãƒ³ã‚¯ãƒ©ã‚¹ã€‚ãƒ—ãƒ­ãƒ‘ãƒ†ã‚£ã‚’é€šã˜ã¦ç›£è¦–å¯¾è±¡ãƒ•ã‚©ãƒ«ãƒ€ã‚„
+        ã‚µãƒ–ãƒ•ã‚©ãƒ«ãƒ€ã®ç›£è¦–å¯å¦ã€å„ç¨®ã‚¤ãƒ™ãƒ³ãƒˆãƒãƒ³ãƒ‰ãƒ©ã‚’è¨­å®šå¯èƒ½ã§ã™ã€‚
 
     - TFolderWatchThread
-        ƒoƒbƒNƒOƒ‰ƒEƒ“ƒh‚ÅŠÄ‹‚ğÀs‚·‚éƒXƒŒƒbƒhƒNƒ‰ƒXBˆê’èŠÔŠu‚ÅƒtƒHƒ‹ƒ_‚ğƒXƒLƒƒƒ“‚µA
-        ‘O‰ñ‚ÌƒXƒiƒbƒvƒVƒ‡ƒbƒg‚Æ”äŠr‚µ‚Ä·•ª‚ğŒŸo‚µ‚Ü‚·B
+        ãƒãƒƒã‚¯ã‚°ãƒ©ã‚¦ãƒ³ãƒ‰ã§ç›£è¦–ã‚’å®Ÿè¡Œã™ã‚‹ã‚¹ãƒ¬ãƒƒãƒ‰ã‚¯ãƒ©ã‚¹ã€‚ä¸€å®šé–“éš”ã§ãƒ•ã‚©ãƒ«ãƒ€ã‚’ã‚¹ã‚­ãƒ£ãƒ³ã—ã€
+        å‰å›ã®ã‚¹ãƒŠãƒƒãƒ—ã‚·ãƒ§ãƒƒãƒˆã¨æ¯”è¼ƒã—ã¦å·®åˆ†ã‚’æ¤œå‡ºã—ã¾ã™ã€‚
 
-  ƒCƒxƒ“ƒg:
-    - OnFileAdd:     ƒtƒ@ƒCƒ‹‚ª’Ç‰Á‚³‚ê‚½‚Æ‚«‚É”­¶‚µ‚Ü‚·B
-    - OnFileDelete:  ƒtƒ@ƒCƒ‹‚ªíœ‚³‚ê‚½‚Æ‚«‚É”­¶‚µ‚Ü‚·B
-    - OnFileUpdate:  Šù‘¶ƒtƒ@ƒCƒ‹‚ªXV‚³‚ê‚½‚Æ‚«‚É”­¶‚µ‚Ü‚·B
-    - OnFileChange:  ã‹L‚·‚×‚Ä‚Ì•ÏXi’Ç‰ÁEíœEXVj‚ğ‚Ü‚Æ‚ß‚Ä’Ê’m‚µ‚Ü‚·B
+  ã‚¤ãƒ™ãƒ³ãƒˆ:
+    - OnFileAdd:     ãƒ•ã‚¡ã‚¤ãƒ«ãŒè¿½åŠ ã•ã‚ŒãŸã¨ãã«ç™ºç”Ÿã—ã¾ã™ã€‚
+    - OnFileDelete:  ãƒ•ã‚¡ã‚¤ãƒ«ãŒå‰Šé™¤ã•ã‚ŒãŸã¨ãã«ç™ºç”Ÿã—ã¾ã™ã€‚
+    - OnFileUpdate:  æ—¢å­˜ãƒ•ã‚¡ã‚¤ãƒ«ãŒæ›´æ–°ã•ã‚ŒãŸã¨ãã«ç™ºç”Ÿã—ã¾ã™ã€‚
+    - OnFileChange:  ä¸Šè¨˜ã™ã¹ã¦ã®å¤‰æ›´ï¼ˆè¿½åŠ ãƒ»å‰Šé™¤ãƒ»æ›´æ–°ï¼‰ã‚’ã¾ã¨ã‚ã¦é€šçŸ¥ã—ã¾ã™ã€‚
 
-  ’ˆÓ“_:
-    - ƒXƒŒƒbƒh‚ÅƒtƒHƒ‹ƒ_‚ğ’èŠúƒXƒLƒƒƒ“‚·‚é•û®‚Å‚ ‚é‚½‚ßA
-      ƒtƒ@ƒCƒ‹ƒVƒXƒeƒ€‚Ì’Ê’mAPIiFindFirstChangeNotification “™j‚Íg—p‚µ‚Ä‚¢‚Ü‚¹‚ñB
-    - ƒXƒLƒƒƒ“ŠÔŠu‚â’Ê’m‚Ì—±“x‚Í“à•”À‘•‚ÉˆË‘¶‚µ‚Ü‚·B
-    - ƒXƒŒƒbƒh‚ÍƒoƒbƒNƒOƒ‰ƒEƒ“ƒh‚ÅÀs‚³‚ê‚Ü‚·‚ªAƒCƒxƒ“ƒgƒnƒ“ƒhƒ‰‚Ìˆ—‚ª
-      ƒƒCƒ“ƒXƒŒƒbƒh‚Å‚ ‚é‚±‚Æ‚Í•ÛØ‚³‚ê‚Ü‚¹‚ñi•K—v‚É‰‚¶‚Ä“¯Šúˆ—‚ğs‚Á‚Ä‚­‚¾‚³‚¢jB
+  æ³¨æ„ç‚¹:
+    - ã‚¹ãƒ¬ãƒƒãƒ‰ã§ãƒ•ã‚©ãƒ«ãƒ€ã‚’å®šæœŸã‚¹ã‚­ãƒ£ãƒ³ã™ã‚‹æ–¹å¼ã§ã‚ã‚‹ãŸã‚ã€
+      ãƒ•ã‚¡ã‚¤ãƒ«ã‚·ã‚¹ãƒ†ãƒ ã®é€šçŸ¥APIï¼ˆFindFirstChangeNotification ç­‰ï¼‰ã¯ä½¿ç”¨ã—ã¦ã„ã¾ã›ã‚“ã€‚
+    - ã‚¹ã‚­ãƒ£ãƒ³é–“éš”ã‚„é€šçŸ¥ã®ç²’åº¦ã¯å†…éƒ¨å®Ÿè£…ã«ä¾å­˜ã—ã¾ã™ã€‚
+    - ã‚¹ãƒ¬ãƒƒãƒ‰ã¯ãƒãƒƒã‚¯ã‚°ãƒ©ã‚¦ãƒ³ãƒ‰ã§å®Ÿè¡Œã•ã‚Œã¾ã™ãŒã€ã‚¤ãƒ™ãƒ³ãƒˆãƒãƒ³ãƒ‰ãƒ©ã®å‡¦ç†ãŒ
+      ãƒ¡ã‚¤ãƒ³ã‚¹ãƒ¬ãƒƒãƒ‰ã§ã‚ã‚‹ã“ã¨ã¯ä¿è¨¼ã•ã‚Œã¾ã›ã‚“ï¼ˆå¿…è¦ã«å¿œã˜ã¦åŒæœŸå‡¦ç†ã‚’è¡Œã£ã¦ãã ã•ã„ï¼‰ã€‚
 
-  —˜—p—á:
+  åˆ©ç”¨ä¾‹:
     var
       Watcher: TFolderWatch;
     begin
@@ -58,21 +58,21 @@ type
     FIncludeSubFolders : Boolean;
     FNotifyFilter      : DWORD;
     FExtFilters        : TStringList;
-    FOwner             : TObject; // © Œ^‚ğ’ŠÛ‰»
+    FOwner             : TObject; // â† å‹ã‚’æŠ½è±¡åŒ–
 
-    FLastSnapshot: TDictionary<string, TDateTime>; // ŠÄ‹ƒLƒƒƒbƒVƒ…
+    FLastSnapshot: TDictionary<string, TDateTime>; // ç›£è¦–ã‚­ãƒ£ãƒƒã‚·ãƒ¥
     FNotificationHandle: THandle;
-    // w’èƒtƒHƒ‹ƒ_“à‚Ì‘Sƒtƒ@ƒCƒ‹‚ğ‘–¸
+    // æŒ‡å®šãƒ•ã‚©ãƒ«ãƒ€å†…ã®å…¨ãƒ•ã‚¡ã‚¤ãƒ«ã‚’èµ°æŸ»
     procedure ScanAndCompare;
-    // ƒtƒ@ƒCƒ‹‚ğŒŸõ
+    // ãƒ•ã‚¡ã‚¤ãƒ«ã‚’æ¤œç´¢
     procedure ScanSearch(CurrentFiles: TDictionary<string, TDateTime>);
-    // Œ»İ‚Ìî•ñ‚ğ•Û‘¶
+    // ç¾åœ¨ã®æƒ…å ±ã‚’ä¿å­˜
     procedure ScanUpdate(CurrentFiles: TDictionary<string, TDateTime>);
-    // ƒXƒLƒƒƒ“‚ğ–³‹
+    // ã‚¹ã‚­ãƒ£ãƒ³ã‚’ç„¡è¦–
     procedure ScanDone();
-    // ƒtƒ@ƒCƒ‹–¼‚ğˆø”‚Éæ‚èAExtFilters ‚ğQÆ‚µ‚ÄA•\¦‚µ‚Ä‚æ‚¯‚ê‚Î True
+    // ãƒ•ã‚¡ã‚¤ãƒ«åã‚’å¼•æ•°ã«å–ã‚Šã€ExtFilters ã‚’å‚ç…§ã—ã¦ã€è¡¨ç¤ºã—ã¦ã‚ˆã‘ã‚Œã° True
     function IsVisible(const FileName: string): Boolean;
-    //ƒXƒŒƒbƒh“à•”‚©‚çƒI[ƒi[iTFolderWatchj‚É‘Î‚µ‚ÄƒCƒxƒ“ƒg‚ğƒXƒŒƒbƒhƒZ[ƒt‚É’Ê’m‚µ‚Ü‚·B
+    //ã‚¹ãƒ¬ãƒƒãƒ‰å†…éƒ¨ã‹ã‚‰ã‚ªãƒ¼ãƒŠãƒ¼ï¼ˆTFolderWatchï¼‰ã«å¯¾ã—ã¦ã‚¤ãƒ™ãƒ³ãƒˆã‚’ã‚¹ãƒ¬ãƒƒãƒ‰ã‚»ãƒ¼ãƒ•ã«é€šçŸ¥ã—ã¾ã™ã€‚
     procedure NotifyChanges(const AddList, DelList, ModList: TStringList);
   protected
     procedure Execute; override;
@@ -84,7 +84,7 @@ type
 type
   TFolderWatch = class(TPersistent )
   private
-    { Private éŒ¾ }
+    { Private å®£è¨€ }
     FFolderPath        : string;
     FIncludeSubFolders : Boolean;
     FNotifyFilter      : DWORD;
@@ -115,9 +115,9 @@ type
     property FolderPath: string read FFolderPath write SetFolderPath;
     property IncludeSubFolders: Boolean read FIncludeSubFolders write SetIncludeSubFolders;
     property NotifyFilter: DWORD read FNotifyFilter write SetNotifyFilter;
-    // ‰‰ñ‚ÍƒCƒxƒ“ƒg‚ğ”­¶‚³‚¹‚È‚¢
+    // åˆå›ã¯ã‚¤ãƒ™ãƒ³ãƒˆã‚’ç™ºç”Ÿã•ã›ãªã„
     property FirstScanDone : Boolean read FFirstScanDone write SetFirstScanDone;
-    // Šg’£qƒtƒBƒ‹ƒ^[ ¦İ’èŒãÄ‹N“®‚ª•K—v
+    // æ‹¡å¼µå­ãƒ•ã‚£ãƒ«ã‚¿ãƒ¼ â€»è¨­å®šå¾Œå†èµ·å‹•ãŒå¿…è¦
     property ExtFilters: TStringList read FExtFilters;
     property OnFileChange: TFolderWatchAllEvent read FOnFileChange write FOnFileChange;
     property OnFileAdd: TFolderWatchEvent       read FOnFileAdd    write FOnFileAdd;
@@ -130,7 +130,7 @@ implementation
 uses System.IOUtils;
 
 const
-  MinTimeGapSec = 1.0; // 1•bˆÈ“à‚Ì•ÏX‚Í–³‹
+  MinTimeGapSec = 1.0; // 1ç§’ä»¥å†…ã®å¤‰æ›´ã¯ç„¡è¦–
 
 { TFolderWatch }
 
@@ -138,14 +138,14 @@ constructor TFolderWatch.Create;
 begin
   inherited Create;
 
-  // ‰Šú’l‚Ìİ’èi•K—v‚É‰‚¶‚Äj
+  // åˆæœŸå€¤ã®è¨­å®šï¼ˆå¿…è¦ã«å¿œã˜ã¦ï¼‰
   FFolderPath := '';
   FIncludeSubFolders := False;
 
   FExtFilters := TStringList.Create;
   FExtFilters.CaseSensitive := False;
 
-  // ‰Šú“o˜^i•K—v‚È‚çŠO•”‚©‚ç’Ç‰Á^íœ‰Â”\j
+  // åˆæœŸç™»éŒ²ï¼ˆå¿…è¦ãªã‚‰å¤–éƒ¨ã‹ã‚‰è¿½åŠ ï¼å‰Šé™¤å¯èƒ½ï¼‰
   FExtFilters.Add('.crdownload');
   FExtFilters.Add('.tmp');
   FExtFilters.Add('.part');
@@ -172,7 +172,7 @@ end;
 procedure TFolderWatch.StartWatching;
 begin
   if Assigned(FThread) then
-    Exit; // ‚·‚Å‚ÉŠJn‚³‚ê‚Ä‚¢‚ê‚Î–³‹
+    Exit; // ã™ã§ã«é–‹å§‹ã•ã‚Œã¦ã„ã‚Œã°ç„¡è¦–
 
   FThread := TFolderWatchThread.Create(Self);
   FThread.FFolderPath := FFolderPath;
@@ -253,7 +253,7 @@ begin
   if WasRunning then
     StopWatching;
 
-  Action(); // ’l‚Ì•ÏX
+  Action(); // å€¤ã®å¤‰æ›´
 
   if WasRunning then
     StartWatching;
@@ -285,9 +285,9 @@ end;
 
 constructor TFolderWatchThread.Create(AOwner: TObject);
 begin
-  inherited Create(True); // Suspended=TrueiStart‚ÍŠO‚ÅŒÄ‚Ôj
+  inherited Create(True); // Suspended=Trueï¼ˆStartã¯å¤–ã§å‘¼ã¶ï¼‰
 
-  FreeOnTerminate := False; // –¾¦“I‚É‰ğ•ú‚·‚é‘z’è
+  FreeOnTerminate := False; // æ˜ç¤ºçš„ã«è§£æ”¾ã™ã‚‹æƒ³å®š
   FOwner := AOwner;
 
   FFolderPath := '';
@@ -330,20 +330,20 @@ begin
   end;
 
   try
-    // ‰‰ñƒXƒiƒbƒvƒVƒ‡ƒbƒgì¬
+    // åˆå›ã‚¹ãƒŠãƒƒãƒ—ã‚·ãƒ§ãƒƒãƒˆä½œæˆ
     ScanAndCompare;
 
     while not Terminated do
     begin
-      // •ÏX‚ª’Ê’m‚³‚ê‚é‚Ü‚Å‘Ò‹@
+      // å¤‰æ›´ãŒé€šçŸ¥ã•ã‚Œã‚‹ã¾ã§å¾…æ©Ÿ
       case WaitForSingleObject(FNotificationHandle, 500) of
         WAIT_OBJECT_0:
         begin
           if Terminated then Break;
-          Sleep(500);             // ’Ç‰ÁEíœE•ÏX‚ÌŒëŒŸo‚ğ”ğ‚¯‚é‚½‚ßA’Ê’mŒã‚É­‚µ‘Ò‚Â
-          ScanAndCompare;         // DLŠ®—¹ or ƒƒ^ƒf[ƒ^XV‚Ì—]”g‚ğ‹zû‚·‚é
+          Sleep(500);             // è¿½åŠ ãƒ»å‰Šé™¤ãƒ»å¤‰æ›´ã®èª¤æ¤œå‡ºã‚’é¿ã‘ã‚‹ãŸã‚ã€é€šçŸ¥å¾Œã«å°‘ã—å¾…ã¤
+          ScanAndCompare;         // DLå®Œäº† or ãƒ¡ã‚¿ãƒ‡ãƒ¼ã‚¿æ›´æ–°ã®ä½™æ³¢ã‚’å¸åã™ã‚‹
 
-          // Ÿ‚Ì’Ê’m‚ğÄİ’è
+          // æ¬¡ã®é€šçŸ¥ã‚’å†è¨­å®š
           if not FindNextChangeNotification(FNotificationHandle) then
             Break;
         end;
@@ -367,7 +367,7 @@ var
   Ext: string;
 begin
   Ext := LowerCase(ExtractFileExt(FileName));
-  Result := FExtFilters.IndexOf(Ext) = -1; // ƒtƒBƒ‹ƒ^[‚ÉŠÜ‚Ü‚ê‚Ä‚¢‚È‚¯‚ê‚Î•\¦‘ÎÛ
+  Result := FExtFilters.IndexOf(Ext) = -1; // ãƒ•ã‚£ãƒ«ã‚¿ãƒ¼ã«å«ã¾ã‚Œã¦ã„ãªã‘ã‚Œã°è¡¨ç¤ºå¯¾è±¡
 end;
 
 procedure TFolderWatchThread.NotifyChanges(const AddList, DelList,
@@ -380,12 +380,12 @@ begin
 
   Owner := TFolderWatch(FOwner);
 
-  // ˆêŠ‡’Ê’miOnFileChangej
+  // ä¸€æ‹¬é€šçŸ¥ï¼ˆOnFileChangeï¼‰
   Synchronize(procedure begin
     Owner.DoFileChange(AddList, DelList, ModList);
   end);
 
-  // ŒÂ•Ê’Ê’miDoFileAddj
+  // å€‹åˆ¥é€šçŸ¥ï¼ˆDoFileAddï¼‰
   if (AddList.Count > 0) then begin
     Synchronize(procedure begin
       Owner.DoFileAdd(AddList);
@@ -417,34 +417,34 @@ begin
   DelList := TStringList.Create;
   ModList := TStringList.Create;
   try
-    // Ä‹A‚µ‚È‚¢’Pƒ‚È‘–¸iÄ‹A‘Î‰‚Í‚ ‚Æ‚Å‰ü—Ç‰Âj
+    // å†å¸°ã—ãªã„å˜ç´”ãªèµ°æŸ»ï¼ˆå†å¸°å¯¾å¿œã¯ã‚ã¨ã§æ”¹è‰¯å¯ï¼‰
     ScanSearch(CurrentFiles);
 
-    // ’Ç‰Á^XVƒ`ƒFƒbƒN
+    // è¿½åŠ ï¼æ›´æ–°ãƒã‚§ãƒƒã‚¯
     for Pair in CurrentFiles do
     begin
       if not FLastSnapshot.TryGetValue(Pair.Key, Value) then
       begin
-        AddList.Add(Pair.Key); // V‹K’Ç‰Á
+        AddList.Add(Pair.Key); // æ–°è¦è¿½åŠ 
       end
       else if (FLastSnapshot[Pair.Key] <> Pair.Value) and
               ((Now - FLastSnapshot[Pair.Key]) * 86400 > MinTimeGapSec) then
       begin
-        ModList.Add(Pair.Key); // XV‚ ‚è
+        ModList.Add(Pair.Key); // æ›´æ–°ã‚ã‚Š
       end;
     end;
 
-    // íœƒ`ƒFƒbƒN
+    // å‰Šé™¤ãƒã‚§ãƒƒã‚¯
     for Pair in FLastSnapshot do
     begin
       if not CurrentFiles.ContainsKey(Pair.Key) then
         DelList.Add(Pair.Key);
     end;
 
-    // ’Ê’mÀs
+    // é€šçŸ¥å®Ÿè¡Œ
     NotifyChanges(AddList, DelList, ModList);
 
-    // Œ»İ‚Ìî•ñ‚ğ•Û‘¶
+    // ç¾åœ¨ã®æƒ…å ±ã‚’ä¿å­˜
     ScanUpdate(CurrentFiles);
 
   finally
@@ -461,15 +461,15 @@ var
   SearchRec: TSearchRec;
   FilePath: string;
 begin
-  // Ä‹A‚µ‚È‚¢’Pƒ‚È‘–¸iÄ‹A‘Î‰‚Í‚ ‚Æ‚Å‰ü—Ç‰Âj
+  // å†å¸°ã—ãªã„å˜ç´”ãªèµ°æŸ»ï¼ˆå†å¸°å¯¾å¿œã¯ã‚ã¨ã§æ”¹è‰¯å¯ï¼‰
   if FindFirst(IncludeTrailingPathDelimiter(FFolderPath) + '*.*', faAnyFile, SearchRec) = 0 then
   begin
     repeat
       if (SearchRec.Attr and faDirectory) = 0 then
       begin
-        if not IsVisible(SearchRec.Name) then Continue;   // ŠÄ‹‘ÎÛ‚©”»’f
+        if not IsVisible(SearchRec.Name) then Continue;   // ç›£è¦–å¯¾è±¡ã‹åˆ¤æ–­
         FilePath := IncludeTrailingPathDelimiter(FFolderPath) + SearchRec.Name;
-        CurrentFiles.Add(FilePath, SearchRec.TimeStamp);  // Delphi10ˆÈ~‘Î‰
+        CurrentFiles.Add(FilePath, SearchRec.TimeStamp);  // Delphi10ä»¥é™å¯¾å¿œ
       end;
     until FindNext(SearchRec) <> 0;
     FindClose(SearchRec);
@@ -483,7 +483,7 @@ var
 begin
   FLastSnapshot.Clear;
   for Pair in CurrentFiles do begin
-    if not IsVisible(Pair.Key) then Continue;   // ŠÄ‹‘ÎÛ‚©”»’f
+    if not IsVisible(Pair.Key) then Continue;   // ç›£è¦–å¯¾è±¡ã‹åˆ¤æ–­
     FLastSnapshot.Add(Pair.Key, Pair.Value);
   end;
 end;

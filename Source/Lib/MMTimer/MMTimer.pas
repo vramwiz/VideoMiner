@@ -1,4 +1,4 @@
-unit MMTimer;
+ï»¿unit MMTimer;
 
 interface
 
@@ -56,18 +56,18 @@ type
     procedure InternalStopThread;
 
     procedure TimerTick(Sender: TObject);
-    procedure DoTimer; // Dispatcher ‚©‚çŒÄ‚Î‚ê‚éi= TTimer ‚©‚çŒÄ‚Ôj
+    procedure DoTimer; // Dispatcher ã‹ã‚‰å‘¼ã°ã‚Œã‚‹ï¼ˆ= TTimer ã‹ã‚‰å‘¼ã¶ï¼‰
   protected
     procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
 
-    procedure Start; // Œv‘ªŠî€ƒŠƒZƒbƒg
-    procedure Stop;  // ƒ^ƒCƒ}[’â~iƒXƒŒƒbƒh’â~‘Š“–j
+    procedure Start; // è¨ˆæ¸¬åŸºæº–ãƒªã‚»ãƒƒãƒˆ
+    procedure Stop;  // ã‚¿ã‚¤ãƒãƒ¼åœæ­¢ï¼ˆã‚¹ãƒ¬ãƒƒãƒ‰åœæ­¢ç›¸å½“ï¼‰
 
-    function GetTickCnt: Cardinal;   // ·•ªimsj: ‘O‰ñ”­‰Î¨¡‰ñ”­‰Î
-    function ElapsedTime: Cardinal;  // â‘ÎŒo‰ßimsj: StartŠî€iPausel—¶j
+    function GetTickCnt: Cardinal;   // å·®åˆ†ï¼ˆmsï¼‰: å‰å›ç™ºç«â†’ä»Šå›ç™ºç«
+    function ElapsedTime: Cardinal;  // çµ¶å¯¾çµŒéï¼ˆmsï¼‰: StartåŸºæº–ï¼ˆPauseè€ƒæ…®ï¼‰
   published
     property Enabled  : Boolean  read FEnabled  write SetEnabled;
     property Interval : Cardinal read FInterval write SetInterval;
@@ -264,7 +264,7 @@ end;
 
 procedure TMMTimer.Stop;
 begin
-  // Stop = timer’â~iPausej‚Æ‚µ‚Äˆµ‚¤FEnabled‚ğFalse‚Ö
+  // Stop = timeråœæ­¢ï¼ˆPauseï¼‰ã¨ã—ã¦æ‰±ã†ï¼šEnabledã‚’Falseã¸
   SetEnabled(False);
 end;
 

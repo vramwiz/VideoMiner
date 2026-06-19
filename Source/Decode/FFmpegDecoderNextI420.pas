@@ -1,14 +1,14 @@
-unit FFmpegDecoderNextI420;
+﻿unit FFmpegDecoderNextI420;
 
-// ���݈ʒu���玟�̓���t���[����ǂ݁AI420 �o�b�t�@�֕ϊ�����B
-// �`���ʂ̏������f�R�[�h�����Ƃ��� BGRX32 �n���番������B
+// 現在位置から次の動画フレームを読み、I420 バッファへ変換する。
+// 形式別の順方向デコード処理として BGRX32 系から分離する。
 
 interface
 
 uses
   FFmpegDecoderContext;
 
-// ���̓���t���[����ǂ݁A�K�v�Ȃ� I420 �o�b�t�@�֕ϊ�����B
+// 次の動画フレームを読み、必要なら I420 バッファへ変換する。
 function DecodeNextFrameToI420Optional(
   Context: TFFmpegDecoderContext;
   Buffer: Pointer;
@@ -24,7 +24,7 @@ uses
   System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo;
 
 
-// ���̓���t���[����ǂ݁A�K�v�Ȃ� I420 �o�b�t�@�֕ϊ�����B
+// 次の動画フレームを読み、必要なら I420 バッファへ変換する。
 function DecodeNextFrameToI420Optional(
   Context: TFFmpegDecoderContext;
   Buffer: Pointer;

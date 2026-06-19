@@ -1,14 +1,14 @@
-unit FFmpegDecoderNextBgrx32;
+﻿unit FFmpegDecoderNextBgrx32;
 
-// ���݈ʒu���玟�̓���t���[����ǂ݁ABGRX32 �o�b�t�@�֕ϊ�����B
-// VideoMiner �̒ʏ�\���Ɏg���������f�R�[�h�̒��S������S������B
+// 現在位置から次の動画フレームを読み、BGRX32 バッファへ変換する。
+// VideoMiner の通常表示に使う順方向デコードの中心処理を担当する。
 
 interface
 
 uses
   FFmpegDecoderContext;
 
-// ���̓���t���[����ǂ݁A�K�v�Ȃ� BGRX32 �o�b�t�@�֕ϊ�����B
+// 次の動画フレームを読み、必要なら BGRX32 バッファへ変換する。
 function DecodeNextFrameToBgrx32Optional(
   Context: TFFmpegDecoderContext;
   Buffer: Pointer;
@@ -24,7 +24,7 @@ uses
   System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo;
 
 
-// ���̓���t���[����ǂ݁A�K�v�Ȃ� BGRX32 �o�b�t�@�֕ϊ�����B
+// 次の動画フレームを読み、必要なら BGRX32 バッファへ変換する。
 function DecodeNextFrameToBgrx32Optional(
   Context: TFFmpegDecoderContext;
   Buffer: Pointer;

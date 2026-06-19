@@ -1,14 +1,14 @@
-unit FFmpegDecoderSeekBgr24;
+﻿unit FFmpegDecoderSeekBgr24;
 
-// �w�莞���փV�[�N���A����t���[���� BGR24 �o�b�t�@�֕ϊ�����B
-// �`���ʂ̔C�ӈʒu�擾�����Ƃ��� BGRX32 �n���番������B
+// 指定時刻へシークし、動画フレームを BGR24 バッファへ変換する。
+// 形式別の任意位置取得処理として BGRX32 系から分離する。
 
 interface
 
 uses
   FFmpegDecoderContext;
 
-// �w�莞���̓���t���[���� BGR24 �o�b�t�@�֎擾����B
+// 指定時刻の動画フレームを BGR24 バッファへ取得する。
 function DecodeFrameToBgr24(
   Context: TFFmpegDecoderContext;
   PositionMs: Integer;
@@ -23,7 +23,7 @@ uses
   System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegStreamInfo;
 
 
-// �w�莞���̓���t���[���� BGR24 �o�b�t�@�֎擾����B
+// 指定時刻の動画フレームを BGR24 バッファへ取得する。
 function DecodeFrameToBgr24(
   Context: TFFmpegDecoderContext;
   PositionMs: Integer;

@@ -1,4 +1,4 @@
-unit VideoMinerThumbnailCache;
+﻿unit VideoMinerThumbnailCache;
 
 // サムネイル一覧で使う縮小済み画像を、起動をまたいで再利用するための簡易ディスクキャッシュ。
 // 元ファイルのパス、更新日時、サイズをファイル名に含め、内容が変わった場合は別キャッシュとして扱う。

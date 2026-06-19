@@ -433,6 +433,28 @@ $env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
 
 ## 共通メモ
 
+- 文字コードは最優先の作業ルールとして扱う。
+- 管理対象の `.pas` / `.dfm` / `.dpr` / `.dproj` / `.inc` / `.rc` / `.md` / `.txt` / `.ps1` / `.bat` / `.cmd` は UTF-8 BOM 付き、改行 CRLF で保存する。
+- ANSI / Shift-JIS / UTF-8 BOM なしへ戻さない。
+- 編集前後に以下を実行し、UTF-8 BOM でない管理対象テキストが残っていないか確認する。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\EnsureUtf8Bom.ps1 -Check
+```
+
+- 変換が必要な場合は以下を実行する。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\EnsureUtf8Bom.ps1
+```
+
+- `.editorconfig` でも UTF-8 BOM / CRLF を指定している。対応エディタではこの設定を優先する。
+- コミット前に自動検査したい場合は、以下でローカル `pre-commit` hook を入れる。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\InstallGitHooks.ps1
+```
+
 - `note.md` は UTF-8 BOM 付き、改行は CRLF で保存する。ANSI / Shift-JIS へ変換しない。
 - PowerShell で `note.md` を編集する場合は、`[System.Text.UTF8Encoding]::new($true)` などで UTF-8 BOM を明示して読み書きする。
 - Delphi ソースを修正する場合も、UTF-8 BOM 付き、改行 CRLF で保存する。
@@ -1452,3 +1474,135 @@ VideoMiner のチェック機能は、以下を主目的にする。
 - 第二段階として、音声も `LoopSegmentStartMs` から短いキューを事前生成できれば、終端到達時に音声出力を即切り替えられる。ただし音声キュー管理が複雑になるため、まずは映像プリロールだけで体感改善を見る。
 - 理想形は、ループ区間を小さな仮想タイムラインとして扱い、`LoopSegmentEndMs` 到達時に表示・音声クロックを `LoopSegmentStartMs` へ巻き戻し、再開直後の数フレームだけ事前準備済みフレームを使う方式。
 - 実装時は、ループ区間が変わった場合、動画を切り替えた場合、シークやチャプター編集で `LoopSegmentStartMs` が変わった場合に、プリロールキャッシュを破棄または再準備する。
+
+## 2026-06-19 ループ再生 映像プリロール試作
+- ループ終端到達時の見た目の待ちを減らす第一段階として、映像のみのプリロールを追加した。
+- 再生 tick 中に現在のループ区間終端へ近づいたら、`FPreviewDecoder` を使って `LoopSegmentStartMs` のフレームを `TVideoMinerVideoView` のループ専用キャッシュへ先読みする。
+- 先読みは同じ動画ファイル、同じループ開始/終端の組み合わせにつき 1 回だけ試す。失敗時に毎 tick で重い seek/decode を繰り返さないため。
+- ループ再開時は、先読み済みフレームがあればそれを即時表示し、なければ従来どおり `ShowFrameAtMs` で開始フレームを表示する。
+- メイン再生デコーダと音声再開処理は従来経路を維持し、今回は表示の待ちを減らすところだけに絞った。
+- 動画切り替え/再読み込み時は、controller と view のループプリロール状態を明示的に破棄する。
+- 変更ファイルは `VideoMinerPlaybackController.pas` / `VideoMinerVideoView.pas` / `VideoMinerMainForm.pas`。
+- `Debug Win64` / `Release Win64` ビルド成功。警告 0 / エラー 0。
+- 実動画での体感確認は未実施。もし終端直前に小さな引っかかりが出る場合は、`LOOP_PREROLL_WINDOW_MS` の調整、または非同期プリロール化を次段階で検討する。
+
+## 2026-06-19 ループ再生 プリロール位置調整
+- 実動画でループ部分の改善が小さく、少しガクガクする状態が残った。
+- 直前の試作は、再生 tick 中にループ終端へ近づいたタイミングで `FPreviewDecoder` の seek/decode を同期実行していたため、終端直前の tick を詰まらせる可能性があった。
+- `MaybePrepareLoopPreroll` は再生 tick 中から外し、`StartPlaybackAtMs` でループ区間を `ConfigureLoopSegment` した直後に 1 回だけ準備する方式へ変更した。
+- ループ再開時に開始フレームがすでに表示済みで、再開位置が現在の `FLoopSegmentStartMs` と一致する場合だけ、メインデコーダ側の再開 seek を `FastSeek` にするようにした。
+- これで再生中の終端直前に重い先読みを挟まない。境界で残るガクつきがある場合は、次に音声再開の同期処理、またはメインデコーダの loop 専用 seek/decode をさらに軽くする方向を見る。
+- `Debug Win64` / `Release Win64` ビルド成功。警告 0 / エラー 0。
+
+## 2026-06-19 チャプター位置再生と終端ループ戻り修正
+- ループ再生は滑らかになったが、チャプターを付けた位置そのものから再生できない場合があり、少しずらすと再生できる現象を確認した。
+- 再生開始側の `StartAtMs` は、プレビュー表示用の `ShowFrameNearMs` と違い、指定位置ぴったりのデコード失敗を近傍位置で救済していなかった。
+- `TVideoMinerPlaybackController.ShowPlaybackFrameNearMs` を追加し、再生用メインデコーダでも `0 / ±33 / ±100 / ±250 / ±500 / ±1000 ms` の順に近傍 fallback するようにした。
+- fallback で近傍フレームを使えた場合は、再生開始位置と音声開始位置も実際に使えた位置へ揃える。
+- チャプター付きループで終端まで行ってもチャプターへ戻らないことがあったため、EOF 経路の `FinishPlaybackAtEnd` では、現在有効な `FLoopSegmentStartMs` があればそれを優先して戻り先にするようにした。
+- これにより、最後のチャプター以降の区間でも、終端到達時は現在のループ区間開始位置へ戻る。
+- `Debug Win64` / `Release Win64` ビルド成功。警告 0 / エラー 0。
+
+## 2026-06-19 チャプター境界 fallback 順の修正
+- チャプター位置ぴったりの再生開始が失敗した場合、近傍 fallback が `-33ms` など目標位置の手前を先に採用していた。
+- そのため終端ループ時に一瞬チャプターへ戻っても、実際の再生開始位置がチャプター手前になり、次の `ConfigureLoopSegment` で先頭区間扱いに戻る可能性があった。
+- 再生用の `ShowPlaybackFrameNearMs` は fallback 順を `0 / +33 / -33 / +100 / -100 / ...` に変更し、チャプター境界ではまず境界の後ろ側を採用するようにした。
+- これにより、チャプター位置そのものがデコードできない場合でも、再生開始位置がチャプター境界をまたいで手前へ戻りにくくなり、終端ループの戻り先が先頭へ化ける経路を抑える。
+- `Debug Win64` / `Release Win64` ビルド成功。警告 0 / エラー 0。
+
+## 2026-06-19 先頭ループ時の数フレーム混入調査
+- 終端からチャプターへ戻るループは正常になったが、先頭へ戻るループでは戻った直後に数フレーム異なる表示が混ざる現象が残った。
+- 原因候補として、`StartPlaybackAtMs` がループ開始フレーム表示済みの場合に `FastSeek` を使う最適化を確認した。
+- `DecodeFrameToBgrx32Fast` は通常 seek と違い、目標時刻以降のフレームまで読み進めず、seek 後に最初に取れたフレームを採用する。先頭 0ms では、表示済みの 0ms フレームとメインデコーダの再開位置が数フレームずれる可能性がある。
+- 先頭ループでは正確なデコーダ位置を優先するため、`FLoopSegmentStartMs > 0` の場合だけ `FastSeek` を使うように変更した。0ms へ戻る場合は通常 seek で再開する。
+- debug log の `start_playback` / `start_playback_done` に `fast_seek` を追加し、再発時に先頭ループが正確 seek になっているか確認できるようにした。
+- `Debug Win64` / `Release Win64` ビルド成功。警告 0 / エラー 0。
+
+## 2026-06-19 ループ滑らかさ低下のログ確認
+- `VIDEOMINER_DEBUG_LOG=1` / `VIDEOMINER_SLOW_LOG=1` を設定した Debug 実行で、`%TEMP%\VideoMiner_playback_debug.log` に詳細ログを出せるようにした。
+- `finish_loop_restart` / `show_playback_frame_near` / `seek_guard_accept` を追加し、ループ戻り時に表示した戻りフレーム、再生用デコーダの seek 結果、seek guard が受理した decoded_ms を確認できるようにした。
+- 実行ログでは、ループ戻り直後のフレーム位置は `1881 -> 1914 -> 1958 ...` のように戻り先以降へ進んでおり、無関係な前後フレーム混入ではなく、メインデコーダを戻す同期 seek が長いことが主因だった。
+- 例として `start_playback_done target_ms=1914 video_seek_ms=974.628 total_ms=976.871` が出ており、表示済みの戻りフレームから次の再生フレームへ進むまで約 1 秒止まっている。
+- fallback もすべて fast seek にする実験では、この動画で `Frame could not be decoded.` が続き、`video_seek_ms=3691ms` 以上まで悪化したため採用しない。
+- 次に滑らかさを本当に戻す場合は、境界でメインデコーダを同期 seek するのではなく、先読み済みの補助デコーダを再生用デコーダとして使う、または再生用デコーダの再配置を非同期化する方向が必要。
+
+## 2026-06-19 ループ再開直後の余計なフレーム抑制
+- 滑らかさは戻ったが、ループ再開直後に余計なフレームが混入する現象を確認した。
+- ループ戻りフレームは `PresentLoopPrerollFrame` または `ShowFrameAtMs` ですでに表示済みなのに、直後の `HandleSeekGuard` が受理した `decoded_ms` をさらに `ShowFrameAt` で明示表示していた。
+- この guard 側の再表示は、戻り先フレームから通常再生へ進む間に中間フレームを差し込むため、見た目上の混入になり得る。
+- `seek_guard_accept` ではフレーム位置だけ内部状態として受理し、画面には出さないように変更した。ログにも `present=False` を出す。
+- 戻り先フレームは保持したまま、次の通常 tick の表示フレームから再生を進めるため、滑らかさを残しつつ余計な guard 再表示を抑える狙い。
+- `Debug Win64` / `Release Win64` ビルド成功。警告 0 / エラー 0。
+
+## 2026-06-19 1つ前のコミットとの比較結果
+- 一時的に現在の作業ツリーを stash し、`HEAD~1` の `259c927 シークジの挙動を安定` へ detached checkout して比較した。
+- 比較後、stash を戻して作業状態は復元済み。
+- 実動画で比較した結果、現在の修正後よりも `259c927` の方がループ再生は滑らかだった。
+- 現在の修正群は、余計なフレーム混入の抑制には効果があったが、このスレッドの本来目的である「滑らかにループする」点では後退している。
+- 次の作業方針は、現在のプリロール/seek guard 表示抑制/正確 seek 寄りの調整を前提に積み増すのではなく、`259c927` の滑らかな経路を基準に戻し、そこへ余計なフレーム混入だけを最小限で潰す方向がよい。
+- 特に `HandleSeekGuard` の表示抑制、`FastSeek` の制限、メインデコーダの同期 seek 追加/近傍 fallback が滑らかさへ与えた影響を個別に切り分ける。
+
+## 2026-06-19 ループ開始フレーム列キャッシュへ方針変更
+- ループ改善の方針を「先読み」から「一度表示したループ開始直後フレーム列のキャッシュ」へ変更した。
+- 初回ループの滑らかさは期待せず、初回に実際に通過して表示したループ開始直後のフレームを短く保存する。
+- 2 回目以降のループ戻りでは、保存済みフレーム列の先頭付近を即時表示し、戻り直後の余計な表示混入を抑える狙い。
+- `TVideoMinerVideoView` は、ループ区間ごとに開始から約 900ms / 最大 24 枚の表示済みフレームを `TBitmap` と位置 ms で保持する。
+- キャッシュ対象は、通常再生 tick で本当に画面へ出たフレームだけに限定した。seek guard の内部受理など、画面に出ていないフレームは混ぜない。
+- ループ区間、動画ファイル、動画切り替え、再読み込みなどでキャッシュは破棄する。
+- 既存の `ClearLoopPreroll` / `PresentLoopPrerollFrame` 名は大きな呼び出し変更を避けるため残したが、中身は補助デコーダによる先読みではなく、表示済みフレーム列キャッシュの管理へ変わった。
+- 補助デコーダで `LoopSegmentStartMs` を同期 seek/decode する `MaybePrepareLoopPreroll` は廃止し、現在のループ区間に合わせてキャッシュ受け入れ範囲を設定するだけにした。
+- `Debug Win64` / `Release Win64` ビルド成功。警告 0 / エラー 0。
+- 実動画での体感確認は未実施。次は 2 周目以降のループ戻りで滑らかさと余計なフレーム混入がどう変わったかを確認する。
+
+## 2026-06-19 ループキャッシュ hit ログ確認と先頭フレーム補正
+- `VIDEOMINER_DEBUG_LOG=1` / `VIDEOMINER_SLOW_LOG=1` で Debug 実行し、全体ループの戻りログを確認した。
+- 最初のキャッシュ方式では、2 周目以降の戻りで `loop_frame_cache_hit requested_ms=0 cached_ms=42` になっていた。
+- 原因は、再生開始時点ですでに表示済みの 0ms フレームをキャッシュへ入れておらず、再生 tick で最初に通過した 42ms フレームがキャッシュ先頭になっていたこと。
+- `StartPlaybackAtMs` でループ区間を設定した直後、現在表示済みの `TargetMs` フレームも `CaptureLoopFrameCache` へ渡すようにした。
+- これにより再確認ログでは `loop_frame_cache_hit requested_ms=0 cached_ms=0 index=0 delta=0 count=11` になった。
+- 戻り直後の `start_playback_done target_ms=0` は `video_seek_ms=11-16ms` 程度で、今回の全体ループでは数秒単位の seek 待ちは出ていない。
+- seek guard は `decoded_ms=42 present=False` として内部位置だけ受理し、画面には出さない。表示はキャッシュ済み 0ms から次の通常 tick へ進む。
+- シークバーが末端から先頭へ戻る表示が遅く見えないよう、`SeekPlaybackTickToMs` で `FSeekPositionMs` 更新直後に `UpdatePlaybackProgress(PositionMs)` を呼ぶようにした。
+
+## 2026-06-19 チャプター戻りループのキャッシュ確認
+- チャプターを追加した状態で、終端からチャプター位置へ戻るループを Debug 実行ログで確認した。
+- チャプター位置は `1321ms` だったが、その位置ぴったりは再生用デコーダで直接使えず、実際に表示できる開始フレームは `1354ms` だった。
+- 変更前は `loop_frame_cache_hit requested_ms=1321 cached_ms=1354` の後も、再開処理が `requested_ms=1321 target_ms=1321` から探し直しており、`video_seek_ms` が約 1000ms になっていた。
+- `PresentLoopPrerollFrame` が実際に表示した `cached_ms` を out 引数で返すようにし、キャッシュ hit 時は `StartPlaybackAtMs` へ `1354ms` を渡すようにした。
+- 再確認では `start_playback file=... requested_ms=1354 target_ms=1354` になり、`video_seek_ms` は約 250ms まで下がった。
+- cached_ms 付近で fast seek を許可する実験も行ったが、`target_ms=1354` から `shown_ms=1387` へ fallback し、`video_seek_ms` が約 1000ms へ悪化したため採用しない。fast seek は従来どおり、厳密にループ開始位置と一致する場合だけに戻した。
+- 現時点では、チャプター戻りでもキャッシュ hit 自体は効いている。ただしメインデコーダを戻す同期 seek が約 250ms 残るため、完全な滑らかさにはまだ届かない。
+- 次に本当に滑らかにする場合は、キャッシュ列を画面へ順に出している間に、別デコーダまたは非同期処理でメインデコーダをチャプター開始付近へ戻す必要がある。
+
+## 2026-06-19 ループ再開直後のキャッシュ優先表示
+- 実動画確認で、先頭への全体ループは戻り直後に余計なフレームが混入し、チャプターへのループは混入しないが同期 seek 待ちで遅いという状態を確認した。
+- 1 枚だけキャッシュを即表示する方式では、直後の seek guard、音声同期、通常 tick が別フレームを出せるため、先頭ループの混入を完全には抑えられない。
+- `ShowFrameAt(..., PresentFrame=False)` は scratch へデコードしているにもかかわらず表示面を `PresentImmediate` していたため、表示しない seek 準備では再描画しないようにした。
+- ループ再開直後に `FrameAlreadyShown=True` で開始した場合は、開始から約 900ms の間、通常デコード結果よりもループ開始直後のキャッシュ済みフレームを優先して表示するようにした。
+- キャッシュ優先区間中は、音声追従による別位置フレーム表示も抑える。これにより、先頭ループで戻り直後に別フレームが挟まる経路を減らす。
+- チャプター戻りの遅さは、キャッシュ表示後のメインデコーダ同期 seek が残ることが原因。今回の修正では混入抑制を優先し、遅さの根本対策は別デコーダまたは非同期再配置を次段階とする。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+
+## 2026-06-19 Bitmap コピー型ループキャッシュの無効化
+- キャッシュが効いている箇所そのものが重く、滑らかさの改善よりも `TBitmap.Assign` と即時 repaint の負荷が目立つ状態になった。
+- とくにループ開始直後のキャッシュ優先表示は、再生 tick 中に Bitmap コピーと `PresentImmediate` を繰り返すため、目的と逆に詰まりを作っていた。
+- ループ開始直後フレーム列キャッシュは、保存側、表示側とも実行しないようにした。
+- `ShowFrameAt(..., PresentFrame=False)` で表示面を即時再描画しない修正は、余計な repaint を減らすため残した。
+- チャプター区間の戻り先を現在のループ区間開始へする修正、シークバー位置を先に戻す修正は残した。
+- 次に改善する場合は、UI スレッド上で Bitmap をコピーするキャッシュではなく、デコーダ状態そのものを温めて切り替える方式、または非同期 seek 完了後に自然に合流する方式へ切り替える。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+
+## 2026-06-19 ループキャッシュ試作をコミット前状態へ戻し
+- ループ開始直後フレーム列を `TBitmap` として保持し、2 周目以降に表示する方式を試したが、キャッシュが効く箇所そのものが重くなり、滑らかさの改善に使えないと判断した。
+- 先頭への全体ループでは余計なフレーム混入が残り、チャプターへのループでは混入は少ないものの同期 seek 待ちで遅くなる状態だった。
+- `TBitmap.Assign` と `PresentImmediate` をループ境界や再生 tick 中で行う設計は、UI スレッドを詰まらせやすく、今回の目的である滑らかなループには向かない。
+- `Source/App/VideoMinerMainForm.pas`、`Source/App/VideoMinerPlaybackController.pas`、`Source/App/VideoMinerVideoView.pas` は Git のコミット済み状態へ戻した。
+- 今回の試作方針は採用しない。次に進める場合は、表示 Bitmap のキャッシュではなく、補助デコーダでループ開始側のデコーダ状態を準備して切り替える方式、またはメインデコーダの再配置を非同期化して表示に混ぜない方式を検討する。
+
+## 2026-06-19 フレーム混入の最小修正
+- コミット前状態へ戻した後、フレーム関係で余計な表示が入る経路を再確認した。
+- `ShowFrameAt(..., PresentFrame=False)` は scratch buffer へデコードするだけの意図なのに、最後に `FSurface.PresentImmediate` を呼んでいた。このため、表示しない準備デコードでも現在の表示面が再描画され、古いフレームや直前の表示状態が混ざって見える可能性があった。
+- `PresentFrame=False` の場合は一切 `PresentImmediate` しないようにした。
+- seek guard が受理した初期フレームも、戻り先フレームから通常再生へ進む間の余計な差し込み表示になり得るため、画面には出さず内部位置だけ受理するようにした。Debug log には `seek_guard_accept ... present=False` を出す。
+- Bitmap コピー型ループキャッシュは再導入しない。今回のコミットは、表示しない経路が画面へ出てしまう問題だけを修正する。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。

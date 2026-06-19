@@ -1,8 +1,8 @@
-unit VideoMinerMediaOpen;
+ï»¿unit VideoMinerMediaOpen;
 
-// “®‰æƒtƒ@ƒCƒ‹‚ğŠJ‚­‘OŒã‚ÌŒŸØ‚ÆA‘O‰ñƒtƒ@ƒCƒ‹‚Ì‰ğŒˆ‚ğ’S“–‚·‚éB
-// ƒƒCƒ“ƒtƒH[ƒ€‚ª UI ó‘Ô‚ğƒŠƒZƒbƒg‚·‚é‘O‚É¸”s‚ğ”»’è‚Å‚«‚é‚æ‚¤A
-// ƒtƒ@ƒCƒ‹‘¶İŠm”FAƒfƒR[ƒ_ openAƒƒfƒBƒAˆê——\’z‚ğ‚Ü‚Æ‚ß‚Äˆµ‚¤B
+// å‹•ç”»ãƒ•ã‚¡ã‚¤ãƒ«ã‚’é–‹ãå‰å¾Œã®æ¤œè¨¼ã¨ã€å‰å›ãƒ•ã‚¡ã‚¤ãƒ«ã®è§£æ±ºã‚’æ‹…å½“ã™ã‚‹ã€‚
+// ãƒ¡ã‚¤ãƒ³ãƒ•ã‚©ãƒ¼ãƒ ãŒ UI çŠ¶æ…‹ã‚’ãƒªã‚»ãƒƒãƒˆã™ã‚‹å‰ã«å¤±æ•—ã‚’åˆ¤å®šã§ãã‚‹ã‚ˆã†ã€
+// ãƒ•ã‚¡ã‚¤ãƒ«å­˜åœ¨ç¢ºèªã€ãƒ‡ã‚³ãƒ¼ãƒ€ openã€ãƒ¡ãƒ‡ã‚£ã‚¢ä¸€è¦§æ§‹ç¯‰ã‚’ã¾ã¨ã‚ã¦æ‰±ã†ã€‚
 
 interface
 
@@ -12,24 +12,24 @@ uses
 
 type
   TVideoMinerMediaOpenResult = record
-    ErrorMessage : string;     // ¸”s‚É UI ‚Ö•\¦‚·‚é——R
-    FileName     : string;     // ÀÛ‚ÉŠJ‚¯‚½“®‰æƒtƒ@ƒCƒ‹
-    Info         : TVideoInfo; // ƒƒCƒ“ƒfƒR[ƒ_‚©‚ç“¾‚½“®‰æî•ñ
+    ErrorMessage : string;     // å¤±æ•—æ™‚ã« UI ã¸è¡¨ç¤ºã™ã‚‹ç†ç”±
+    FileName     : string;     // å®Ÿéš›ã«é–‹ã‘ãŸå‹•ç”»ãƒ•ã‚¡ã‚¤ãƒ«
+    Info         : TVideoInfo; // ãƒ¡ã‚¤ãƒ³ãƒ‡ã‚³ãƒ¼ãƒ€ã‹ã‚‰å¾—ãŸå‹•ç”»æƒ…å ±
   end;
 
-// UI ó‘Ô‚ğ‰ó‚·‘O‚ÉAw’èƒtƒ@ƒCƒ‹‚ªŠJ‚­‘ÎÛ‚Æ‚µ‚Ä‘¶İ‚·‚é‚©Šm”F‚·‚é
+// UI çŠ¶æ…‹ã‚’å£Šã™å‰ã«ã€æŒ‡å®šãƒ•ã‚¡ã‚¤ãƒ«ãŒé–‹ãå¯¾è±¡ã¨ã—ã¦å­˜åœ¨ã™ã‚‹ã‹ç¢ºèªã™ã‚‹
 function ValidateVideoMinerMediaFile(const FileName: string;
   out ErrorMessage: string): Boolean;
 
-// ƒtƒ@ƒCƒ‹‘I‘ğƒ_ƒCƒAƒƒO‚ÅÅ‰‚É•\¦‚·‚éƒtƒHƒ‹ƒ_‚ğŒˆ‚ß‚é
+// ãƒ•ã‚¡ã‚¤ãƒ«é¸æŠãƒ€ã‚¤ã‚¢ãƒ­ã‚°ã§æœ€åˆã«è¡¨ç¤ºã™ã‚‹ãƒ•ã‚©ãƒ«ãƒ€ã‚’æ±ºã‚ã‚‹
 function VideoMinerOpenDialogInitialDir(const CurrentFileName: string): string;
-// ³í‚ÉŠJ‚¯‚½ƒtƒ@ƒCƒ‹‚ğAŸ‰ñ‹N“®‚âŸ‰ñƒ_ƒCƒAƒƒO‚ÌŠî€‚Æ‚µ‚Ä•Û‘¶‚·‚é
+// æ­£å¸¸ã«é–‹ã‘ãŸãƒ•ã‚¡ã‚¤ãƒ«ã‚’ã€æ¬¡å›èµ·å‹•ã‚„æ¬¡å›ãƒ€ã‚¤ã‚¢ãƒ­ã‚°ã®åŸºæº–ã¨ã—ã¦ä¿å­˜ã™ã‚‹
 procedure RememberVideoMinerMediaFile(const FileName: string);
-// •Û‘¶Ï‚İ‚Ì‘O‰ñƒtƒ@ƒCƒ‹‚ğAŒ»İŠJ‚¯‚éâ‘ÎƒpƒX‚Æ‚µ‚Ä‰ğŒˆ‚·‚é
+// ä¿å­˜æ¸ˆã¿ã®å‰å›ãƒ•ã‚¡ã‚¤ãƒ«ã‚’ã€ç¾åœ¨é–‹ã‘ã‚‹çµ¶å¯¾ãƒ‘ã‚¹ã¨ã—ã¦è§£æ±ºã™ã‚‹
 function ResolveRememberedVideoMinerMediaFile(out FileName: string;
   out ErrorMessage: string): Boolean;
 
-// ƒƒCƒ“/ƒvƒŒƒrƒ…[ƒfƒR[ƒ_‚ğŠJ‚«A“¯‚¶ƒtƒHƒ‹ƒ_‚Ì“®‰æˆê——‚ğXV‚·‚é
+// ãƒ¡ã‚¤ãƒ³/ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ãƒ‡ã‚³ãƒ¼ãƒ€ã‚’é–‹ãã€åŒã˜ãƒ•ã‚©ãƒ«ãƒ€ã®å‹•ç”»ä¸€è¦§ã‚’æ›´æ–°ã™ã‚‹
 function OpenVideoMinerMediaFile(const FileName: string; Decoder,
   PreviewDecoder: TFFmpegDecoder; MediaList: TVideoMinerMediaList;
   out OpenResult: TVideoMinerMediaOpenResult): Boolean;

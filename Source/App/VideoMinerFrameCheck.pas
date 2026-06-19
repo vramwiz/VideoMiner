@@ -1,8 +1,8 @@
-unit VideoMinerFrameCheck;
+ï»¿unit VideoMinerFrameCheck;
 
-// ƒ`ƒFƒbƒN‹@”\‚Åg‚¤ƒtƒŒ[ƒ€‚ÌŒy—Ê”»’è‚ğ’S“–‚·‚éB
-// UI ‚âƒ`ƒƒƒvƒ^[ŠÇ—‚Ö‚ÍˆË‘¶‚¹‚¸A•\¦Ï‚İ Bitmap ‚©‚ç•‰æ–ÊŒó•â‚â
-// ƒtƒŒ[ƒ€·•ª—p‚Ì¬‚³‚È–¼‚¾‚¯‚ğæ‚èo‚·B
+// ãƒã‚§ãƒƒã‚¯æ©Ÿèƒ½ã§ä½¿ã†ãƒ•ãƒ¬ãƒ¼ãƒ ã®è»½é‡åˆ¤å®šã‚’æ‹…å½“ã™ã‚‹ã€‚
+// UI ã‚„ãƒãƒ£ãƒ—ã‚¿ãƒ¼ç®¡ç†ã¸ã¯ä¾å­˜ã›ãšã€è¡¨ç¤ºæ¸ˆã¿ Bitmap ã‹ã‚‰é»’ç”»é¢å€™è£œã‚„
+// ãƒ•ãƒ¬ãƒ¼ãƒ å·®åˆ†ç”¨ã®å°ã•ãªç½²åã ã‘ã‚’å–ã‚Šå‡ºã™ã€‚
 
 interface
 
@@ -14,25 +14,25 @@ const
 
 type
   TVideoMinerFrameSignature = record
-    Values: array[0..FRAME_CHECK_DIFF_CELL_COUNT - 1] of Byte; // ‰æ–Ê‚ğ‘e‚­‹æØ‚Á‚½ŠeƒZƒ‹‚Ì–¾‚é‚³
+    Values: array[0..FRAME_CHECK_DIFF_CELL_COUNT - 1] of Byte; // ç”»é¢ã‚’ç²—ãåŒºåˆ‡ã£ãŸå„ã‚»ãƒ«ã®æ˜ã‚‹ã•
   end;
 
-// l‹÷‚ª‚·‚×‚ÄˆÃ‚¢ƒtƒŒ[ƒ€‚ğ•‰æ–ÊŒó•â‚Æ‚µ‚Ä”»’è‚·‚é
+// å››éš…ãŒã™ã¹ã¦æš—ã„ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’é»’ç”»é¢å€™è£œã¨ã—ã¦åˆ¤å®šã™ã‚‹
 function FrameCornersMostlyDark(Bitmap: TBitmap): Boolean;
-// ƒtƒŒ[ƒ€·•ªŒŸo—p‚ÉA‰æ–Ê‘S‘Ì‚ğ 8x8 ‚Ì–¾‚é‚³–¼‚Öˆ³k‚·‚é
+// ãƒ•ãƒ¬ãƒ¼ãƒ å·®åˆ†æ¤œå‡ºç”¨ã«ã€ç”»é¢å…¨ä½“ã‚’ 8x8 ã®æ˜ã‚‹ã•ç½²åã¸åœ§ç¸®ã™ã‚‹
 function BuildFrameSignature(Bitmap: TBitmap;
   out Signature: TVideoMinerFrameSignature): Boolean;
-// 2 ‚Â‚ÌƒtƒŒ[ƒ€–¼‚Ì•½‹Ï‹P“x·‚ğ•Ô‚·
+// 2 ã¤ã®ãƒ•ãƒ¬ãƒ¼ãƒ ç½²åã®å¹³å‡è¼åº¦å·®ã‚’è¿”ã™
 function FrameSignatureDifference(const A, B: TVideoMinerFrameSignature): Integer;
 
 implementation
 
 type
   TBgraQuad = packed record
-    B: Byte; // Bitmap ‚ÌÂ¬•ª
-    G: Byte; // Bitmap ‚Ì—Î¬•ª
-    R: Byte; // Bitmap ‚ÌÔ¬•ª
-    A: Byte; // pf32bit ‚Ì–¢g—pƒAƒ‹ƒtƒ@‘Š“–¬•ª
+    B: Byte; // Bitmap ã®é’æˆåˆ†
+    G: Byte; // Bitmap ã®ç·‘æˆåˆ†
+    R: Byte; // Bitmap ã®èµ¤æˆåˆ†
+    A: Byte; // pf32bit ã®æœªä½¿ç”¨ã‚¢ãƒ«ãƒ•ã‚¡ç›¸å½“æˆåˆ†
   end;
   TBgraQuadArray = array[0..MaxInt div SizeOf(TBgraQuad) - 1] of TBgraQuad;
   PBgraQuadArray = ^TBgraQuadArray;
@@ -42,7 +42,7 @@ const
   FRAME_CHECK_DARK_CORNER_THRESHOLD = 18;
   FRAME_CHECK_DIFF_GRID_SIZE = 8;
 
-// ƒtƒŒ[ƒ€·•ªŒŸo—p‚ÉA•\¦ Bitmap ‚ğŒÅ’è”ƒZƒ‹‚Ì–¾‚é‚³‚Ök–ñ‚·‚é
+// ãƒ•ãƒ¬ãƒ¼ãƒ å·®åˆ†æ¤œå‡ºç”¨ã«ã€è¡¨ç¤º Bitmap ã‚’å›ºå®šæ•°ã‚»ãƒ«ã®æ˜ã‚‹ã•ã¸ç¸®ç´„ã™ã‚‹
 function BuildFrameSignature(Bitmap: TBitmap;
   out Signature: TVideoMinerFrameSignature): Boolean;
 var
@@ -83,7 +83,7 @@ begin
   Result := True;
 end;
 
-// ƒZƒ‹’PˆÊ‚Ì–¾‚é‚³·‚ğ•½‹Ï‰»‚µA’P”­ƒmƒCƒYŒó•â‚Ì”»’è’l‚Æ‚µ‚Äg‚¤
+// ã‚»ãƒ«å˜ä½ã®æ˜ã‚‹ã•å·®ã‚’å¹³å‡åŒ–ã—ã€å˜ç™ºãƒã‚¤ã‚ºå€™è£œã®åˆ¤å®šå€¤ã¨ã—ã¦ä½¿ã†
 function FrameSignatureDifference(
   const A, B: TVideoMinerFrameSignature): Integer;
 var
@@ -96,7 +96,7 @@ begin
   Result := Total div FRAME_CHECK_DIFF_CELL_COUNT;
 end;
 
-// w’è‚³‚ê‚½‹÷‚Ì¬—Ìˆæ‚ªˆÃ‚³‚µ‚«‚¢’lˆÈ‰º‚©‚ğ’²‚×‚é
+// æŒ‡å®šã•ã‚ŒãŸéš…ã®å°é ˜åŸŸãŒæš—ã•ã—ãã„å€¤ä»¥ä¸‹ã‹ã‚’èª¿ã¹ã‚‹
 function FrameCornerIsDark(Bitmap: TBitmap; Left, Top, CornerWidth,
   CornerHeight: Integer): Boolean;
 var
@@ -121,7 +121,7 @@ begin
     FRAME_CHECK_DARK_CORNER_THRESHOLD;
 end;
 
-// l‹÷‚¾‚¯‚ğƒTƒ“ƒvƒŠƒ“ƒO‚µ‚ÄA•‰æ–Ê‚É‹ß‚¢ƒtƒŒ[ƒ€‚©‚ğŒy‚­”»’è‚·‚é
+// å››éš…ã ã‘ã‚’ã‚µãƒ³ãƒ—ãƒªãƒ³ã‚°ã—ã¦ã€é»’ç”»é¢ã«è¿‘ã„ãƒ•ãƒ¬ãƒ¼ãƒ ã‹ã‚’è»½ãåˆ¤å®šã™ã‚‹
 function FrameCornersMostlyDark(Bitmap: TBitmap): Boolean;
 var
   CornerHeight: Integer;

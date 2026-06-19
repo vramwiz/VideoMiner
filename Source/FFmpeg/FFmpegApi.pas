@@ -1,7 +1,7 @@
-unit FFmpegApi;
+ï»¿unit FFmpegApi;
 
-// FFmpeg 8.1ŒnDLL‚ğDelphi‚©‚çŒÄ‚Ño‚·‚½‚ß‚Ì’áƒŒƒxƒ‹API’è‹`ƒ†ƒjƒbƒgB
-// •K—v‚ÈFFmpeg\‘¢‘ÌAŠÖ”ƒ|ƒCƒ“ƒ^ADLLƒ[ƒhˆ—AŠÔ²•ÏŠ·‚Ì•â•ŠÖ”‚ğ‚Ü‚Æ‚ß‚éB
+// FFmpeg 8.1ç³»DLLã‚’Delphiã‹ã‚‰å‘¼ã³å‡ºã™ãŸã‚ã®ä½ãƒ¬ãƒ™ãƒ«APIå®šç¾©ãƒ¦ãƒ‹ãƒƒãƒˆã€‚
+// å¿…è¦ãªFFmpegæ§‹é€ ä½“ã€é–¢æ•°ãƒã‚¤ãƒ³ã‚¿ã€DLLãƒ­ãƒ¼ãƒ‰å‡¦ç†ã€æ™‚é–“è»¸å¤‰æ›ã®è£œåŠ©é–¢æ•°ã‚’ã¾ã¨ã‚ã‚‹ã€‚
 
 interface
 
@@ -11,100 +11,100 @@ uses
 type
   TAVMediaType = Integer;
 
-  // FFmpeg‚Ì•ª”’l‚ğ•\‚·Œ^B
+  // FFmpegã®åˆ†æ•°å€¤ã‚’è¡¨ã™å‹ã€‚
   TAVRational = record
-    num : Integer; // •ªq
-    den : Integer; // •ª•ê
+    num : Integer; // åˆ†å­
+    den : Integer; // åˆ†æ¯
   end;
 
   PAVCodecParameters = ^TAVCodecParameters;
   PAVChannelLayout = ^TAVChannelLayout;
-  // FFmpeg‚Ìƒ`ƒƒƒ“ƒlƒ‹ƒŒƒCƒAƒEƒgî•ñB
+  // FFmpegã®ãƒãƒ£ãƒ³ãƒãƒ«ãƒ¬ã‚¤ã‚¢ã‚¦ãƒˆæƒ…å ±ã€‚
   TAVChannelLayout = record
-    order       : Integer; // ƒŒƒCƒAƒEƒg•\Œ»•û®
-    nb_channels : Integer; // ƒ`ƒƒƒ“ƒlƒ‹”
-    u           : UInt64;  // FFmpeg‘¤‚ÌƒŒƒCƒAƒEƒg’l
-    opaque      : Pointer; // FFmpeg“à•”—pƒ|ƒCƒ“ƒ^
+    order       : Integer; // ãƒ¬ã‚¤ã‚¢ã‚¦ãƒˆè¡¨ç¾æ–¹å¼
+    nb_channels : Integer; // ãƒãƒ£ãƒ³ãƒãƒ«æ•°
+    u           : UInt64;  // FFmpegå´ã®ãƒ¬ã‚¤ã‚¢ã‚¦ãƒˆå€¤
+    opaque      : Pointer; // FFmpegå†…éƒ¨ç”¨ãƒã‚¤ãƒ³ã‚¿
   end;
 
-  // FFmpegƒXƒgƒŠ[ƒ€‚ÌƒR[ƒfƒbƒNŠî–{î•ñB
+  // FFmpegã‚¹ãƒˆãƒªãƒ¼ãƒ ã®ã‚³ãƒ¼ãƒ‡ãƒƒã‚¯åŸºæœ¬æƒ…å ±ã€‚
   TAVCodecParameters = record
-    codec_type            : TAVMediaType;     // ‰f‘œ/‰¹º‚È‚Ç‚ÌƒƒfƒBƒAí•Ê
-    codec_id              : Integer;          // FFmpeg‚ÌƒR[ƒfƒbƒNID
-    codec_tag             : Cardinal;         // ƒRƒ“ƒeƒi‘¤‚ÌƒR[ƒfƒbƒNƒ^ƒO
-    extradata             : PByte;            // ƒfƒR[ƒ_‰Šú‰»—p‚Ì’Ç‰Áƒf[ƒ^
-    extradata_size        : Integer;          // ’Ç‰Áƒf[ƒ^‚ÌƒoƒCƒg”
-    coded_side_data       : Pointer;          // FFmpeg‘¤‚ÌƒTƒCƒhƒf[ƒ^
-    nb_coded_side_data    : Integer;          // ƒTƒCƒhƒf[ƒ^”
-    format                : Integer;          // ƒsƒNƒZƒ‹Œ`®‚Ü‚½‚ÍƒTƒ“ƒvƒ‹Œ`®
-    bit_rate              : Int64;            // ƒrƒbƒgƒŒ[ƒg
-    bits_per_coded_sample : Integer;          // •„†‰»ƒTƒ“ƒvƒ‹‚ ‚½‚èƒrƒbƒg”
-    bits_per_raw_sample   : Integer;          // ¶ƒTƒ“ƒvƒ‹‚ ‚½‚èƒrƒbƒg”
-    profile               : Integer;          // ƒR[ƒfƒbƒNƒvƒƒtƒ@ƒCƒ‹
-    level                 : Integer;          // ƒR[ƒfƒbƒNƒŒƒxƒ‹
-    width                 : Integer;          // ‰f‘œ•
-    height                : Integer;          // ‰f‘œ‚‚³
-    sample_aspect_ratio   : TAVRational;      // ƒTƒ“ƒvƒ‹ƒAƒXƒyƒNƒg”ä
-    framerate             : TAVRational;      // ƒXƒgƒŠ[ƒ€‘¤‚ÌƒtƒŒ[ƒ€ƒŒ[ƒg
-    field_order           : Integer;          // ƒtƒB[ƒ‹ƒh‡
-    color_range           : Integer;          // F”ÍˆÍ
-    color_primaries       : Integer;          // Fˆæ
-    color_trc             : Integer;          // “`’B“Á«
-    color_space           : Integer;          // F‹óŠÔ
-    chroma_location       : Integer;          // ƒNƒƒ}ˆÊ’u
-    video_delay           : Integer;          // ‰f‘œƒfƒR[ƒh’x‰„
-    ch_layout             : TAVChannelLayout; // ‰¹ºƒ`ƒƒƒ“ƒlƒ‹ƒŒƒCƒAƒEƒg
-    sample_rate           : Integer;          // ‰¹ºƒTƒ“ƒvƒ‹ƒŒ[ƒg
-    block_align           : Integer;          // ‰¹ºƒuƒƒbƒN‹«ŠE
-    frame_size            : Integer;          // ‰¹ºƒtƒŒ[ƒ€ƒTƒCƒY
-    initial_padding       : Integer;          // æ“ªƒpƒfƒBƒ“ƒO
-    trailing_padding      : Integer;          // ––”öƒpƒfƒBƒ“ƒO
-    seek_preroll          : Integer;          // ƒV[ƒNŒã‚É•K—v‚ÈƒvƒŠƒ[ƒ‹
+    codec_type            : TAVMediaType;     // æ˜ åƒ/éŸ³å£°ãªã©ã®ãƒ¡ãƒ‡ã‚£ã‚¢ç¨®åˆ¥
+    codec_id              : Integer;          // FFmpegã®ã‚³ãƒ¼ãƒ‡ãƒƒã‚¯ID
+    codec_tag             : Cardinal;         // ã‚³ãƒ³ãƒ†ãƒŠå´ã®ã‚³ãƒ¼ãƒ‡ãƒƒã‚¯ã‚¿ã‚°
+    extradata             : PByte;            // ãƒ‡ã‚³ãƒ¼ãƒ€åˆæœŸåŒ–ç”¨ã®è¿½åŠ ãƒ‡ãƒ¼ã‚¿
+    extradata_size        : Integer;          // è¿½åŠ ãƒ‡ãƒ¼ã‚¿ã®ãƒã‚¤ãƒˆæ•°
+    coded_side_data       : Pointer;          // FFmpegå´ã®ã‚µã‚¤ãƒ‰ãƒ‡ãƒ¼ã‚¿
+    nb_coded_side_data    : Integer;          // ã‚µã‚¤ãƒ‰ãƒ‡ãƒ¼ã‚¿æ•°
+    format                : Integer;          // ãƒ”ã‚¯ã‚»ãƒ«å½¢å¼ã¾ãŸã¯ã‚µãƒ³ãƒ—ãƒ«å½¢å¼
+    bit_rate              : Int64;            // ãƒ“ãƒƒãƒˆãƒ¬ãƒ¼ãƒˆ
+    bits_per_coded_sample : Integer;          // ç¬¦å·åŒ–ã‚µãƒ³ãƒ—ãƒ«ã‚ãŸã‚Šãƒ“ãƒƒãƒˆæ•°
+    bits_per_raw_sample   : Integer;          // ç”Ÿã‚µãƒ³ãƒ—ãƒ«ã‚ãŸã‚Šãƒ“ãƒƒãƒˆæ•°
+    profile               : Integer;          // ã‚³ãƒ¼ãƒ‡ãƒƒã‚¯ãƒ—ãƒ­ãƒ•ã‚¡ã‚¤ãƒ«
+    level                 : Integer;          // ã‚³ãƒ¼ãƒ‡ãƒƒã‚¯ãƒ¬ãƒ™ãƒ«
+    width                 : Integer;          // æ˜ åƒå¹…
+    height                : Integer;          // æ˜ åƒé«˜ã•
+    sample_aspect_ratio   : TAVRational;      // ã‚µãƒ³ãƒ—ãƒ«ã‚¢ã‚¹ãƒšã‚¯ãƒˆæ¯”
+    framerate             : TAVRational;      // ã‚¹ãƒˆãƒªãƒ¼ãƒ å´ã®ãƒ•ãƒ¬ãƒ¼ãƒ ãƒ¬ãƒ¼ãƒˆ
+    field_order           : Integer;          // ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰é †
+    color_range           : Integer;          // è‰²ç¯„å›²
+    color_primaries       : Integer;          // è‰²åŸŸ
+    color_trc             : Integer;          // ä¼é”ç‰¹æ€§
+    color_space           : Integer;          // è‰²ç©ºé–“
+    chroma_location       : Integer;          // ã‚¯ãƒ­ãƒä½ç½®
+    video_delay           : Integer;          // æ˜ åƒãƒ‡ã‚³ãƒ¼ãƒ‰é…å»¶
+    ch_layout             : TAVChannelLayout; // éŸ³å£°ãƒãƒ£ãƒ³ãƒãƒ«ãƒ¬ã‚¤ã‚¢ã‚¦ãƒˆ
+    sample_rate           : Integer;          // éŸ³å£°ã‚µãƒ³ãƒ—ãƒ«ãƒ¬ãƒ¼ãƒˆ
+    block_align           : Integer;          // éŸ³å£°ãƒ–ãƒ­ãƒƒã‚¯å¢ƒç•Œ
+    frame_size            : Integer;          // éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ã‚µã‚¤ã‚º
+    initial_padding       : Integer;          // å…ˆé ­ãƒ‘ãƒ‡ã‚£ãƒ³ã‚°
+    trailing_padding      : Integer;          // æœ«å°¾ãƒ‘ãƒ‡ã‚£ãƒ³ã‚°
+    seek_preroll          : Integer;          // ã‚·ãƒ¼ã‚¯å¾Œã«å¿…è¦ãªãƒ—ãƒªãƒ­ãƒ¼ãƒ«
   end;
 
   PAVStream = ^TAVStream;
   PPAVStream = ^PAVStream;
-  // FFmpeg‚Ì“ü—ÍƒXƒgƒŠ[ƒ€î•ñB
+  // FFmpegã®å…¥åŠ›ã‚¹ãƒˆãƒªãƒ¼ãƒ æƒ…å ±ã€‚
   TAVStream = record
-    av_class            : Pointer;               // FFmpeg“à•”ƒNƒ‰ƒXî•ñ
-    index               : Integer;               // ƒXƒgƒŠ[ƒ€”Ô†
-    id                  : Integer;               // ƒRƒ“ƒeƒi“à‚ÌƒXƒgƒŠ[ƒ€ID
-    codecpar            : PAVCodecParameters;    // ƒR[ƒfƒbƒNî•ñ
-    priv_data           : Pointer;               // FFmpeg“à•”—pƒf[ƒ^
-    time_base           : TAVRational;           // PTS/DTS‚ÌŠÔ’PˆÊ
-    start_time          : Int64;                 // ŠJn
-    duration            : Int64;                 // ƒXƒgƒŠ[ƒ€’·
-    nb_frames           : Int64;                 // ƒtƒŒ[ƒ€”
-    disposition         : Integer;               // ƒXƒgƒŠ[ƒ€‘®«
-    discard             : Integer;               // ”jŠüİ’è
-    sample_aspect_ratio : TAVRational;           // ƒTƒ“ƒvƒ‹ƒAƒXƒyƒNƒg”ä
-    metadata            : Pointer;               // ƒƒ^ƒf[ƒ^
-    avg_frame_rate      : TAVRational;           // •½‹ÏƒtƒŒ[ƒ€ƒŒ[ƒg
-    attached_pic        : array[0..103] of Byte; // “Y•t‰æ‘œî•ñ‚Ì—\–ñ—Ìˆæ
-    event_flags         : Integer;               // FFmpegƒCƒxƒ“ƒgƒtƒ‰ƒO
-    r_frame_rate        : TAVRational;           // „’èƒtƒŒ[ƒ€ƒŒ[ƒg
-    pts_wrap_bits       : Integer;               // PTSÜ‚è•Ô‚µƒrƒbƒg”
+    av_class            : Pointer;               // FFmpegå†…éƒ¨ã‚¯ãƒ©ã‚¹æƒ…å ±
+    index               : Integer;               // ã‚¹ãƒˆãƒªãƒ¼ãƒ ç•ªå·
+    id                  : Integer;               // ã‚³ãƒ³ãƒ†ãƒŠå†…ã®ã‚¹ãƒˆãƒªãƒ¼ãƒ ID
+    codecpar            : PAVCodecParameters;    // ã‚³ãƒ¼ãƒ‡ãƒƒã‚¯æƒ…å ±
+    priv_data           : Pointer;               // FFmpegå†…éƒ¨ç”¨ãƒ‡ãƒ¼ã‚¿
+    time_base           : TAVRational;           // PTS/DTSã®æ™‚é–“å˜ä½
+    start_time          : Int64;                 // é–‹å§‹æ™‚åˆ»
+    duration            : Int64;                 // ã‚¹ãƒˆãƒªãƒ¼ãƒ é•·
+    nb_frames           : Int64;                 // ãƒ•ãƒ¬ãƒ¼ãƒ æ•°
+    disposition         : Integer;               // ã‚¹ãƒˆãƒªãƒ¼ãƒ å±æ€§
+    discard             : Integer;               // ç ´æ£„è¨­å®š
+    sample_aspect_ratio : TAVRational;           // ã‚µãƒ³ãƒ—ãƒ«ã‚¢ã‚¹ãƒšã‚¯ãƒˆæ¯”
+    metadata            : Pointer;               // ãƒ¡ã‚¿ãƒ‡ãƒ¼ã‚¿
+    avg_frame_rate      : TAVRational;           // å¹³å‡ãƒ•ãƒ¬ãƒ¼ãƒ ãƒ¬ãƒ¼ãƒˆ
+    attached_pic        : array[0..103] of Byte; // æ·»ä»˜ç”»åƒæƒ…å ±ã®äºˆç´„é ˜åŸŸ
+    event_flags         : Integer;               // FFmpegã‚¤ãƒ™ãƒ³ãƒˆãƒ•ãƒ©ã‚°
+    r_frame_rate        : TAVRational;           // æ¨å®šãƒ•ãƒ¬ãƒ¼ãƒ ãƒ¬ãƒ¼ãƒˆ
+    pts_wrap_bits       : Integer;               // PTSæŠ˜ã‚Šè¿”ã—ãƒ“ãƒƒãƒˆæ•°
   end;
 
   PAVFormatContext = ^TAVFormatContext;
   PPAVFormatContext = ^PAVFormatContext;
-  // FFmpeg‚Ì“ü—ÍƒtƒH[ƒ}ƒbƒgƒRƒ“ƒeƒLƒXƒgB
+  // FFmpegã®å…¥åŠ›ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã€‚
   TAVFormatContext = record
-    av_class         : Pointer;    // FFmpeg“à•”ƒNƒ‰ƒXî•ñ
-    iformat          : Pointer;    // “ü—ÍƒtƒH[ƒ}ƒbƒg
-    oformat          : Pointer;    // o—ÍƒtƒH[ƒ}ƒbƒg
-    priv_data        : Pointer;    // FFmpeg“à•”—pƒf[ƒ^
-    pb               : Pointer;    // I/OƒRƒ“ƒeƒLƒXƒg
-    ctx_flags        : Integer;    // ƒRƒ“ƒeƒLƒXƒgƒtƒ‰ƒO
-    nb_streams       : Cardinal;   // ƒXƒgƒŠ[ƒ€”
-    streams          : PPAVStream; // ƒXƒgƒŠ[ƒ€”z—ñ
-    nb_stream_groups : Cardinal;   // ƒXƒgƒŠ[ƒ€ƒOƒ‹[ƒv”
-    stream_groups    : Pointer;    // ƒXƒgƒŠ[ƒ€ƒOƒ‹[ƒv”z—ñ
-    nb_chapters      : Cardinal;   // ƒ`ƒƒƒvƒ^[”
-    chapters         : Pointer;    // ƒ`ƒƒƒvƒ^[”z—ñ
-    url              : PAnsiChar;  // “ü—ÍURL
-    start_time       : Int64;      // “ü—Í‘S‘Ì‚ÌŠJn
-    duration         : Int64;      // “ü—Í‘S‘Ì‚Ì’·‚³
+    av_class         : Pointer;    // FFmpegå†…éƒ¨ã‚¯ãƒ©ã‚¹æƒ…å ±
+    iformat          : Pointer;    // å…¥åŠ›ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆ
+    oformat          : Pointer;    // å‡ºåŠ›ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆ
+    priv_data        : Pointer;    // FFmpegå†…éƒ¨ç”¨ãƒ‡ãƒ¼ã‚¿
+    pb               : Pointer;    // I/Oã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆ
+    ctx_flags        : Integer;    // ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆãƒ•ãƒ©ã‚°
+    nb_streams       : Cardinal;   // ã‚¹ãƒˆãƒªãƒ¼ãƒ æ•°
+    streams          : PPAVStream; // ã‚¹ãƒˆãƒªãƒ¼ãƒ é…åˆ—
+    nb_stream_groups : Cardinal;   // ã‚¹ãƒˆãƒªãƒ¼ãƒ ã‚°ãƒ«ãƒ¼ãƒ—æ•°
+    stream_groups    : Pointer;    // ã‚¹ãƒˆãƒªãƒ¼ãƒ ã‚°ãƒ«ãƒ¼ãƒ—é…åˆ—
+    nb_chapters      : Cardinal;   // ãƒãƒ£ãƒ—ã‚¿ãƒ¼æ•°
+    chapters         : Pointer;    // ãƒãƒ£ãƒ—ã‚¿ãƒ¼é…åˆ—
+    url              : PAnsiChar;  // å…¥åŠ›URL
+    start_time       : Int64;      // å…¥åŠ›å…¨ä½“ã®é–‹å§‹æ™‚åˆ»
+    duration         : Int64;      // å…¥åŠ›å…¨ä½“ã®é•·ã•
   end;
 
   PAVCodec = Pointer;
@@ -123,67 +123,67 @@ type
 
   PAVPacket = ^TAVPacket;
   PPAVPacket = ^PAVPacket;
-  // FFmpeg‚©‚ç“Ç‚İ‚Şˆ³kÏ‚İƒpƒPƒbƒgB
+  // FFmpegã‹ã‚‰èª­ã¿è¾¼ã‚€åœ§ç¸®æ¸ˆã¿ãƒ‘ã‚±ãƒƒãƒˆã€‚
   TAVPacket = record
-    buf             : Pointer;     // FFmpeg“à•”ƒoƒbƒtƒ@QÆ
-    pts             : Int64;       // •\¦
-    dts             : Int64;       // ƒfƒR[ƒh
-    data            : PByte;       // ƒpƒPƒbƒgƒf[ƒ^
-    size            : Integer;     // ƒpƒPƒbƒgƒf[ƒ^‚ÌƒoƒCƒg”
-    stream_index    : Integer;     // Š‘®ƒXƒgƒŠ[ƒ€”Ô†
-    flags           : Integer;     // ƒpƒPƒbƒgƒtƒ‰ƒO
-    side_data       : Pointer;     // ƒTƒCƒhƒf[ƒ^
-    side_data_elems : Integer;     // ƒTƒCƒhƒf[ƒ^”
-    duration        : Int64;       // ƒpƒPƒbƒg‚Ì’·‚³
-    pos             : Int64;       // “ü—Í“à‚ÌˆÊ’u
-    opaque          : Pointer;     // FFmpeg“à•”—pƒ|ƒCƒ“ƒ^
-    opaque_ref      : Pointer;     // FFmpeg“à•”—pQÆ
-    time_base       : TAVRational; // ƒpƒPƒbƒg‚ÌŠÔ’PˆÊ
+    buf             : Pointer;     // FFmpegå†…éƒ¨ãƒãƒƒãƒ•ã‚¡å‚ç…§
+    pts             : Int64;       // è¡¨ç¤ºæ™‚åˆ»
+    dts             : Int64;       // ãƒ‡ã‚³ãƒ¼ãƒ‰æ™‚åˆ»
+    data            : PByte;       // ãƒ‘ã‚±ãƒƒãƒˆãƒ‡ãƒ¼ã‚¿
+    size            : Integer;     // ãƒ‘ã‚±ãƒƒãƒˆãƒ‡ãƒ¼ã‚¿ã®ãƒã‚¤ãƒˆæ•°
+    stream_index    : Integer;     // æ‰€å±ã‚¹ãƒˆãƒªãƒ¼ãƒ ç•ªå·
+    flags           : Integer;     // ãƒ‘ã‚±ãƒƒãƒˆãƒ•ãƒ©ã‚°
+    side_data       : Pointer;     // ã‚µã‚¤ãƒ‰ãƒ‡ãƒ¼ã‚¿
+    side_data_elems : Integer;     // ã‚µã‚¤ãƒ‰ãƒ‡ãƒ¼ã‚¿æ•°
+    duration        : Int64;       // ãƒ‘ã‚±ãƒƒãƒˆã®é•·ã•
+    pos             : Int64;       // å…¥åŠ›å†…ã®ä½ç½®
+    opaque          : Pointer;     // FFmpegå†…éƒ¨ç”¨ãƒã‚¤ãƒ³ã‚¿
+    opaque_ref      : Pointer;     // FFmpegå†…éƒ¨ç”¨å‚ç…§
+    time_base       : TAVRational; // ãƒ‘ã‚±ãƒƒãƒˆæ™‚åˆ»ã®æ™‚é–“å˜ä½
   end;
 
   PAVFrame = ^TAVFrame;
   PPAVFrame = ^PAVFrame;
-  // FFmpeg‚ªƒfƒR[ƒh‚µ‚½‰f‘œ/‰¹ºƒtƒŒ[ƒ€B
+  // FFmpegãŒãƒ‡ã‚³ãƒ¼ãƒ‰ã—ãŸæ˜ åƒ/éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ã€‚
   TAVFrame = record
-    data                  : array[0..7] of PByte;        // ƒtƒŒ[ƒ€ƒf[ƒ^‚ÌƒvƒŒ[ƒ“ƒ|ƒCƒ“ƒ^
-    linesize              : array[0..7] of Integer;      // ŠeƒvƒŒ[ƒ“‚Ì1sƒoƒCƒg”
-    extended_data         : Pointer;                     // ‰¹º‚È‚Ç‚Åg‚¤Šg’£ƒvƒŒ[ƒ“
-    width                 : Integer;                     // ‰f‘œ•
-    height                : Integer;                     // ‰f‘œ‚‚³
-    nb_samples            : Integer;                     // ‰¹ºƒTƒ“ƒvƒ‹”
-    format                : Integer;                     // ƒsƒNƒZƒ‹Œ`®‚Ü‚½‚ÍƒTƒ“ƒvƒ‹Œ`®
-    pict_type             : Integer;                     // ‰f‘œƒtƒŒ[ƒ€í•Ê
-    sample_aspect_ratio   : TAVRational;                 // ƒTƒ“ƒvƒ‹ƒAƒXƒyƒNƒg”ä
-    pts                   : Int64;                       // ƒtƒŒ[ƒ€‚Ì•\¦
-    pkt_dts               : Int64;                       // ƒpƒPƒbƒg—R—ˆ‚ÌDTS
-    time_base             : TAVRational;                 // ƒtƒŒ[ƒ€‚ÌŠÔ’PˆÊ
-    quality               : Integer;                     // •i¿’l
-    opaque                : Pointer;                     // ŒÄ‚Ño‚µ‘¤‚Ì„—Lƒf[ƒ^
-    repeat_pict           : Integer;                     // ƒtƒŒ[ƒ€ŒJ‚è•Ô‚µî•ñ
-    sample_rate           : Integer;                     // ‰¹ºƒTƒ“ƒvƒ‹ƒŒ[ƒg
-    buf                   : array[0..7] of PAVBufferRef; // ƒtƒŒ[ƒ€ƒf[ƒ^‚ÌQÆƒoƒbƒtƒ@
-    extended_buf          : Pointer;                     // Šg’£ƒoƒbƒtƒ@”z—ñ
-    nb_extended_buf       : Integer;                     // Šg’£ƒoƒbƒtƒ@”
-    side_data             : Pointer;                     // ƒTƒCƒhƒf[ƒ^”z—ñ
-    nb_side_data          : Integer;                     // ƒTƒCƒhƒf[ƒ^”
-    flags                 : Integer;                     // ƒtƒŒ[ƒ€ƒtƒ‰ƒO
-    color_range           : Integer;                     // F”ÍˆÍ
-    color_primaries       : Integer;                     // Fˆæ
-    color_trc             : Integer;                     // “`’B“Á«
-    colorspace            : Integer;                     // F‹óŠÔ
-    chroma_location       : Integer;                     // ƒNƒƒ}ˆÊ’u
-    best_effort_timestamp : Int64;                       // „’è•\¦
-    metadata              : Pointer;                     // ƒƒ^ƒf[ƒ^
-    decode_error_flags    : Integer;                     // ƒfƒR[ƒhƒGƒ‰[ƒtƒ‰ƒO
+    data                  : array[0..7] of PByte;        // ãƒ•ãƒ¬ãƒ¼ãƒ ãƒ‡ãƒ¼ã‚¿ã®ãƒ—ãƒ¬ãƒ¼ãƒ³ãƒã‚¤ãƒ³ã‚¿
+    linesize              : array[0..7] of Integer;      // å„ãƒ—ãƒ¬ãƒ¼ãƒ³ã®1è¡Œãƒã‚¤ãƒˆæ•°
+    extended_data         : Pointer;                     // éŸ³å£°ãªã©ã§ä½¿ã†æ‹¡å¼µãƒ—ãƒ¬ãƒ¼ãƒ³
+    width                 : Integer;                     // æ˜ åƒå¹…
+    height                : Integer;                     // æ˜ åƒé«˜ã•
+    nb_samples            : Integer;                     // éŸ³å£°ã‚µãƒ³ãƒ—ãƒ«æ•°
+    format                : Integer;                     // ãƒ”ã‚¯ã‚»ãƒ«å½¢å¼ã¾ãŸã¯ã‚µãƒ³ãƒ—ãƒ«å½¢å¼
+    pict_type             : Integer;                     // æ˜ åƒãƒ•ãƒ¬ãƒ¼ãƒ ç¨®åˆ¥
+    sample_aspect_ratio   : TAVRational;                 // ã‚µãƒ³ãƒ—ãƒ«ã‚¢ã‚¹ãƒšã‚¯ãƒˆæ¯”
+    pts                   : Int64;                       // ãƒ•ãƒ¬ãƒ¼ãƒ ã®è¡¨ç¤ºæ™‚åˆ»
+    pkt_dts               : Int64;                       // ãƒ‘ã‚±ãƒƒãƒˆç”±æ¥ã®DTS
+    time_base             : TAVRational;                 // ãƒ•ãƒ¬ãƒ¼ãƒ æ™‚åˆ»ã®æ™‚é–“å˜ä½
+    quality               : Integer;                     // å“è³ªå€¤
+    opaque                : Pointer;                     // å‘¼ã³å‡ºã—å´ã®ç§æœ‰ãƒ‡ãƒ¼ã‚¿
+    repeat_pict           : Integer;                     // ãƒ•ãƒ¬ãƒ¼ãƒ ç¹°ã‚Šè¿”ã—æƒ…å ±
+    sample_rate           : Integer;                     // éŸ³å£°ã‚µãƒ³ãƒ—ãƒ«ãƒ¬ãƒ¼ãƒˆ
+    buf                   : array[0..7] of PAVBufferRef; // ãƒ•ãƒ¬ãƒ¼ãƒ ãƒ‡ãƒ¼ã‚¿ã®å‚ç…§ãƒãƒƒãƒ•ã‚¡
+    extended_buf          : Pointer;                     // æ‹¡å¼µãƒãƒƒãƒ•ã‚¡é…åˆ—
+    nb_extended_buf       : Integer;                     // æ‹¡å¼µãƒãƒƒãƒ•ã‚¡æ•°
+    side_data             : Pointer;                     // ã‚µã‚¤ãƒ‰ãƒ‡ãƒ¼ã‚¿é…åˆ—
+    nb_side_data          : Integer;                     // ã‚µã‚¤ãƒ‰ãƒ‡ãƒ¼ã‚¿æ•°
+    flags                 : Integer;                     // ãƒ•ãƒ¬ãƒ¼ãƒ ãƒ•ãƒ©ã‚°
+    color_range           : Integer;                     // è‰²ç¯„å›²
+    color_primaries       : Integer;                     // è‰²åŸŸ
+    color_trc             : Integer;                     // ä¼é”ç‰¹æ€§
+    colorspace            : Integer;                     // è‰²ç©ºé–“
+    chroma_location       : Integer;                     // ã‚¯ãƒ­ãƒä½ç½®
+    best_effort_timestamp : Int64;                       // æ¨å®šè¡¨ç¤ºæ™‚åˆ»
+    metadata              : Pointer;                     // ãƒ¡ã‚¿ãƒ‡ãƒ¼ã‚¿
+    decode_error_flags    : Integer;                     // ãƒ‡ã‚³ãƒ¼ãƒ‰ã‚¨ãƒ©ãƒ¼ãƒ•ãƒ©ã‚°
     hw_frames_ctx         : PAVBufferRef;                // HW frame context
-    opaque_ref            : PAVBufferRef;                // QÆƒJƒEƒ“ƒg•t‚«„—Lƒf[ƒ^
-    crop_top              : NativeUInt;                  // ƒNƒƒbƒvã’[
-    crop_bottom           : NativeUInt;                  // ƒNƒƒbƒv‰º’[
-    crop_left             : NativeUInt;                  // ƒNƒƒbƒv¶’[
-    crop_right            : NativeUInt;                  // ƒNƒƒbƒv‰E’[
-    private_ref           : Pointer;                     // FFmpeg“à•”QÆ
-    ch_layout             : TAVChannelLayout;            // ‰¹ºƒ`ƒƒƒ“ƒlƒ‹ƒŒƒCƒAƒEƒg
-    duration              : Int64;                       // ƒtƒŒ[ƒ€’·
+    opaque_ref            : PAVBufferRef;                // å‚ç…§ã‚«ã‚¦ãƒ³ãƒˆä»˜ãç§æœ‰ãƒ‡ãƒ¼ã‚¿
+    crop_top              : NativeUInt;                  // ã‚¯ãƒ­ãƒƒãƒ—ä¸Šç«¯
+    crop_bottom           : NativeUInt;                  // ã‚¯ãƒ­ãƒƒãƒ—ä¸‹ç«¯
+    crop_left             : NativeUInt;                  // ã‚¯ãƒ­ãƒƒãƒ—å·¦ç«¯
+    crop_right            : NativeUInt;                  // ã‚¯ãƒ­ãƒƒãƒ—å³ç«¯
+    private_ref           : Pointer;                     // FFmpegå†…éƒ¨å‚ç…§
+    ch_layout             : TAVChannelLayout;            // éŸ³å£°ãƒãƒ£ãƒ³ãƒãƒ«ãƒ¬ã‚¤ã‚¢ã‚¦ãƒˆ
+    duration              : Int64;                       // ãƒ•ãƒ¬ãƒ¼ãƒ é•·
     alpha_mode            : Integer;                     // alpha handling mode
   end;
 
@@ -289,32 +289,32 @@ type
     frame: PAVFrame): Integer; cdecl;
 
 const
-  AVMEDIA_TYPE_VIDEO          = 0;                    // FFmpeg ‚Ì“®‰æƒƒfƒBƒAí•Ê
-  AVMEDIA_TYPE_AUDIO          = 1;                    // FFmpeg ‚Ì‰¹ºƒƒfƒBƒAí•Ê
-  AV_TIME_BASE                = 1000000;              // FFmpeg ‹¤’ÊŠÔ²‚Ì 1 •b’PˆÊ
-  AVSEEK_FLAG_BACKWARD        = 1;                    // ’¼‘OƒL[ƒtƒŒ[ƒ€‚Ö–ß‚éƒV[ƒNw’è
-  AVSEEK_FLAG_ANY             = 4;                    // ”ñƒL[ƒtƒŒ[ƒ€‚à‹–‰Â‚·‚éƒV[ƒNw’è
-  AV_PIX_FMT_BGR24            = 3;                    // 24bit BGR o—ÍŒ`®
-  AV_PIX_FMT_YUV420P          = 0;                    // I420/YUV420 planar Œ`®
-  AV_PIX_FMT_YUYV422          = 1;                    // YUY2 ‚Ö“n‚· FFmpeg packed YUV422 Œ`®
-  AV_PIX_FMT_BGRA             = 28;                   // BGRX32 •\¦‚Åg‚¤ BGRA Œ`®
-  AV_PIX_FMT_NV12             = 23;                   // QSV ‚Åg‚í‚ê‚é‚±‚Æ‚ª‚ ‚é NV12 Œ`®
-  AV_PIX_FMT_QSV              = 114;                  // QSV hardware frame Œ`®
-  AV_PIX_FMT_BGR0             = 121;                  // alpha ‚È‚µ 32bit BGR Œ`®
-  AV_HWDEVICE_TYPE_QSV        = 5;                    // QSV device context ‚Ìí—Ş
-  SWS_BILINEAR                = 2;                    // sws_scale ‚Ì bilinear •ÏŠ·w’è
-  AVIO_FLAG_WRITE             = 2;                    // FFmpeg I/O ‚Ì‘‚«‚İw’è
-  AV_CODEC_FLAG_GLOBAL_HEADER = 1 shl 22;             // ƒRƒ“ƒeƒiŠO global header ‚ğg‚¤ codec flag
-  AVERROR_EOF                 = -541478725;           // filter/decoder ‚ªI’[‚ğ•Ô‚·ƒGƒ‰[’l
-  AVERROR_EAGAIN              = -11;                  // “üo—Í‘Ò‚¿‚ğ¦‚·ƒGƒ‰[’l
-  AV_NOPTS_VALUE              = -9223372036854775808; // PTS ‚ª‘¶İ‚µ‚È‚¢‚±‚Æ‚ğ¦‚·’l
-  AV_SAMPLE_FMT_S16           = 1;                    // signed 16bit PCM ƒTƒ“ƒvƒ‹Œ`®
-  AV_BUFFERSRC_FLAG_KEEP_REF  = 8;                    // buffersrc ‚ÖQÆ•Û‚Å“n‚·w’è
-  AUDIO_OUTPUT_SAMPLE_RATE    = 48000;                // VideoMiner ‚ÌŒÅ’è‰¹ºo—ÍƒTƒ“ƒvƒ‹ƒŒ[ƒg Hz
-  AUDIO_OUTPUT_CHANNELS       = 2;                    // VideoMiner ‚ÌŒÅ’è‰¹ºo—Íƒ`ƒƒƒ“ƒlƒ‹”
+  AVMEDIA_TYPE_VIDEO          = 0;                    // FFmpeg ã®å‹•ç”»ãƒ¡ãƒ‡ã‚£ã‚¢ç¨®åˆ¥
+  AVMEDIA_TYPE_AUDIO          = 1;                    // FFmpeg ã®éŸ³å£°ãƒ¡ãƒ‡ã‚£ã‚¢ç¨®åˆ¥
+  AV_TIME_BASE                = 1000000;              // FFmpeg å…±é€šæ™‚é–“è»¸ã® 1 ç§’å˜ä½
+  AVSEEK_FLAG_BACKWARD        = 1;                    // ç›´å‰ã‚­ãƒ¼ãƒ•ãƒ¬ãƒ¼ãƒ ã¸æˆ»ã‚‹ã‚·ãƒ¼ã‚¯æŒ‡å®š
+  AVSEEK_FLAG_ANY             = 4;                    // éã‚­ãƒ¼ãƒ•ãƒ¬ãƒ¼ãƒ ã‚‚è¨±å¯ã™ã‚‹ã‚·ãƒ¼ã‚¯æŒ‡å®š
+  AV_PIX_FMT_BGR24            = 3;                    // 24bit BGR å‡ºåŠ›å½¢å¼
+  AV_PIX_FMT_YUV420P          = 0;                    // I420/YUV420 planar å½¢å¼
+  AV_PIX_FMT_YUYV422          = 1;                    // YUY2 ã¸æ¸¡ã™ FFmpeg packed YUV422 å½¢å¼
+  AV_PIX_FMT_BGRA             = 28;                   // BGRX32 è¡¨ç¤ºã§ä½¿ã† BGRA å½¢å¼
+  AV_PIX_FMT_NV12             = 23;                   // QSV ã§ä½¿ã‚ã‚Œã‚‹ã“ã¨ãŒã‚ã‚‹ NV12 å½¢å¼
+  AV_PIX_FMT_QSV              = 114;                  // QSV hardware frame å½¢å¼
+  AV_PIX_FMT_BGR0             = 121;                  // alpha ãªã— 32bit BGR å½¢å¼
+  AV_HWDEVICE_TYPE_QSV        = 5;                    // QSV device context ã®ç¨®é¡
+  SWS_BILINEAR                = 2;                    // sws_scale ã® bilinear å¤‰æ›æŒ‡å®š
+  AVIO_FLAG_WRITE             = 2;                    // FFmpeg I/O ã®æ›¸ãè¾¼ã¿æŒ‡å®š
+  AV_CODEC_FLAG_GLOBAL_HEADER = 1 shl 22;             // ã‚³ãƒ³ãƒ†ãƒŠå¤– global header ã‚’ä½¿ã† codec flag
+  AVERROR_EOF                 = -541478725;           // filter/decoder ãŒçµ‚ç«¯ã‚’è¿”ã™ã‚¨ãƒ©ãƒ¼å€¤
+  AVERROR_EAGAIN              = -11;                  // å…¥å‡ºåŠ›å¾…ã¡ã‚’ç¤ºã™ã‚¨ãƒ©ãƒ¼å€¤
+  AV_NOPTS_VALUE              = -9223372036854775808; // PTS ãŒå­˜åœ¨ã—ãªã„ã“ã¨ã‚’ç¤ºã™å€¤
+  AV_SAMPLE_FMT_S16           = 1;                    // signed 16bit PCM ã‚µãƒ³ãƒ—ãƒ«å½¢å¼
+  AV_BUFFERSRC_FLAG_KEEP_REF  = 8;                    // buffersrc ã¸å‚ç…§ä¿æŒã§æ¸¡ã™æŒ‡å®š
+  AUDIO_OUTPUT_SAMPLE_RATE    = 48000;                // VideoMiner ã®å›ºå®šéŸ³å£°å‡ºåŠ›ã‚µãƒ³ãƒ—ãƒ«ãƒ¬ãƒ¼ãƒˆ Hz
+  AUDIO_OUTPUT_CHANNELS       = 2;                    // VideoMiner ã®å›ºå®šéŸ³å£°å‡ºåŠ›ãƒãƒ£ãƒ³ãƒãƒ«æ•°
 
 type
-  // FFmpeg DLL‚Ìƒ[ƒhó‘Ô‚ÆŠÖ”ƒ|ƒCƒ“ƒ^‚ğ•Û‚·‚éƒNƒ‰ƒXB
+  // FFmpeg DLLã®ãƒ­ãƒ¼ãƒ‰çŠ¶æ…‹ã¨é–¢æ•°ãƒã‚¤ãƒ³ã‚¿ã‚’ä¿æŒã™ã‚‹ã‚¯ãƒ©ã‚¹ã€‚
   TFFmpegApi = class
   public
     class var avcodec_find_decoder_by_name: Tavcodec_find_decoder_by_name;
@@ -322,92 +322,92 @@ type
     class var av_hwdevice_ctx_create: Tav_hwdevice_ctx_create;
     class var av_hwframe_transfer_data: Tav_hwframe_transfer_data;
     class var av_buffer_unref: Tav_buffer_unref;
-    class var FLoaded                       : Boolean;                        // FFmpeg DLLƒ[ƒhÏ‚İƒtƒ‰ƒO
-    class var FAvUtil                       : HMODULE;                        // avutil DLLƒnƒ“ƒhƒ‹
-    class var FAvCodec                      : HMODULE;                        // avcodec DLLƒnƒ“ƒhƒ‹
-    class var FAvFilter                     : HMODULE;                        // avfilter DLLƒnƒ“ƒhƒ‹
-    class var FAvFormat                     : HMODULE;                        // avformat DLLƒnƒ“ƒhƒ‹
-    class var FSwResample                   : HMODULE;                        // swresample DLLƒnƒ“ƒhƒ‹
-    class var FSwScale                      : HMODULE;                        // swscale DLLƒnƒ“ƒhƒ‹
-    class var avformat_open_input           : Tavformat_open_input;           // “ü—Íƒtƒ@ƒCƒ‹‚ğŠJ‚­ŠÖ”
-    class var avformat_find_stream_info     : Tavformat_find_stream_info;     // ƒXƒgƒŠ[ƒ€î•ñ‚ğ“Ç‚ŞŠÖ”
-    class var avformat_close_input          : Tavformat_close_input;          // “ü—ÍƒRƒ“ƒeƒLƒXƒg‚ğ•Â‚¶‚éŠÖ”
-    class var avformat_network_init         : Tavformat_network_init;         // FFmpegƒlƒbƒgƒ[ƒN‹@”\‰Šú‰»ŠÖ”
-    class var av_find_best_stream           : Tav_find_best_stream;           // Å“K‚È‰f‘œƒXƒgƒŠ[ƒ€‚ğ’T‚·ŠÖ”
-    class var av_read_frame                 : Tav_read_frame;                 // Ÿ‚ÌƒpƒPƒbƒg‚ğ“Ç‚ŞŠÖ”
-    class var av_seek_frame                 : Tav_seek_frame;                 // w’èˆÊ’u‚ÖƒV[ƒN‚·‚éŠÖ”
-    class var avformat_flush                : Tavformat_flush;                // “ü—Í‘¤‚Ì“à•”ƒoƒbƒtƒ@‚ğÌ‚Ä‚éŠÖ”
-    class var avcodec_find_decoder          : Tavcodec_find_decoder;          // ƒR[ƒfƒbƒNID‚©‚çƒfƒR[ƒ_‚ğ’T‚·ŠÖ”
-    class var avcodec_alloc_context3        : Tavcodec_alloc_context3;        // ƒfƒR[ƒhƒRƒ“ƒeƒLƒXƒg‚ğŠm•Û‚·‚éŠÖ”
-    class var avcodec_parameters_to_context : Tavcodec_parameters_to_context; // ƒXƒgƒŠ[ƒ€î•ñ‚ğƒfƒR[ƒhƒRƒ“ƒeƒLƒXƒg‚ÖƒRƒs[‚·‚éŠÖ”
-    class var avcodec_open2                 : Tavcodec_open2;                 // ƒfƒR[ƒ_‚ğŠJ‚­ŠÖ”
-    class var avcodec_free_context          : Tavcodec_free_context;          // ƒfƒR[ƒhƒRƒ“ƒeƒLƒXƒg‚ğ‰ğ•ú‚·‚éŠÖ”
-    class var avcodec_send_packet           : Tavcodec_send_packet;           // ƒpƒPƒbƒg‚ğƒfƒR[ƒ_‚Ö“n‚·ŠÖ”
-    class var avcodec_receive_frame         : Tavcodec_receive_frame;         // ƒfƒR[ƒhÏ‚İƒtƒŒ[ƒ€‚ğó‚¯æ‚éŠÖ”
-    class var avcodec_flush_buffers         : Tavcodec_flush_buffers;         // ƒV[ƒNŒã‚ÉƒfƒR[ƒ_“à•”ƒoƒbƒtƒ@‚ğÌ‚Ä‚éŠÖ”
-    class var av_packet_alloc               : Tav_packet_alloc;               // AVPacket‚ğŠm•Û‚·‚éŠÖ”
-    class var av_packet_free                : Tav_packet_free;                // AVPacket‚ğ‰ğ•ú‚·‚éŠÖ”
-    class var av_packet_unref               : Tav_packet_unref;               // AVPacket‚ÌQÆ‚ğ‰ğ•ú‚·‚éŠÖ”
-    class var av_frame_alloc                : Tav_frame_alloc;                // AVFrame‚ğŠm•Û‚·‚éŠÖ”
-    class var av_frame_free                 : Tav_frame_free;                 // AVFrame‚ğ‰ğ•ú‚·‚éŠÖ”
-    class var av_frame_get_buffer           : Tav_frame_get_buffer;           // AVFrame—pƒoƒbƒtƒ@‚ğŠm•Û‚·‚éŠÖ”
-    class var av_frame_make_writable        : Tav_frame_make_writable;        // AVFrame‚ğ‘‚«‚İ‰Â”\‚É‚·‚éŠÖ”
-    class var av_strerror                   : Tav_strerror;                   // FFmpegƒGƒ‰[ƒR[ƒh‚ğ•¶š—ñ‰»‚·‚éŠÖ”
-    class var av_get_sample_fmt_name        : Tav_get_sample_fmt_name;        // ƒTƒ“ƒvƒ‹Œ`®–¼‚ğæ“¾‚·‚éŠÖ”
-    class var av_get_pix_fmt_name           : Tav_get_pix_fmt_name;           // pixel format –¼‚ğæ“¾‚·‚éŠÖ”
-    class var av_samples_get_buffer_size    : Tav_samples_get_buffer_size;    // ‰¹ºƒTƒ“ƒvƒ‹‚ÌƒoƒCƒg”‚ğŒvZ‚·‚éŠÖ”
-    class var av_channel_layout_default     : Tav_channel_layout_default;     // •W€ƒ`ƒƒƒ“ƒlƒ‹ƒŒƒCƒAƒEƒg‚ğì‚éŠÖ”
-    class var av_channel_layout_copy        : Tav_channel_layout_copy;        // ƒ`ƒƒƒ“ƒlƒ‹ƒŒƒCƒAƒEƒg‚ğƒRƒs[‚·‚éŠÖ”
-    class var av_channel_layout_uninit      : Tav_channel_layout_uninit;      // ƒ`ƒƒƒ“ƒlƒ‹ƒŒƒCƒAƒEƒg‚ğ‰ğ•ú‚·‚éŠÖ”
-    class var sws_getContext                : Tsws_getContext;                // F•ÏŠ·ƒRƒ“ƒeƒLƒXƒg‚ğì‚éŠÖ”
-    class var sws_scale                     : Tsws_scale;                     // ƒtƒŒ[ƒ€‚ğBGR‚Ö•ÏŠ·‚·‚éŠÖ”
-    class var sws_freeContext               : Tsws_freeContext;               // F•ÏŠ·ƒRƒ“ƒeƒLƒXƒg‚ğ‰ğ•ú‚·‚éŠÖ”
-    class var swr_alloc_set_opts2           : Tswr_alloc_set_opts2;           // ‰¹º•ÏŠ·ƒRƒ“ƒeƒLƒXƒg‚ğì‚éŠÖ”
-    class var swr_init                      : Tswr_init;                      // ‰¹º•ÏŠ·ƒRƒ“ƒeƒLƒXƒg‚ğ‰Šú‰»‚·‚éŠÖ”
-    class var swr_convert                   : Tswr_convert;                   // ‰¹ºƒtƒŒ[ƒ€‚ğPCM‚Ö•ÏŠ·‚·‚éŠÖ”
-    class var swr_free                      : Tswr_free;                      // ‰¹º•ÏŠ·ƒRƒ“ƒeƒLƒXƒg‚ğ‰ğ•ú‚·‚éŠÖ”
-    class var avfilter_get_by_name          : Tavfilter_get_by_name;          // ƒtƒBƒ‹ƒ^–¼‚©‚ç’è‹`‚ğæ“¾‚·‚éŠÖ”
-    class var avfilter_graph_alloc          : Tavfilter_graph_alloc;          // ƒtƒBƒ‹ƒ^ƒOƒ‰ƒt‚ğì‚éŠÖ”
-    class var avfilter_graph_create_filter  : Tavfilter_graph_create_filter;  // ƒOƒ‰ƒt“à‚ÉƒtƒBƒ‹ƒ^‚ğì‚éŠÖ”
-    class var avfilter_link                 : Tavfilter_link;                 // ƒtƒBƒ‹ƒ^“¯m‚ğÚ‘±‚·‚éŠÖ”
-    class var avfilter_graph_config         : Tavfilter_graph_config;         // ƒtƒBƒ‹ƒ^ƒOƒ‰ƒt‚ğŠm’è‚·‚éŠÖ”
-    class var avfilter_graph_free           : Tavfilter_graph_free;           // ƒtƒBƒ‹ƒ^ƒOƒ‰ƒt‚ğ‰ğ•ú‚·‚éŠÖ”
-    class var av_buffersrc_add_frame_flags  : Tav_buffersrc_add_frame_flags;  // ƒ\[ƒXƒtƒBƒ‹ƒ^‚ÖƒtƒŒ[ƒ€‚ğ“n‚·ŠÖ”
-    class var av_buffersink_get_frame       : Tav_buffersink_get_frame;       // ƒVƒ“ƒNƒtƒBƒ‹ƒ^‚©‚çƒtƒŒ[ƒ€‚ğó‚¯æ‚éŠÖ”
-    // ‚±‚Ì“ü—Íƒvƒ‰ƒOƒCƒ“‚ª’u‚©‚ê‚Ä‚¢‚éƒtƒHƒ‹ƒ_‚ğæ“¾‚·‚éB
+    class var FLoaded                       : Boolean;                        // FFmpeg DLLãƒ­ãƒ¼ãƒ‰æ¸ˆã¿ãƒ•ãƒ©ã‚°
+    class var FAvUtil                       : HMODULE;                        // avutil DLLãƒãƒ³ãƒ‰ãƒ«
+    class var FAvCodec                      : HMODULE;                        // avcodec DLLãƒãƒ³ãƒ‰ãƒ«
+    class var FAvFilter                     : HMODULE;                        // avfilter DLLãƒãƒ³ãƒ‰ãƒ«
+    class var FAvFormat                     : HMODULE;                        // avformat DLLãƒãƒ³ãƒ‰ãƒ«
+    class var FSwResample                   : HMODULE;                        // swresample DLLãƒãƒ³ãƒ‰ãƒ«
+    class var FSwScale                      : HMODULE;                        // swscale DLLãƒãƒ³ãƒ‰ãƒ«
+    class var avformat_open_input           : Tavformat_open_input;           // å…¥åŠ›ãƒ•ã‚¡ã‚¤ãƒ«ã‚’é–‹ãé–¢æ•°
+    class var avformat_find_stream_info     : Tavformat_find_stream_info;     // ã‚¹ãƒˆãƒªãƒ¼ãƒ æƒ…å ±ã‚’èª­ã‚€é–¢æ•°
+    class var avformat_close_input          : Tavformat_close_input;          // å…¥åŠ›ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã‚’é–‰ã˜ã‚‹é–¢æ•°
+    class var avformat_network_init         : Tavformat_network_init;         // FFmpegãƒãƒƒãƒˆãƒ¯ãƒ¼ã‚¯æ©Ÿèƒ½åˆæœŸåŒ–é–¢æ•°
+    class var av_find_best_stream           : Tav_find_best_stream;           // æœ€é©ãªæ˜ åƒã‚¹ãƒˆãƒªãƒ¼ãƒ ã‚’æ¢ã™é–¢æ•°
+    class var av_read_frame                 : Tav_read_frame;                 // æ¬¡ã®ãƒ‘ã‚±ãƒƒãƒˆã‚’èª­ã‚€é–¢æ•°
+    class var av_seek_frame                 : Tav_seek_frame;                 // æŒ‡å®šä½ç½®ã¸ã‚·ãƒ¼ã‚¯ã™ã‚‹é–¢æ•°
+    class var avformat_flush                : Tavformat_flush;                // å…¥åŠ›å´ã®å†…éƒ¨ãƒãƒƒãƒ•ã‚¡ã‚’æ¨ã¦ã‚‹é–¢æ•°
+    class var avcodec_find_decoder          : Tavcodec_find_decoder;          // ã‚³ãƒ¼ãƒ‡ãƒƒã‚¯IDã‹ã‚‰ãƒ‡ã‚³ãƒ¼ãƒ€ã‚’æ¢ã™é–¢æ•°
+    class var avcodec_alloc_context3        : Tavcodec_alloc_context3;        // ãƒ‡ã‚³ãƒ¼ãƒ‰ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã‚’ç¢ºä¿ã™ã‚‹é–¢æ•°
+    class var avcodec_parameters_to_context : Tavcodec_parameters_to_context; // ã‚¹ãƒˆãƒªãƒ¼ãƒ æƒ…å ±ã‚’ãƒ‡ã‚³ãƒ¼ãƒ‰ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã¸ã‚³ãƒ”ãƒ¼ã™ã‚‹é–¢æ•°
+    class var avcodec_open2                 : Tavcodec_open2;                 // ãƒ‡ã‚³ãƒ¼ãƒ€ã‚’é–‹ãé–¢æ•°
+    class var avcodec_free_context          : Tavcodec_free_context;          // ãƒ‡ã‚³ãƒ¼ãƒ‰ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã‚’è§£æ”¾ã™ã‚‹é–¢æ•°
+    class var avcodec_send_packet           : Tavcodec_send_packet;           // ãƒ‘ã‚±ãƒƒãƒˆã‚’ãƒ‡ã‚³ãƒ¼ãƒ€ã¸æ¸¡ã™é–¢æ•°
+    class var avcodec_receive_frame         : Tavcodec_receive_frame;         // ãƒ‡ã‚³ãƒ¼ãƒ‰æ¸ˆã¿ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’å—ã‘å–ã‚‹é–¢æ•°
+    class var avcodec_flush_buffers         : Tavcodec_flush_buffers;         // ã‚·ãƒ¼ã‚¯å¾Œã«ãƒ‡ã‚³ãƒ¼ãƒ€å†…éƒ¨ãƒãƒƒãƒ•ã‚¡ã‚’æ¨ã¦ã‚‹é–¢æ•°
+    class var av_packet_alloc               : Tav_packet_alloc;               // AVPacketã‚’ç¢ºä¿ã™ã‚‹é–¢æ•°
+    class var av_packet_free                : Tav_packet_free;                // AVPacketã‚’è§£æ”¾ã™ã‚‹é–¢æ•°
+    class var av_packet_unref               : Tav_packet_unref;               // AVPacketã®å‚ç…§ã‚’è§£æ”¾ã™ã‚‹é–¢æ•°
+    class var av_frame_alloc                : Tav_frame_alloc;                // AVFrameã‚’ç¢ºä¿ã™ã‚‹é–¢æ•°
+    class var av_frame_free                 : Tav_frame_free;                 // AVFrameã‚’è§£æ”¾ã™ã‚‹é–¢æ•°
+    class var av_frame_get_buffer           : Tav_frame_get_buffer;           // AVFrameç”¨ãƒãƒƒãƒ•ã‚¡ã‚’ç¢ºä¿ã™ã‚‹é–¢æ•°
+    class var av_frame_make_writable        : Tav_frame_make_writable;        // AVFrameã‚’æ›¸ãè¾¼ã¿å¯èƒ½ã«ã™ã‚‹é–¢æ•°
+    class var av_strerror                   : Tav_strerror;                   // FFmpegã‚¨ãƒ©ãƒ¼ã‚³ãƒ¼ãƒ‰ã‚’æ–‡å­—åˆ—åŒ–ã™ã‚‹é–¢æ•°
+    class var av_get_sample_fmt_name        : Tav_get_sample_fmt_name;        // ã‚µãƒ³ãƒ—ãƒ«å½¢å¼åã‚’å–å¾—ã™ã‚‹é–¢æ•°
+    class var av_get_pix_fmt_name           : Tav_get_pix_fmt_name;           // pixel format åã‚’å–å¾—ã™ã‚‹é–¢æ•°
+    class var av_samples_get_buffer_size    : Tav_samples_get_buffer_size;    // éŸ³å£°ã‚µãƒ³ãƒ—ãƒ«ã®ãƒã‚¤ãƒˆæ•°ã‚’è¨ˆç®—ã™ã‚‹é–¢æ•°
+    class var av_channel_layout_default     : Tav_channel_layout_default;     // æ¨™æº–ãƒãƒ£ãƒ³ãƒãƒ«ãƒ¬ã‚¤ã‚¢ã‚¦ãƒˆã‚’ä½œã‚‹é–¢æ•°
+    class var av_channel_layout_copy        : Tav_channel_layout_copy;        // ãƒãƒ£ãƒ³ãƒãƒ«ãƒ¬ã‚¤ã‚¢ã‚¦ãƒˆã‚’ã‚³ãƒ”ãƒ¼ã™ã‚‹é–¢æ•°
+    class var av_channel_layout_uninit      : Tav_channel_layout_uninit;      // ãƒãƒ£ãƒ³ãƒãƒ«ãƒ¬ã‚¤ã‚¢ã‚¦ãƒˆã‚’è§£æ”¾ã™ã‚‹é–¢æ•°
+    class var sws_getContext                : Tsws_getContext;                // è‰²å¤‰æ›ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã‚’ä½œã‚‹é–¢æ•°
+    class var sws_scale                     : Tsws_scale;                     // ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’BGRã¸å¤‰æ›ã™ã‚‹é–¢æ•°
+    class var sws_freeContext               : Tsws_freeContext;               // è‰²å¤‰æ›ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã‚’è§£æ”¾ã™ã‚‹é–¢æ•°
+    class var swr_alloc_set_opts2           : Tswr_alloc_set_opts2;           // éŸ³å£°å¤‰æ›ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã‚’ä½œã‚‹é–¢æ•°
+    class var swr_init                      : Tswr_init;                      // éŸ³å£°å¤‰æ›ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã‚’åˆæœŸåŒ–ã™ã‚‹é–¢æ•°
+    class var swr_convert                   : Tswr_convert;                   // éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’PCMã¸å¤‰æ›ã™ã‚‹é–¢æ•°
+    class var swr_free                      : Tswr_free;                      // éŸ³å£°å¤‰æ›ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã‚’è§£æ”¾ã™ã‚‹é–¢æ•°
+    class var avfilter_get_by_name          : Tavfilter_get_by_name;          // ãƒ•ã‚£ãƒ«ã‚¿åã‹ã‚‰å®šç¾©ã‚’å–å¾—ã™ã‚‹é–¢æ•°
+    class var avfilter_graph_alloc          : Tavfilter_graph_alloc;          // ãƒ•ã‚£ãƒ«ã‚¿ã‚°ãƒ©ãƒ•ã‚’ä½œã‚‹é–¢æ•°
+    class var avfilter_graph_create_filter  : Tavfilter_graph_create_filter;  // ã‚°ãƒ©ãƒ•å†…ã«ãƒ•ã‚£ãƒ«ã‚¿ã‚’ä½œã‚‹é–¢æ•°
+    class var avfilter_link                 : Tavfilter_link;                 // ãƒ•ã‚£ãƒ«ã‚¿åŒå£«ã‚’æ¥ç¶šã™ã‚‹é–¢æ•°
+    class var avfilter_graph_config         : Tavfilter_graph_config;         // ãƒ•ã‚£ãƒ«ã‚¿ã‚°ãƒ©ãƒ•ã‚’ç¢ºå®šã™ã‚‹é–¢æ•°
+    class var avfilter_graph_free           : Tavfilter_graph_free;           // ãƒ•ã‚£ãƒ«ã‚¿ã‚°ãƒ©ãƒ•ã‚’è§£æ”¾ã™ã‚‹é–¢æ•°
+    class var av_buffersrc_add_frame_flags  : Tav_buffersrc_add_frame_flags;  // ã‚½ãƒ¼ã‚¹ãƒ•ã‚£ãƒ«ã‚¿ã¸ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’æ¸¡ã™é–¢æ•°
+    class var av_buffersink_get_frame       : Tav_buffersink_get_frame;       // ã‚·ãƒ³ã‚¯ãƒ•ã‚£ãƒ«ã‚¿ã‹ã‚‰ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’å—ã‘å–ã‚‹é–¢æ•°
+    // ã“ã®å…¥åŠ›ãƒ—ãƒ©ã‚°ã‚¤ãƒ³ãŒç½®ã‹ã‚Œã¦ã„ã‚‹ãƒ•ã‚©ãƒ«ãƒ€ã‚’å–å¾—ã™ã‚‹ã€‚
     class function ModuleDirectory: string; static;
-    // w’èDLL‚ğÀsƒtƒ@ƒCƒ‹ƒtƒHƒ‹ƒ_‚©‚çƒ[ƒh‚·‚éB
+    // æŒ‡å®šDLLã‚’å®Ÿè¡Œãƒ•ã‚¡ã‚¤ãƒ«ãƒ•ã‚©ãƒ«ãƒ€ã‹ã‚‰ãƒ­ãƒ¼ãƒ‰ã™ã‚‹ã€‚
     class function LoadDll(const DllPath, DllName: string): HMODULE; static;
-    // DLL‚©‚çw’èŠÖ”‚ğæ“¾‚·‚éB
+    // DLLã‹ã‚‰æŒ‡å®šé–¢æ•°ã‚’å–å¾—ã™ã‚‹ã€‚
     class function LoadProc(Module: HMODULE; const ProcName: PAnsiChar): Pointer; static;
-    // •K—v‚ÈFFmpeg DLL‚ÆŠÖ”ƒ|ƒCƒ“ƒ^‚ğ‰Šú‰»‚·‚éB
+    // å¿…è¦ãªFFmpeg DLLã¨é–¢æ•°ãƒã‚¤ãƒ³ã‚¿ã‚’åˆæœŸåŒ–ã™ã‚‹ã€‚
     class procedure EnsureLoaded; static;
-    // FFmpeg ƒGƒ‰[ƒR[ƒh‚ğ•\¦—p•¶š—ñ‚É•ÏŠ·‚·‚éB
+    // FFmpeg ã‚¨ãƒ©ãƒ¼ã‚³ãƒ¼ãƒ‰ã‚’è¡¨ç¤ºç”¨æ–‡å­—åˆ—ã«å¤‰æ›ã™ã‚‹ã€‚
     class function ErrorText(Code: Integer): string; static;
   end;
 
-// FFmpeg ‚Ì•ª”’l‚ğÀ”‚É•ÏŠ·‚·‚éB
+// FFmpeg ã®åˆ†æ•°å€¤ã‚’å®Ÿæ•°ã«å¤‰æ›ã™ã‚‹ã€‚
 function RationalToDouble(const Value: TAVRational): Double;
-// FFmpeg ‚Ì•ª”’l‚ğ•¶š—ñ‚É•ÏŠ·‚·‚éB
+// FFmpeg ã®åˆ†æ•°å€¤ã‚’æ–‡å­—åˆ—ã«å¤‰æ›ã™ã‚‹ã€‚
 function RationalToText(const Value: TAVRational): string;
-// ƒtƒH[ƒ}ƒbƒgƒRƒ“ƒeƒLƒXƒg‚©‚çw’èƒXƒgƒŠ[ƒ€‚ğæ‚èo‚·B
+// ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã‹ã‚‰æŒ‡å®šã‚¹ãƒˆãƒªãƒ¼ãƒ ã‚’å–ã‚Šå‡ºã™ã€‚
 function StreamAt(FormatContext: PAVFormatContext; StreamIndex: Integer): PAVStream;
-// ƒ~ƒŠ•bˆÊ’u‚ğƒXƒgƒŠ[ƒ€ŠÔ²‚Ì PTS ‚Ö•ÏŠ·‚·‚éB
+// ãƒŸãƒªç§’ä½ç½®ã‚’ã‚¹ãƒˆãƒªãƒ¼ãƒ æ™‚é–“è»¸ã® PTS ã¸å¤‰æ›ã™ã‚‹ã€‚
 function StreamTimestampFromMs(Stream: PAVStream; PositionMs: Integer): Int64;
-// ƒXƒgƒŠ[ƒ€ŠÔ²‚Ì PTS ‚ğƒ~ƒŠ•bˆÊ’u‚Ö•ÏŠ·‚·‚éB
+// ã‚¹ãƒˆãƒªãƒ¼ãƒ æ™‚é–“è»¸ã® PTS ã‚’ãƒŸãƒªç§’ä½ç½®ã¸å¤‰æ›ã™ã‚‹ã€‚
 function StreamTimestampToMs(Stream: PAVStream; Timestamp: Int64): Integer;
-// FFmpeg ‚ÌƒTƒ“ƒvƒ‹Œ`®”Ô†‚ğ•\¦—p•¶š—ñ‚É•ÏŠ·‚·‚éB
+// FFmpeg ã®ã‚µãƒ³ãƒ—ãƒ«å½¢å¼ç•ªå·ã‚’è¡¨ç¤ºç”¨æ–‡å­—åˆ—ã«å¤‰æ›ã™ã‚‹ã€‚
 function SampleFormatName(SampleFormat: Integer): string;
-// FFmpeg ‚Ì pixel format ”Ô†‚ğ•\¦—p•¶š—ñ‚É•ÏŠ·‚·‚éB
+// FFmpeg ã® pixel format ç•ªå·ã‚’è¡¨ç¤ºç”¨æ–‡å­—åˆ—ã«å¤‰æ›ã™ã‚‹ã€‚
 function PixelFormatName(PixelFormat: Integer): string;
 
 implementation
 
-// ‚±‚Ì“ü—Íƒvƒ‰ƒOƒCƒ“‚ª’u‚©‚ê‚Ä‚¢‚éƒtƒHƒ‹ƒ_‚ğæ“¾‚·‚éB
+// ã“ã®å…¥åŠ›ãƒ—ãƒ©ã‚°ã‚¤ãƒ³ãŒç½®ã‹ã‚Œã¦ã„ã‚‹ãƒ•ã‚©ãƒ«ãƒ€ã‚’å–å¾—ã™ã‚‹ã€‚
 class function TFFmpegApi.ModuleDirectory: string;
 var
-  ModuleFileName : array[0..MAX_PATH - 1] of Char; // ƒvƒ‰ƒOƒCƒ“DLL‚Ìƒtƒ‹ƒpƒXæ“¾æ
-  Len            : DWORD;                          // GetModuleFileName‚ª•Ô‚µ‚½•¶š”
+  ModuleFileName : array[0..MAX_PATH - 1] of Char; // ãƒ—ãƒ©ã‚°ã‚¤ãƒ³DLLã®ãƒ•ãƒ«ãƒ‘ã‚¹å–å¾—å…ˆ
+  Len            : DWORD;                          // GetModuleFileNameãŒè¿”ã—ãŸæ–‡å­—æ•°
 begin
   Len := GetModuleFileName(HInstance, ModuleFileName, Length(ModuleFileName));
   if Len > 0 then
@@ -416,11 +416,11 @@ begin
     Result := ExtractFilePath(ParamStr(0));
 end;
 
-// w’èDLL‚ğÀsƒtƒ@ƒCƒ‹ƒtƒHƒ‹ƒ_‚©‚çƒ[ƒh‚·‚éB
+// æŒ‡å®šDLLã‚’å®Ÿè¡Œãƒ•ã‚¡ã‚¤ãƒ«ãƒ•ã‚©ãƒ«ãƒ€ã‹ã‚‰ãƒ­ãƒ¼ãƒ‰ã™ã‚‹ã€‚
 class function TFFmpegApi.LoadDll(const DllPath, DllName: string): HMODULE;
 var
-  FullName  : string;   // ƒ[ƒh‘ÎÛDLL‚Ìƒtƒ‹ƒpƒX
-  ErrorCode : Cardinal; // LoadLibrary¸”s‚ÌWindowsƒGƒ‰[ƒR[ƒh
+  FullName  : string;   // ãƒ­ãƒ¼ãƒ‰å¯¾è±¡DLLã®ãƒ•ãƒ«ãƒ‘ã‚¹
+  ErrorCode : Cardinal; // LoadLibraryå¤±æ•—æ™‚ã®Windowsã‚¨ãƒ©ãƒ¼ã‚³ãƒ¼ãƒ‰
 begin
   FullName := DllPath + DllName;
   Result := LoadLibrary(PChar(FullName));
@@ -432,7 +432,7 @@ begin
   end;
 end;
 
-// DLL‚©‚çw’èŠÖ”‚ğæ“¾‚·‚éB
+// DLLã‹ã‚‰æŒ‡å®šé–¢æ•°ã‚’å–å¾—ã™ã‚‹ã€‚
 class function TFFmpegApi.LoadProc(Module: HMODULE; const ProcName: PAnsiChar): Pointer;
 begin
   Result := GetProcAddress(Module, ProcName);
@@ -440,10 +440,10 @@ begin
     raise Exception.CreateFmt('FFmpeg function not found: %s', [string(ProcName)]);
 end;
 
-// •K—v‚ÈFFmpeg DLL‚ÆŠÖ”ƒ|ƒCƒ“ƒ^‚ğ‰Šú‰»‚·‚éB
+// å¿…è¦ãªFFmpeg DLLã¨é–¢æ•°ãƒã‚¤ãƒ³ã‚¿ã‚’åˆæœŸåŒ–ã™ã‚‹ã€‚
 class procedure TFFmpegApi.EnsureLoaded;
 var
-  DllPath : string; // FFmpeg DLL‚ğ’T‚·ƒvƒ‰ƒOƒCƒ“ƒtƒHƒ‹ƒ_
+  DllPath : string; // FFmpeg DLLã‚’æ¢ã™ãƒ—ãƒ©ã‚°ã‚¤ãƒ³ãƒ•ã‚©ãƒ«ãƒ€
 begin
   if FLoaded then
     Exit;
@@ -527,10 +527,10 @@ begin
   FLoaded := True;
 end;
 
-// FFmpeg ƒGƒ‰[ƒR[ƒh‚ğ•\¦—p•¶š—ñ‚É•ÏŠ·‚·‚éB
+// FFmpeg ã‚¨ãƒ©ãƒ¼ã‚³ãƒ¼ãƒ‰ã‚’è¡¨ç¤ºç”¨æ–‡å­—åˆ—ã«å¤‰æ›ã™ã‚‹ã€‚
 class function TFFmpegApi.ErrorText(Code: Integer): string;
 var
-  Buffer : array[0..255] of AnsiChar; // av_strerror ‚Ìo—Íæ
+  Buffer : array[0..255] of AnsiChar; // av_strerror ã®å‡ºåŠ›å…ˆ
 begin
   FillChar(Buffer, SizeOf(Buffer), 0);
   if Assigned(av_strerror) and (av_strerror(Code, Buffer, SizeOf(Buffer)) = 0) then
@@ -539,7 +539,7 @@ begin
     Result := Format('FFmpeg error %d', [Code]);
 end;
 
-// FFmpeg‚Ì•ª”’l‚ğÀ”‚É•ÏŠ·‚·‚éB
+// FFmpegã®åˆ†æ•°å€¤ã‚’å®Ÿæ•°ã«å¤‰æ›ã™ã‚‹ã€‚
 function RationalToDouble(const Value: TAVRational): Double;
 begin
   if Value.den = 0 then
@@ -548,7 +548,7 @@ begin
     Result := Value.num / Value.den;
 end;
 
-// FFmpeg ‚Ì•ª”’l‚ğ•¶š—ñ‚É•ÏŠ·‚·‚éB
+// FFmpeg ã®åˆ†æ•°å€¤ã‚’æ–‡å­—åˆ—ã«å¤‰æ›ã™ã‚‹ã€‚
 function RationalToText(const Value: TAVRational): string;
 begin
   if Value.den = 0 then
@@ -557,13 +557,13 @@ begin
     Result := Format('%d/%d', [Value.num, Value.den]);
 end;
 
-// ƒtƒH[ƒ}ƒbƒgƒRƒ“ƒeƒLƒXƒg‚©‚çw’èƒXƒgƒŠ[ƒ€‚ğæ‚èo‚·B
+// ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã‹ã‚‰æŒ‡å®šã‚¹ãƒˆãƒªãƒ¼ãƒ ã‚’å–ã‚Šå‡ºã™ã€‚
 function StreamAt(FormatContext: PAVFormatContext; StreamIndex: Integer): PAVStream;
 begin
   Result := PAVStream(PPointer(NativeUInt(FormatContext.streams) + NativeUInt(StreamIndex) * SizeOf(Pointer))^);
 end;
 
-// ƒ~ƒŠ•bˆÊ’u‚ğƒXƒgƒŠ[ƒ€ŠÔ²‚Ì PTS ‚Ö•ÏŠ·‚·‚éB
+// ãƒŸãƒªç§’ä½ç½®ã‚’ã‚¹ãƒˆãƒªãƒ¼ãƒ æ™‚é–“è»¸ã® PTS ã¸å¤‰æ›ã™ã‚‹ã€‚
 function StreamTimestampFromMs(Stream: PAVStream; PositionMs: Integer): Int64;
 begin
   if (Stream.time_base.num <= 0) or (Stream.time_base.den <= 0) then
@@ -572,7 +572,7 @@ begin
     Result := Round((PositionMs / 1000.0) * Stream.time_base.den / Stream.time_base.num);
 end;
 
-// ƒXƒgƒŠ[ƒ€ŠÔ²‚Ì PTS ‚ğƒ~ƒŠ•bˆÊ’u‚Ö•ÏŠ·‚·‚éB
+// ã‚¹ãƒˆãƒªãƒ¼ãƒ æ™‚é–“è»¸ã® PTS ã‚’ãƒŸãƒªç§’ä½ç½®ã¸å¤‰æ›ã™ã‚‹ã€‚
 function StreamTimestampToMs(Stream: PAVStream; Timestamp: Int64): Integer;
 begin
   if (Timestamp = AV_NOPTS_VALUE) or (Stream.time_base.num <= 0) or (Stream.time_base.den <= 0) then
@@ -581,10 +581,10 @@ begin
     Result := Round(Timestamp * 1000.0 * Stream.time_base.num / Stream.time_base.den);
 end;
 
-// FFmpeg ‚ÌƒTƒ“ƒvƒ‹Œ`®”Ô†‚ğ•\¦—p•¶š—ñ‚É•ÏŠ·‚·‚éB
+// FFmpeg ã®ã‚µãƒ³ãƒ—ãƒ«å½¢å¼ç•ªå·ã‚’è¡¨ç¤ºç”¨æ–‡å­—åˆ—ã«å¤‰æ›ã™ã‚‹ã€‚
 function SampleFormatName(SampleFormat: Integer): string;
 var
-  Name : PAnsiChar; // FFmpeg‚©‚ç•Ô‚éƒTƒ“ƒvƒ‹Œ`®–¼
+  Name : PAnsiChar; // FFmpegã‹ã‚‰è¿”ã‚‹ã‚µãƒ³ãƒ—ãƒ«å½¢å¼å
 begin
   Result := Format('fmt %d', [SampleFormat]);
   if Assigned(TFFmpegApi.av_get_sample_fmt_name) then
@@ -595,10 +595,10 @@ begin
   end;
 end;
 
-// FFmpeg ‚Ì pixel format ”Ô†‚ğ•\¦—p•¶š—ñ‚É•ÏŠ·‚·‚éB
+// FFmpeg ã® pixel format ç•ªå·ã‚’è¡¨ç¤ºç”¨æ–‡å­—åˆ—ã«å¤‰æ›ã™ã‚‹ã€‚
 function PixelFormatName(PixelFormat: Integer): string;
 var
-  Name : PAnsiChar; // FFmpeg ‚©‚ç•Ô‚é pixel format –¼
+  Name : PAnsiChar; // FFmpeg ã‹ã‚‰è¿”ã‚‹ pixel format å
 begin
   Result := Format('fmt %d', [PixelFormat]);
   if Assigned(TFFmpegApi.av_get_pix_fmt_name) then

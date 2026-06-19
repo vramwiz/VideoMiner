@@ -1,19 +1,19 @@
-unit FFmpegAudioOpen;
+ï»¿unit FFmpegAudioOpen;
 
-// “®‰æƒtƒ@ƒCƒ‹“à‚Ì‰¹ºƒXƒgƒŠ[ƒ€‚ğ FFmpeg ‚ÅŠJ‚­‚½‚ß‚Ì•â•ƒ†ƒjƒbƒgB
-// ‰¹ºƒfƒR[ƒ_A‰¹ºƒtƒŒ[ƒ€APCM •ÏŠ·—p swr ƒRƒ“ƒeƒLƒXƒg‚Ì€”õ‚ğ’S“–‚·‚éB
+// å‹•ç”»ãƒ•ã‚¡ã‚¤ãƒ«å†…ã®éŸ³å£°ã‚¹ãƒˆãƒªãƒ¼ãƒ ã‚’ FFmpeg ã§é–‹ããŸã‚ã®è£œåŠ©ãƒ¦ãƒ‹ãƒƒãƒˆã€‚
+// éŸ³å£°ãƒ‡ã‚³ãƒ¼ãƒ€ã€éŸ³å£°ãƒ•ãƒ¬ãƒ¼ãƒ ã€PCM å¤‰æ›ç”¨ swr ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã®æº–å‚™ã‚’æ‹…å½“ã™ã‚‹ã€‚
 
 interface
 
 uses
   FFmpegApi, FFmpegDecoderTypes;
 
-// “ü—Í‰¹º‚ğ PCM16 stereo 48kHz ‚Ö•ÏŠ·‚·‚é swr ƒRƒ“ƒeƒLƒXƒg‚ğ€”õ‚·‚éB
+// å…¥åŠ›éŸ³å£°ã‚’ PCM16 stereo 48kHz ã¸å¤‰æ›ã™ã‚‹ swr ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã‚’æº–å‚™ã™ã‚‹ã€‚
 function PrepareAudioResampler(AudioCodecPar: PAVCodecParameters;
   InputSampleFormat: Integer; out SwrContext: PSwrContext;
   out ErrorMessage: string): Boolean;
 
-// ‰¹ºƒXƒgƒŠ[ƒ€‚ª‘¶İ‚·‚éê‡‚É‰¹ºƒfƒR[ƒ_‚Æ PCM •ÏŠ·ƒRƒ“ƒeƒLƒXƒg‚ğŠJ‚­B
+// éŸ³å£°ã‚¹ãƒˆãƒªãƒ¼ãƒ ãŒå­˜åœ¨ã™ã‚‹å ´åˆã«éŸ³å£°ãƒ‡ã‚³ãƒ¼ãƒ€ã¨ PCM å¤‰æ›ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã‚’é–‹ãã€‚
 procedure OpenAudioDecoder(FormatContext: PAVFormatContext; var Info: TVideoInfo;
   out AudioCodecContext: PAVCodecContext; out AudioStream: PAVStream;
   out AudioStreamIndex: Integer; out AudioFrame: PAVFrame; out SwrContext: PSwrContext);
@@ -23,7 +23,7 @@ implementation
 uses
   System.SysUtils;
 
-// ‰¹º open “r’†‚ÅŠm•Û‚µ‚½ƒŠƒ\[ƒX‚ğ‚Ü‚Æ‚ß‚Ä‰ğ•ú‚·‚éB
+// éŸ³å£° open é€”ä¸­ã§ç¢ºä¿ã—ãŸãƒªã‚½ãƒ¼ã‚¹ã‚’ã¾ã¨ã‚ã¦è§£æ”¾ã™ã‚‹ã€‚
 procedure ReleaseAudioOpenResources(var AudioCodecContext: PAVCodecContext; var AudioFrame: PAVFrame;
   var SwrContext: PSwrContext);
 begin
@@ -46,14 +46,14 @@ begin
   end;
 end;
 
-// “ü—Í‰¹º‚ğ PCM16 stereo 48kHz ‚Ö•ÏŠ·‚·‚é swr ƒRƒ“ƒeƒLƒXƒg‚ğ€”õ‚·‚éB
+// å…¥åŠ›éŸ³å£°ã‚’ PCM16 stereo 48kHz ã¸å¤‰æ›ã™ã‚‹ swr ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã‚’æº–å‚™ã™ã‚‹ã€‚
 function PrepareAudioResampler(AudioCodecPar: PAVCodecParameters;
   InputSampleFormat: Integer; out SwrContext: PSwrContext;
   out ErrorMessage: string): Boolean;
 var
-  InLayout  : TAVChannelLayout; // “ü—Í‰¹º‚Ìƒ`ƒƒƒ“ƒlƒ‹ƒŒƒCƒAƒEƒg
-  OutLayout : TAVChannelLayout; // o—Í PCM ‚Ìƒ`ƒƒƒ“ƒlƒ‹ƒŒƒCƒAƒEƒg
-  Ret       : Integer;          // FFmpeg API ‚Ì–ß‚è’l
+  InLayout  : TAVChannelLayout; // å…¥åŠ›éŸ³å£°ã®ãƒãƒ£ãƒ³ãƒãƒ«ãƒ¬ã‚¤ã‚¢ã‚¦ãƒˆ
+  OutLayout : TAVChannelLayout; // å‡ºåŠ› PCM ã®ãƒãƒ£ãƒ³ãƒãƒ«ãƒ¬ã‚¤ã‚¢ã‚¦ãƒˆ
+  Ret       : Integer;          // FFmpeg API ã®æˆ»ã‚Šå€¤
 begin
   Result := False;
   SwrContext := nil;
@@ -105,14 +105,14 @@ begin
   end;
 end;
 
-// ‰¹ºƒXƒgƒŠ[ƒ€‚ª‘¶İ‚·‚éê‡‚É‰¹ºƒfƒR[ƒ_‚Æ PCM •ÏŠ·ƒRƒ“ƒeƒLƒXƒg‚ğŠJ‚­B
+// éŸ³å£°ã‚¹ãƒˆãƒªãƒ¼ãƒ ãŒå­˜åœ¨ã™ã‚‹å ´åˆã«éŸ³å£°ãƒ‡ã‚³ãƒ¼ãƒ€ã¨ PCM å¤‰æ›ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã‚’é–‹ãã€‚
 procedure OpenAudioDecoder(FormatContext: PAVFormatContext; var Info: TVideoInfo;
   out AudioCodecContext: PAVCodecContext; out AudioStream: PAVStream;
   out AudioStreamIndex: Integer; out AudioFrame: PAVFrame; out SwrContext: PSwrContext);
 var
-  AudioCodec: PAVCodec; // ‰¹ºƒXƒgƒŠ[ƒ€‚É‘Î‰‚·‚éFFmpegƒfƒR[ƒ_
-  AudioCodecPar: PAVCodecParameters; // ‰¹ºƒXƒgƒŠ[ƒ€‚ÌƒR[ƒfƒbƒNî•ñ
-  Ret       : Integer;          // FFmpeg API ‚Ì–ß‚è’l
+  AudioCodec: PAVCodec; // éŸ³å£°ã‚¹ãƒˆãƒªãƒ¼ãƒ ã«å¯¾å¿œã™ã‚‹FFmpegãƒ‡ã‚³ãƒ¼ãƒ€
+  AudioCodecPar: PAVCodecParameters; // éŸ³å£°ã‚¹ãƒˆãƒªãƒ¼ãƒ ã®ã‚³ãƒ¼ãƒ‡ãƒƒã‚¯æƒ…å ±
+  Ret       : Integer;          // FFmpeg API ã®æˆ»ã‚Šå€¤
 begin
   AudioCodecContext := nil;
   AudioStream := nil;

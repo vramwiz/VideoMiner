@@ -1,8 +1,8 @@
-unit VideoMinerCommandController;
+ï»¿unit VideoMinerCommandController;
 
-// “®‰æƒrƒ…[ã‚Ì‘€ìAƒVƒ‡[ƒgƒJƒbƒgA‰¹—Ê‘€ì‚ğƒAƒvƒŠ‘¤ˆ—‚Ö‹´“n‚µ‚·‚éB
-// ÀÛ‚Ì open / seek / navigate / playback §Œä‚Í callback ‚ÖˆÏ÷‚µA
-// ƒƒCƒ“ƒtƒH[ƒ€‚©‚ç overlay click ‚â shortcut “o˜^‚Ì×•”‚ğ•ª—£‚·‚éB
+// å‹•ç”»ãƒ“ãƒ¥ãƒ¼ä¸Šã®æ“ä½œã€ã‚·ãƒ§ãƒ¼ãƒˆã‚«ãƒƒãƒˆã€éŸ³é‡æ“ä½œã‚’ã‚¢ãƒ—ãƒªå´å‡¦ç†ã¸æ©‹æ¸¡ã—ã™ã‚‹ã€‚
+// å®Ÿéš›ã® open / seek / navigate / playback åˆ¶å¾¡ã¯ callback ã¸å§”è­²ã—ã€
+// ãƒ¡ã‚¤ãƒ³ãƒ•ã‚©ãƒ¼ãƒ ã‹ã‚‰ overlay click ã‚„ shortcut ç™»éŒ²ã®ç´°éƒ¨ã‚’åˆ†é›¢ã™ã‚‹ã€‚
 
 interface
 
@@ -11,105 +11,105 @@ uses
   VideoMinerVideoView, ShortcutAction;
 
 type
-  // ˆø”‚È‚µ‚ÅÀs‚·‚éƒAƒvƒŠ‘¤ƒRƒ}ƒ“ƒh
+  // å¼•æ•°ãªã—ã§å®Ÿè¡Œã™ã‚‹ã‚¢ãƒ—ãƒªå´ã‚³ãƒãƒ³ãƒ‰
   TVideoMinerCommandProc = procedure of object;
-  // Œ»İ‚ÌÄ¶ó‘Ô‚È‚Ç‚ğ–â‚¢‡‚í‚¹‚éƒAƒvƒŠ‘¤ callback
+  // ç¾åœ¨ã®å†ç”ŸçŠ¶æ…‹ãªã©ã‚’å•ã„åˆã‚ã›ã‚‹ã‚¢ãƒ—ãƒªå´ callback
   TVideoMinerCommandBoolFunc = function: Boolean of object;
-  // ‘OŒãˆÚ“®‚â‘Š‘ÎƒV[ƒN‚Ì·•ª’l‚ğ“n‚·ƒRƒ}ƒ“ƒh
+  // å‰å¾Œç§»å‹•ã‚„ç›¸å¯¾ã‚·ãƒ¼ã‚¯ã®å·®åˆ†å€¤ã‚’æ¸¡ã™ã‚³ãƒãƒ³ãƒ‰
   TVideoMinerCommandDeltaProc = procedure(Delta: Integer) of object;
-  // w’èˆÊ’u‚ÖƒV[ƒN‚µA•K—v‚È‚çÄ¶ó‘Ô‚Ì•œŒ³‰Â”Û‚à“n‚·ƒRƒ}ƒ“ƒh
+  // æŒ‡å®šä½ç½®ã¸ã‚·ãƒ¼ã‚¯ã—ã€å¿…è¦ãªã‚‰å†ç”ŸçŠ¶æ…‹ã®å¾©å…ƒå¯å¦ã‚‚æ¸¡ã™ã‚³ãƒãƒ³ãƒ‰
   TVideoMinerCommandSeekProc = procedure(PositionMs: Integer;
     ResumeIfPlaying: Boolean) of object;
 
   TVideoMinerCommandController = class
   private
-    FAudioPlayback             : TVideoMinerAudioPlayback;      // ‰¹—Ê‚Æƒ~ƒ…[ƒg‚ğ‘€ì‚·‚éÄ¶ƒ‰ƒbƒp
-    FVideoView                 : TVideoMinerVideoView;          // overlay ƒCƒxƒ“ƒg‚Æ•\¦ó‘Ô‚ğ’†Œp‚·‚é“®‰æƒrƒ…[
-    FOnChapterNavigate         : TVideoMinerCommandDeltaProc;   // ‘OŒãƒ`ƒƒƒvƒ^[ˆÚ“®‚ÌˆÏ÷æ
-    FOnCopyCurrentFrame        : TVideoMinerCommandProc;        // Œ»İƒtƒŒ[ƒ€ƒRƒs[‚ÌˆÏ÷æ
-    FOnNavigate                : TVideoMinerCommandDeltaProc;   // ‘OŒãƒtƒ@ƒCƒ‹ˆÚ“®‚ÌˆÏ÷æ
-    FOnOpenDialog              : TVideoMinerCommandProc;        // ƒtƒ@ƒCƒ‹‘I‘ğƒ_ƒCƒAƒƒO•\¦‚ÌˆÏ÷æ
-    FOnPlaybackActiveOrPending : TVideoMinerCommandBoolFunc;    // Ä¶’†‚Ü‚½‚ÍÄŠJ‘Ò‚¿‚©‚ğ–â‚¢‡‚í‚¹‚éˆÏ÷æ
-    FOnPlaybackRateCycle       : TVideoMinerCommandProc;        // Ä¶‘¬“xØ‚è‘Ö‚¦‚ÌˆÏ÷æ
-    FOnPlayFromCurrentPosition : TVideoMinerCommandProc;        // Œ»İˆÊ’u‚©‚çÄ¶ŠJn‚·‚éˆÏ÷æ
-    FOnSaveAudioSettings       : TVideoMinerCommandProc;        // ‰¹—Ê/ƒ~ƒ…[ƒg•ÏXŒã‚Ìİ’è•Û‘¶æ
-    FOnSeekByMs                : TVideoMinerCommandDeltaProc;   // ‘Š‘ÎŠÔƒV[ƒN‚ÌˆÏ÷æ
-    FOnSeekToFirstFrame        : TVideoMinerCommandProc;        // æ“ªƒtƒŒ[ƒ€ˆÚ“®‚ÌˆÏ÷æ
-    FOnSeekToLastFrame         : TVideoMinerCommandProc;        // ÅIƒtƒŒ[ƒ€ˆÚ“®‚ÌˆÏ÷æ
+    FAudioPlayback             : TVideoMinerAudioPlayback;      // éŸ³é‡ã¨ãƒŸãƒ¥ãƒ¼ãƒˆã‚’æ“ä½œã™ã‚‹å†ç”Ÿãƒ©ãƒƒãƒ‘
+    FVideoView                 : TVideoMinerVideoView;          // overlay ã‚¤ãƒ™ãƒ³ãƒˆã¨è¡¨ç¤ºçŠ¶æ…‹ã‚’ä¸­ç¶™ã™ã‚‹å‹•ç”»ãƒ“ãƒ¥ãƒ¼
+    FOnChapterNavigate         : TVideoMinerCommandDeltaProc;   // å‰å¾Œãƒãƒ£ãƒ—ã‚¿ãƒ¼ç§»å‹•ã®å§”è­²å…ˆ
+    FOnCopyCurrentFrame        : TVideoMinerCommandProc;        // ç¾åœ¨ãƒ•ãƒ¬ãƒ¼ãƒ ã‚³ãƒ”ãƒ¼ã®å§”è­²å…ˆ
+    FOnNavigate                : TVideoMinerCommandDeltaProc;   // å‰å¾Œãƒ•ã‚¡ã‚¤ãƒ«ç§»å‹•ã®å§”è­²å…ˆ
+    FOnOpenDialog              : TVideoMinerCommandProc;        // ãƒ•ã‚¡ã‚¤ãƒ«é¸æŠãƒ€ã‚¤ã‚¢ãƒ­ã‚°è¡¨ç¤ºã®å§”è­²å…ˆ
+    FOnPlaybackActiveOrPending : TVideoMinerCommandBoolFunc;    // å†ç”Ÿä¸­ã¾ãŸã¯å†é–‹å¾…ã¡ã‹ã‚’å•ã„åˆã‚ã›ã‚‹å§”è­²å…ˆ
+    FOnPlaybackRateCycle       : TVideoMinerCommandProc;        // å†ç”Ÿé€Ÿåº¦åˆ‡ã‚Šæ›¿ãˆã®å§”è­²å…ˆ
+    FOnPlayFromCurrentPosition : TVideoMinerCommandProc;        // ç¾åœ¨ä½ç½®ã‹ã‚‰å†ç”Ÿé–‹å§‹ã™ã‚‹å§”è­²å…ˆ
+    FOnSaveAudioSettings       : TVideoMinerCommandProc;        // éŸ³é‡/ãƒŸãƒ¥ãƒ¼ãƒˆå¤‰æ›´å¾Œã®è¨­å®šä¿å­˜å…ˆ
+    FOnSeekByMs                : TVideoMinerCommandDeltaProc;   // ç›¸å¯¾æ™‚é–“ã‚·ãƒ¼ã‚¯ã®å§”è­²å…ˆ
+    FOnSeekToFirstFrame        : TVideoMinerCommandProc;        // å…ˆé ­ãƒ•ãƒ¬ãƒ¼ãƒ ç§»å‹•ã®å§”è­²å…ˆ
+    FOnSeekToLastFrame         : TVideoMinerCommandProc;        // æœ€çµ‚ãƒ•ãƒ¬ãƒ¼ãƒ ç§»å‹•ã®å§”è­²å…ˆ
     FOnShowHelp                : TVideoMinerCommandProc;        // show help overlay delegate
-    FOnSeekToMs                : TVideoMinerCommandSeekProc;    // â‘ÎˆÊ’uƒV[ƒN‚ÌˆÏ÷æ
-    FOnStopPlayback            : TVideoMinerCommandProc;        // Ä¶’â~‚ÌˆÏ÷æ
-    FOnToggleSafeArea          : TVideoMinerCommandProc;        // 90% ƒZ[ƒtƒGƒŠƒAŠm”F˜gØ‚è‘Ö‚¦‚ÌˆÏ÷æ
-    FOnToggleFullScreen        : TVideoMinerCommandProc;        // ‘S‰æ–ÊØ‚è‘Ö‚¦‚ÌˆÏ÷æ
-    // ‰¹—Ê/ƒ~ƒ…[ƒgó‘Ô‚ğ“®‰æƒrƒ…[‚Ì overlay •\¦‚Ö”½‰f‚·‚é
+    FOnSeekToMs                : TVideoMinerCommandSeekProc;    // çµ¶å¯¾ä½ç½®ã‚·ãƒ¼ã‚¯ã®å§”è­²å…ˆ
+    FOnStopPlayback            : TVideoMinerCommandProc;        // å†ç”Ÿåœæ­¢ã®å§”è­²å…ˆ
+    FOnToggleSafeArea          : TVideoMinerCommandProc;        // 90% ã‚»ãƒ¼ãƒ•ã‚¨ãƒªã‚¢ç¢ºèªæ åˆ‡ã‚Šæ›¿ãˆã®å§”è­²å…ˆ
+    FOnToggleFullScreen        : TVideoMinerCommandProc;        // å…¨ç”»é¢åˆ‡ã‚Šæ›¿ãˆã®å§”è­²å…ˆ
+    // éŸ³é‡/ãƒŸãƒ¥ãƒ¼ãƒˆçŠ¶æ…‹ã‚’å‹•ç”»ãƒ“ãƒ¥ãƒ¼ã® overlay è¡¨ç¤ºã¸åæ˜ ã™ã‚‹
     procedure SyncVolumeToView;
   public
-    // ‘€ì‘ÎÛ‚Ì‰¹ºÄ¶ƒ‰ƒbƒp‚Æ“®‰æƒrƒ…[‚ğó‚¯æ‚é
+    // æ“ä½œå¯¾è±¡ã®éŸ³å£°å†ç”Ÿãƒ©ãƒƒãƒ‘ã¨å‹•ç”»ãƒ“ãƒ¥ãƒ¼ã‚’å—ã‘å–ã‚‹
     constructor Create(AudioPlayback: TVideoMinerAudioPlayback;
       VideoView: TVideoMinerVideoView);
-    // “®‰æƒrƒ…[‚Ì overlay ƒCƒxƒ“ƒg‚ğ controller ‚Ì handler ‚ÖÚ‘±‚·‚é
+    // å‹•ç”»ãƒ“ãƒ¥ãƒ¼ã® overlay ã‚¤ãƒ™ãƒ³ãƒˆã‚’ controller ã® handler ã¸æ¥ç¶šã™ã‚‹
     procedure BindVideoView;
-    // VideoMiner —pƒVƒ‡[ƒgƒJƒbƒg‚ğ ShortcutAction ‚Ö“o˜^‚·‚é
+    // VideoMiner ç”¨ã‚·ãƒ§ãƒ¼ãƒˆã‚«ãƒƒãƒˆã‚’ ShortcutAction ã¸ç™»éŒ²ã™ã‚‹
     procedure RegisterShortcuts(Shortcuts: TShortcutAction);
-    // Œ»İ‰¹—Ê‚ğw’èƒp[ƒZƒ“ƒg‚Ô‚ñ‘Œ¸‚µAƒ~ƒ…[ƒg‚ğ‰ğœ‚·‚é
+    // ç¾åœ¨éŸ³é‡ã‚’æŒ‡å®šãƒ‘ãƒ¼ã‚»ãƒ³ãƒˆã¶ã‚“å¢—æ¸›ã—ã€ãƒŸãƒ¥ãƒ¼ãƒˆã‚’è§£é™¤ã™ã‚‹
     procedure ChangeVolumeBy(DeltaPercent: Integer);
-    // Œ»İƒtƒŒ[ƒ€ƒRƒs[‚ğƒAƒvƒŠ‘¤‚ÖˆÏ÷‚·‚é
+    // ç¾åœ¨ãƒ•ãƒ¬ãƒ¼ãƒ ã‚³ãƒ”ãƒ¼ã‚’ã‚¢ãƒ—ãƒªå´ã¸å§”è­²ã™ã‚‹
     procedure CopyCurrentFrame;
-    // Ä¶‘¬“x‚Ì’iŠKØ‚è‘Ö‚¦‚ğƒAƒvƒŠ‘¤‚ÖˆÏ÷‚·‚é
+    // å†ç”Ÿé€Ÿåº¦ã®æ®µéšåˆ‡ã‚Šæ›¿ãˆã‚’ã‚¢ãƒ—ãƒªå´ã¸å§”è­²ã™ã‚‹
     procedure CyclePlaybackRate;
-    // overlay ‚Ìæ“ªƒtƒŒ[ƒ€ƒ{ƒ^ƒ“‚©‚çæ“ªˆÚ“®‚ğÀs‚·‚é
+    // overlay ã®å…ˆé ­ãƒ•ãƒ¬ãƒ¼ãƒ ãƒœã‚¿ãƒ³ã‹ã‚‰å…ˆé ­ç§»å‹•ã‚’å®Ÿè¡Œã™ã‚‹
     procedure FirstFrameClick(Sender: TObject);
-    // overlay ‚Ì‘S‰æ–Êƒ{ƒ^ƒ“‚©‚ç‘S‰æ–ÊØ‚è‘Ö‚¦‚ğÀs‚·‚é
+    // overlay ã®å…¨ç”»é¢ãƒœã‚¿ãƒ³ã‹ã‚‰å…¨ç”»é¢åˆ‡ã‚Šæ›¿ãˆã‚’å®Ÿè¡Œã™ã‚‹
     procedure FullScreenClick(Sender: TObject);
-    // overlay ‚ÌÅIƒtƒŒ[ƒ€ƒ{ƒ^ƒ“‚©‚çI’[ˆÚ“®‚ğÀs‚·‚é
+    // overlay ã®æœ€çµ‚ãƒ•ãƒ¬ãƒ¼ãƒ ãƒœã‚¿ãƒ³ã‹ã‚‰çµ‚ç«¯ç§»å‹•ã‚’å®Ÿè¡Œã™ã‚‹
     procedure LastFrameClick(Sender: TObject);
-    // overlay ‚Ìƒ~ƒ…[ƒgƒ{ƒ^ƒ“‚©‚çƒ~ƒ…[ƒgó‘Ô‚ğØ‚è‘Ö‚¦‚é
+    // overlay ã®ãƒŸãƒ¥ãƒ¼ãƒˆãƒœã‚¿ãƒ³ã‹ã‚‰ãƒŸãƒ¥ãƒ¼ãƒˆçŠ¶æ…‹ã‚’åˆ‡ã‚Šæ›¿ãˆã‚‹
     procedure MuteClick(Sender: TObject);
-    // overlay ‚ÌŸƒtƒ@ƒCƒ‹ƒ{ƒ^ƒ“‚©‚çŸ“®‰æ‚ÖˆÚ“®‚·‚é
+    // overlay ã®æ¬¡ãƒ•ã‚¡ã‚¤ãƒ«ãƒœã‚¿ãƒ³ã‹ã‚‰æ¬¡å‹•ç”»ã¸ç§»å‹•ã™ã‚‹
     procedure NavigateNextClick(Sender: TObject);
-    // overlay ‚Ì‘Oƒtƒ@ƒCƒ‹ƒ{ƒ^ƒ“‚©‚ç‘O“®‰æ‚ÖˆÚ“®‚·‚é
+    // overlay ã®å‰ãƒ•ã‚¡ã‚¤ãƒ«ãƒœã‚¿ãƒ³ã‹ã‚‰å‰å‹•ç”»ã¸ç§»å‹•ã™ã‚‹
     procedure NavigatePreviousClick(Sender: TObject);
-    // ƒtƒ@ƒCƒ‹‘I‘ğƒ_ƒCƒAƒƒO•\¦‚ğƒAƒvƒŠ‘¤‚ÖˆÏ÷‚·‚é
+    // ãƒ•ã‚¡ã‚¤ãƒ«é¸æŠãƒ€ã‚¤ã‚¢ãƒ­ã‚°è¡¨ç¤ºã‚’ã‚¢ãƒ—ãƒªå´ã¸å§”è­²ã™ã‚‹
     procedure OpenDialog;
-    // overlay ‚ÌÄ¶‘¬“xƒ{ƒ^ƒ“‚©‚ç‘¬“xØ‚è‘Ö‚¦‚ğÀs‚·‚é
+    // overlay ã®å†ç”Ÿé€Ÿåº¦ãƒœã‚¿ãƒ³ã‹ã‚‰é€Ÿåº¦åˆ‡ã‚Šæ›¿ãˆã‚’å®Ÿè¡Œã™ã‚‹
     procedure PlaybackRateClick(Sender: TObject);
-    // overlay ‚ÌÄ¶/ˆê’â~ƒ{ƒ^ƒ“‚©‚çÄ¶ó‘Ô‚ğØ‚è‘Ö‚¦‚é
+    // overlay ã®å†ç”Ÿ/ä¸€æ™‚åœæ­¢ãƒœã‚¿ãƒ³ã‹ã‚‰å†ç”ŸçŠ¶æ…‹ã‚’åˆ‡ã‚Šæ›¿ãˆã‚‹
     procedure PlayPauseClick(Sender: TObject);
-    // ƒV[ƒNƒo[‘€ì‚Åw’èˆÊ’u‚ÖˆÚ“®‚µAÄ¶’†‚È‚çÄŠJ‚ğ‹–‰Â‚·‚é
+    // ã‚·ãƒ¼ã‚¯ãƒãƒ¼æ“ä½œã§æŒ‡å®šä½ç½®ã¸ç§»å‹•ã—ã€å†ç”Ÿä¸­ãªã‚‰å†é–‹ã‚’è¨±å¯ã™ã‚‹
     procedure Seek(Sender: TObject; PositionMs: Integer);
-    // ƒzƒC[ƒ‹ƒV[ƒN‚Åw’èˆÊ’u‚ÖˆÚ“®‚µAÄ¶ÄŠJ‚Ís‚í‚È‚¢
+    // ãƒ›ã‚¤ãƒ¼ãƒ«ã‚·ãƒ¼ã‚¯ã§æŒ‡å®šä½ç½®ã¸ç§»å‹•ã—ã€å†ç”Ÿå†é–‹ã¯è¡Œã‚ãªã„
     procedure SeekByWheel(Sender: TObject; PositionMs: Integer);
-    // æ“ªƒtƒŒ[ƒ€‚Ö‚ÌˆÚ“®‚ğƒAƒvƒŠ‘¤‚ÖˆÏ÷‚·‚é
+    // å…ˆé ­ãƒ•ãƒ¬ãƒ¼ãƒ ã¸ã®ç§»å‹•ã‚’ã‚¢ãƒ—ãƒªå´ã¸å§”è­²ã™ã‚‹
     procedure SeekToFirstFrame;
-    // ÅIƒtƒŒ[ƒ€‚Ö‚ÌˆÚ“®‚ğƒAƒvƒŠ‘¤‚ÖˆÏ÷‚·‚é
+    // æœ€çµ‚ãƒ•ãƒ¬ãƒ¼ãƒ ã¸ã®ç§»å‹•ã‚’ã‚¢ãƒ—ãƒªå´ã¸å§”è­²ã™ã‚‹
     procedure SeekToLastFrame;
-    // ƒwƒ‹ƒv•\¦‚ğƒAƒvƒŠ‘¤‚ÖˆÏ÷‚·‚é
+    // ãƒ˜ãƒ«ãƒ—è¡¨ç¤ºã‚’ã‚¢ãƒ—ãƒªå´ã¸å§”è­²ã™ã‚‹
     procedure ShowHelp;
-    // Ÿƒ`ƒƒƒvƒ^[‚Ö‚ÌƒVƒ‡[ƒgƒJƒbƒgˆ—‚ğÀs‚·‚é
+    // æ¬¡ãƒãƒ£ãƒ—ã‚¿ãƒ¼ã¸ã®ã‚·ãƒ§ãƒ¼ãƒˆã‚«ãƒƒãƒˆå‡¦ç†ã‚’å®Ÿè¡Œã™ã‚‹
     procedure ShortcutChapterNext;
-    // ‘Oƒ`ƒƒƒvƒ^[‚Ö‚ÌƒVƒ‡[ƒgƒJƒbƒgˆ—‚ğÀs‚·‚é
+    // å‰ãƒãƒ£ãƒ—ã‚¿ãƒ¼ã¸ã®ã‚·ãƒ§ãƒ¼ãƒˆã‚«ãƒƒãƒˆå‡¦ç†ã‚’å®Ÿè¡Œã™ã‚‹
     procedure ShortcutChapterPrevious;
-    // Ÿƒtƒ@ƒCƒ‹‚Ö‚ÌƒVƒ‡[ƒgƒJƒbƒgˆ—‚ğÀs‚·‚é
+    // æ¬¡ãƒ•ã‚¡ã‚¤ãƒ«ã¸ã®ã‚·ãƒ§ãƒ¼ãƒˆã‚«ãƒƒãƒˆå‡¦ç†ã‚’å®Ÿè¡Œã™ã‚‹
     procedure ShortcutNavigateNext;
-    // ‘Oƒtƒ@ƒCƒ‹‚Ö‚ÌƒVƒ‡[ƒgƒJƒbƒgˆ—‚ğÀs‚·‚é
+    // å‰ãƒ•ã‚¡ã‚¤ãƒ«ã¸ã®ã‚·ãƒ§ãƒ¼ãƒˆã‚«ãƒƒãƒˆå‡¦ç†ã‚’å®Ÿè¡Œã™ã‚‹
     procedure ShortcutNavigatePrevious;
-    // overlay ‚Ì 10 •b–ß‚µƒ{ƒ^ƒ“‚©‚ç‘Š‘ÎƒV[ƒN‚ğÀs‚·‚é
+    // overlay ã® 10 ç§’æˆ»ã—ãƒœã‚¿ãƒ³ã‹ã‚‰ç›¸å¯¾ã‚·ãƒ¼ã‚¯ã‚’å®Ÿè¡Œã™ã‚‹
     procedure SkipBackwardClick(Sender: TObject);
-    // overlay ‚Ì 10 •bi‚İƒ{ƒ^ƒ“‚©‚ç‘Š‘ÎƒV[ƒN‚ğÀs‚·‚é
+    // overlay ã® 10 ç§’é€²ã¿ãƒœã‚¿ãƒ³ã‹ã‚‰ç›¸å¯¾ã‚·ãƒ¼ã‚¯ã‚’å®Ÿè¡Œã™ã‚‹
     procedure SkipForwardClick(Sender: TObject);
-    // ‘S‰æ–ÊØ‚è‘Ö‚¦‚ğƒAƒvƒŠ‘¤‚ÖˆÏ÷‚·‚é
+    // å…¨ç”»é¢åˆ‡ã‚Šæ›¿ãˆã‚’ã‚¢ãƒ—ãƒªå´ã¸å§”è­²ã™ã‚‹
     procedure ToggleFullScreen;
-    // 90% ƒZ[ƒtƒGƒŠƒAŠm”F˜gØ‚è‘Ö‚¦‚ğƒAƒvƒŠ‘¤‚ÖˆÏ÷‚·‚é
+    // 90% ã‚»ãƒ¼ãƒ•ã‚¨ãƒªã‚¢ç¢ºèªæ åˆ‡ã‚Šæ›¿ãˆã‚’ã‚¢ãƒ—ãƒªå´ã¸å§”è­²ã™ã‚‹
     procedure ToggleSafeArea;
-    // ƒ~ƒ…[ƒgó‘Ô‚ğØ‚è‘Ö‚¦A•\¦‚Æİ’è•Û‘¶‚Ö”½‰f‚·‚é
+    // ãƒŸãƒ¥ãƒ¼ãƒˆçŠ¶æ…‹ã‚’åˆ‡ã‚Šæ›¿ãˆã€è¡¨ç¤ºã¨è¨­å®šä¿å­˜ã¸åæ˜ ã™ã‚‹
     procedure ToggleMute;
-    // Ä¶’†‚È‚ç’â~‚µA’â~’†‚È‚çŒ»İˆÊ’u‚©‚çÄ¶‚·‚é
+    // å†ç”Ÿä¸­ãªã‚‰åœæ­¢ã—ã€åœæ­¢ä¸­ãªã‚‰ç¾åœ¨ä½ç½®ã‹ã‚‰å†ç”Ÿã™ã‚‹
     procedure TogglePlayPause;
-    // overlay ‚Ì‰¹—Ê•ÏX‚ğ‰¹ºÄ¶ƒ‰ƒbƒp‚Ö”½‰f‚·‚é
+    // overlay ã®éŸ³é‡å¤‰æ›´ã‚’éŸ³å£°å†ç”Ÿãƒ©ãƒƒãƒ‘ã¸åæ˜ ã™ã‚‹
     procedure VolumeChange(Sender: TObject; VolumePercent: Integer);
-    // ‰¹—Ê‚ğ 5% ‰º‚°‚é
+    // éŸ³é‡ã‚’ 5% ä¸‹ã’ã‚‹
     procedure VolumeDown;
-    // ‰¹—Ê‚ğ 5% ã‚°‚é
+    // éŸ³é‡ã‚’ 5% ä¸Šã’ã‚‹
     procedure VolumeUp;
     property OnChapterNavigate: TVideoMinerCommandDeltaProc read FOnChapterNavigate write FOnChapterNavigate;
     property OnCopyCurrentFrame: TVideoMinerCommandProc read FOnCopyCurrentFrame write FOnCopyCurrentFrame;

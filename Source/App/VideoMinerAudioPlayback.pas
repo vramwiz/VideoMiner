@@ -1,8 +1,8 @@
-unit VideoMinerAudioPlayback;
+ï»¿unit VideoMinerAudioPlayback;
 
-// VideoMiner ‚©‚çg‚¤‰¹ºÄ¶ƒ‰ƒbƒp‚ğ’S“–‚·‚éB
-// FFmpeg ƒfƒR[ƒ_‚©‚ç PCM ‚ğæ“Ç‚İ‚µAwaveOut ‚Ö‚Ì“Š“üA‰¹—Ê/ƒ~ƒ…[ƒgA
-// Ä¶‘¬“x•ÏŠ·A’P’²Œvƒx[ƒX‚ÌÄ¶ˆÊ’u‚ğ‚Ü‚Æ‚ß‚ÄŠÇ—‚·‚éB
+// VideoMiner ã‹ã‚‰ä½¿ã†éŸ³å£°å†ç”Ÿãƒ©ãƒƒãƒ‘ã‚’æ‹…å½“ã™ã‚‹ã€‚
+// FFmpeg ãƒ‡ã‚³ãƒ¼ãƒ€ã‹ã‚‰ PCM ã‚’å…ˆèª­ã¿ã—ã€waveOut ã¸ã®æŠ•å…¥ã€éŸ³é‡/ãƒŸãƒ¥ãƒ¼ãƒˆã€
+// å†ç”Ÿé€Ÿåº¦å¤‰æ›ã€å˜èª¿æ™‚è¨ˆãƒ™ãƒ¼ã‚¹ã®å†ç”Ÿä½ç½®ã‚’ã¾ã¨ã‚ã¦ç®¡ç†ã™ã‚‹ã€‚
 
 interface
 
@@ -11,66 +11,66 @@ uses
   FFmpegDecoderTypes, FFmpegAudioTempo, VideoMinerDebugLog;
 
 type
-  // ©“®‰¹ºƒ`ƒFƒbƒN‚Ö“n‚·ƒfƒR[ƒhÏ‚İ PCM ’Ê’m
+  // è‡ªå‹•éŸ³å£°ãƒã‚§ãƒƒã‚¯ã¸æ¸¡ã™ãƒ‡ã‚³ãƒ¼ãƒ‰æ¸ˆã¿ PCM é€šçŸ¥
   TVideoMinerAudioPcmDecodedEvent = procedure(Sender: TObject;
     StartSample: Int64; const Pcm: TBytes) of object;
 
   TVideoMinerAudioPlayback = class
   private const
-    OUTPUT_SAMPLE_RATE = 48000; // waveOut ‚Ö“n‚· PCM ‚ÌƒTƒ“ƒvƒ‹ƒŒ[ƒg
-    OUTPUT_CHANNELS    = 2;     // waveOut ‚Ö“n‚· PCM ‚Ìƒ`ƒƒƒ“ƒlƒ‹”
-    TARGET_QUEUE_MS    = 600;   // Ä¶’†‚ÉˆÛ‚µ‚½‚¢‰¹ºƒLƒ…[’· ms
-    START_QUEUE_MS     = 100;   // Ä¶ŠJn‘O‚Éæ“Ç‚İ‚·‚é‰¹ºƒLƒ…[’· ms
-    FADE_IN_MS         = 12;    // seek ’¼Œã‚ÌƒNƒŠƒbƒNƒmƒCƒY‚ğ—}‚¦‚éƒtƒF[ƒhƒCƒ“’· ms
-    SLOW_START_LOG_MS  = 120;   // ‰¹ºŠJnˆ—‚ğ slow log ‚Éo‚·è‡’l ms
-    SLOW_PUMP_LOG_MS   = 60;    // ‰¹º pump ‚ğ slow log ‚Éo‚·è‡’l ms
+    OUTPUT_SAMPLE_RATE = 48000; // waveOut ã¸æ¸¡ã™ PCM ã®ã‚µãƒ³ãƒ—ãƒ«ãƒ¬ãƒ¼ãƒˆ
+    OUTPUT_CHANNELS    = 2;     // waveOut ã¸æ¸¡ã™ PCM ã®ãƒãƒ£ãƒ³ãƒãƒ«æ•°
+    TARGET_QUEUE_MS    = 600;   // å†ç”Ÿä¸­ã«ç¶­æŒã—ãŸã„éŸ³å£°ã‚­ãƒ¥ãƒ¼é•· ms
+    START_QUEUE_MS     = 100;   // å†ç”Ÿé–‹å§‹å‰ã«å…ˆèª­ã¿ã™ã‚‹éŸ³å£°ã‚­ãƒ¥ãƒ¼é•· ms
+    FADE_IN_MS         = 12;    // seek ç›´å¾Œã®ã‚¯ãƒªãƒƒã‚¯ãƒã‚¤ã‚ºã‚’æŠ‘ãˆã‚‹ãƒ•ã‚§ãƒ¼ãƒ‰ã‚¤ãƒ³é•· ms
+    SLOW_START_LOG_MS  = 120;   // éŸ³å£°é–‹å§‹å‡¦ç†ã‚’ slow log ã«å‡ºã™é–¾å€¤ ms
+    SLOW_PUMP_LOG_MS   = 60;    // éŸ³å£° pump ã‚’ slow log ã«å‡ºã™é–¾å€¤ ms
   private
-    FDecoder             : TFFmpegDecoder;                   // ‰¹ºê—p‚Ég‚¤ FFmpeg ƒfƒR[ƒ_
-    FFinished            : Boolean;                          // “ü—Í‰¹º‚ğÅŒã‚Ü‚Å“Ç‚İI‚¦‚½‚©
-    FStartSamples        : Int64;                            // Œ»İ‚ÌÄ¶ŠJnˆÊ’u‚ğ“ü—ÍƒTƒ“ƒvƒ‹”‚Å•\‚µ‚½’l
-    FQueuedSamples       : Int64;                            // ƒfƒR[ƒhÏ‚İ“ü—Í PCM ‚ÌI’[ƒTƒ“ƒvƒ‹ˆÊ’u
-    FQueuedOutputSamples : Int64;                            // waveOut ‚Ö“Š“üÏ‚İo—Í PCM ‚ÌI’[ƒTƒ“ƒvƒ‹ˆÊ’u
-    FPlaybackRate        : Double;                           // ‰¹ºÄ¶‘¬“x”{—¦
-    FVolumePercent       : Integer;                          // ƒ~ƒ…[ƒg‘O‚Ì‰¹—Ê 0..100
-    FMuted               : Boolean;                          // o—Í‚ğƒ~ƒ…[ƒg‚µ‚Ä‚¢‚é‚©
-    FOnPcmDecoded        : TVideoMinerAudioPcmDecodedEvent;  // ©“®‰¹ºƒ`ƒFƒbƒN‚Ö PCM ‚ğ“n‚·’Ê’m
-    FApplyFadeInNext     : Boolean;                          // Ÿ‚É“Š“ü‚·‚é PCM ‚ÖƒtƒF[ƒhƒCƒ“‚ğ“K—p‚·‚é‚©
-    FOpenFileName        : string;                           // Œ»İ‰¹ºƒfƒR[ƒ_‚ÅŠJ‚¢‚Ä‚¢‚éƒtƒ@ƒCƒ‹
-    FPlaybackClock       : TStopwatch;                       // Ä¶ˆÊ’u‚ğ‹‚ß‚é’P’²Œv
-    FPlaybackClockActive : Boolean;                          // ’P’²Œv‚ğÄ¶ˆÊ’u‚Æ‚µ‚Äg‚¦‚é‚©
-    FPlaybackBaseMs      : Integer;                          // ’P’²Œv‚ÌŠî€‚Æ‚È‚éŠJnˆÊ’u ms
-    // Ÿ‚É“Š“ü‚·‚é PCM ‚Ìæ“ª‚Ö’Z‚¢ƒtƒF[ƒhƒCƒ“‚ğ“K—p‚·‚é
+    FDecoder             : TFFmpegDecoder;                   // éŸ³å£°å°‚ç”¨ã«ä½¿ã† FFmpeg ãƒ‡ã‚³ãƒ¼ãƒ€
+    FFinished            : Boolean;                          // å…¥åŠ›éŸ³å£°ã‚’æœ€å¾Œã¾ã§èª­ã¿çµ‚ãˆãŸã‹
+    FStartSamples        : Int64;                            // ç¾åœ¨ã®å†ç”Ÿé–‹å§‹ä½ç½®ã‚’å…¥åŠ›ã‚µãƒ³ãƒ—ãƒ«æ•°ã§è¡¨ã—ãŸå€¤
+    FQueuedSamples       : Int64;                            // ãƒ‡ã‚³ãƒ¼ãƒ‰æ¸ˆã¿å…¥åŠ› PCM ã®çµ‚ç«¯ã‚µãƒ³ãƒ—ãƒ«ä½ç½®
+    FQueuedOutputSamples : Int64;                            // waveOut ã¸æŠ•å…¥æ¸ˆã¿å‡ºåŠ› PCM ã®çµ‚ç«¯ã‚µãƒ³ãƒ—ãƒ«ä½ç½®
+    FPlaybackRate        : Double;                           // éŸ³å£°å†ç”Ÿé€Ÿåº¦å€ç‡
+    FVolumePercent       : Integer;                          // ãƒŸãƒ¥ãƒ¼ãƒˆå‰ã®éŸ³é‡ 0..100
+    FMuted               : Boolean;                          // å‡ºåŠ›ã‚’ãƒŸãƒ¥ãƒ¼ãƒˆã—ã¦ã„ã‚‹ã‹
+    FOnPcmDecoded        : TVideoMinerAudioPcmDecodedEvent;  // è‡ªå‹•éŸ³å£°ãƒã‚§ãƒƒã‚¯ã¸ PCM ã‚’æ¸¡ã™é€šçŸ¥
+    FApplyFadeInNext     : Boolean;                          // æ¬¡ã«æŠ•å…¥ã™ã‚‹ PCM ã¸ãƒ•ã‚§ãƒ¼ãƒ‰ã‚¤ãƒ³ã‚’é©ç”¨ã™ã‚‹ã‹
+    FOpenFileName        : string;                           // ç¾åœ¨éŸ³å£°ãƒ‡ã‚³ãƒ¼ãƒ€ã§é–‹ã„ã¦ã„ã‚‹ãƒ•ã‚¡ã‚¤ãƒ«
+    FPlaybackClock       : TStopwatch;                       // å†ç”Ÿä½ç½®ã‚’æ±‚ã‚ã‚‹å˜èª¿æ™‚è¨ˆ
+    FPlaybackClockActive : Boolean;                          // å˜èª¿æ™‚è¨ˆã‚’å†ç”Ÿä½ç½®ã¨ã—ã¦ä½¿ãˆã‚‹ã‹
+    FPlaybackBaseMs      : Integer;                          // å˜èª¿æ™‚è¨ˆã®åŸºæº–ã¨ãªã‚‹é–‹å§‹ä½ç½® ms
+    // æ¬¡ã«æŠ•å…¥ã™ã‚‹ PCM ã®å…ˆé ­ã¸çŸ­ã„ãƒ•ã‚§ãƒ¼ãƒ‰ã‚¤ãƒ³ã‚’é©ç”¨ã™ã‚‹
     procedure ApplyFadeIn(var Pcm: TBytes);
-    // Œ»İ‚Ì‰¹—Ê/ƒ~ƒ…[ƒgİ’è‚ğ waveOut ‘¤‚Ö”½‰f‚·‚é
+    // ç¾åœ¨ã®éŸ³é‡/ãƒŸãƒ¥ãƒ¼ãƒˆè¨­å®šã‚’ waveOut å´ã¸åæ˜ ã™ã‚‹
     procedure ApplyOutputVolume;
-    // ’P’²Œv‚©‚çŒ»İ‚Ìo—ÍƒTƒ“ƒvƒ‹ˆÊ’u‚ğ‹‚ß‚é
+    // å˜èª¿æ™‚è¨ˆã‹ã‚‰ç¾åœ¨ã®å‡ºåŠ›ã‚µãƒ³ãƒ—ãƒ«ä½ç½®ã‚’æ±‚ã‚ã‚‹
     function PlaybackSamplePosition: Int64;
-    // ƒ~ƒ…[ƒgó‘Ô‚ğİ’è‚µAo—Í‰¹—Ê‚Ö”½‰f‚·‚é
+    // ãƒŸãƒ¥ãƒ¼ãƒˆçŠ¶æ…‹ã‚’è¨­å®šã—ã€å‡ºåŠ›éŸ³é‡ã¸åæ˜ ã™ã‚‹
     procedure SetMuted(Value: Boolean);
-    // ‰¹ºÄ¶‘¬“x‚ğİ’è‚·‚é
+    // éŸ³å£°å†ç”Ÿé€Ÿåº¦ã‚’è¨­å®šã™ã‚‹
     procedure SetPlaybackRate(Value: Double);
-    // ‰¹—Ê‚ğ 0..100 ‚ÉŠÛ‚ß‚Äİ’è‚µAo—Í‰¹—Ê‚Ö”½‰f‚·‚é
+    // éŸ³é‡ã‚’ 0..100 ã«ä¸¸ã‚ã¦è¨­å®šã—ã€å‡ºåŠ›éŸ³é‡ã¸åæ˜ ã™ã‚‹
     procedure SetVolumePercent(Value: Integer);
-    // PCM ‚ğŒ»İ‚ÌÄ¶‘¬“x‚É‡‚í‚¹‚Ä•ÏŠ·‚·‚é
+    // PCM ã‚’ç¾åœ¨ã®å†ç”Ÿé€Ÿåº¦ã«åˆã‚ã›ã¦å¤‰æ›ã™ã‚‹
     function TransformPcmForPlaybackRate(const InputPcm: TBytes;
       out OutputPcm: TBytes; out OutputSampleCount: Integer): Boolean;
   public
-    // ‰¹ºƒfƒR[ƒ_‚ğì¬‚µAŠù’è‚Ì‰¹—Ê/‘¬“xó‘Ô‚ğ‰Šú‰»‚·‚é
+    // éŸ³å£°ãƒ‡ã‚³ãƒ¼ãƒ€ã‚’ä½œæˆã—ã€æ—¢å®šã®éŸ³é‡/é€Ÿåº¦çŠ¶æ…‹ã‚’åˆæœŸåŒ–ã™ã‚‹
     constructor Create;
-    // Ä¶‚ğ’â~‚µ‚Ä‰¹ºƒfƒR[ƒ_‚ğ‰ğ•ú‚·‚é
+    // å†ç”Ÿã‚’åœæ­¢ã—ã¦éŸ³å£°ãƒ‡ã‚³ãƒ¼ãƒ€ã‚’è§£æ”¾ã™ã‚‹
     destructor Destroy; override;
-    // w’èƒtƒ@ƒCƒ‹‚Ì‰¹º‚ğw’èˆÊ’u‚©‚çŠJn‚·‚é
+    // æŒ‡å®šãƒ•ã‚¡ã‚¤ãƒ«ã®éŸ³å£°ã‚’æŒ‡å®šä½ç½®ã‹ã‚‰é–‹å§‹ã™ã‚‹
     function StartAt(const FileName: string; const VideoInfo: TVideoInfo;
       PositionMs: Integer; out ErrorMessage: string): Boolean;
-    // ‰¹ºo—Í‚ÆƒfƒR[ƒ_ó‘Ô‚ğ’â~‚·‚é
+    // éŸ³å£°å‡ºåŠ›ã¨ãƒ‡ã‚³ãƒ¼ãƒ€çŠ¶æ…‹ã‚’åœæ­¢ã™ã‚‹
     procedure Stop;
-    // ƒfƒR[ƒ_‚Íc‚µ‚½‚Ü‚Ü waveOut o—Í‚¾‚¯‚ğ’â~‚·‚é
+    // ãƒ‡ã‚³ãƒ¼ãƒ€ã¯æ®‹ã—ãŸã¾ã¾ waveOut å‡ºåŠ›ã ã‘ã‚’åœæ­¢ã™ã‚‹
     procedure StopOutput;
-    // waveOut ‚Ìo—Í‰¹—Ê‚ğ–³‰¹‚É‚·‚é
+    // waveOut ã®å‡ºåŠ›éŸ³é‡ã‚’ç„¡éŸ³ã«ã™ã‚‹
     procedure SilenceOutput;
-    // Ä¶’†‚Ì‰¹ºƒLƒ…[‚ğ•K—v—Ê‚Ü‚Åæ“Ç‚İ‚µ‚Ä“Š“ü‚·‚é
+    // å†ç”Ÿä¸­ã®éŸ³å£°ã‚­ãƒ¥ãƒ¼ã‚’å¿…è¦é‡ã¾ã§å…ˆèª­ã¿ã—ã¦æŠ•å…¥ã™ã‚‹
     function Pump(out ErrorMessage: string): Boolean;
-    // ’P’²Œvƒx[ƒX‚ÌŒ»İÄ¶ˆÊ’u ms ‚ğ•Ô‚·
+    // å˜èª¿æ™‚è¨ˆãƒ™ãƒ¼ã‚¹ã®ç¾åœ¨å†ç”Ÿä½ç½® ms ã‚’è¿”ã™
     function PlaybackPositionMs: Integer;
     property Muted: Boolean read FMuted write SetMuted;
     property OnPcmDecoded: TVideoMinerAudioPcmDecodedEvent read FOnPcmDecoded write FOnPcmDecoded;
@@ -424,8 +424,8 @@ function TVideoMinerAudioPlayback.TransformPcmForPlaybackRate(
   const InputPcm: TBytes; out OutputPcm: TBytes;
   out OutputSampleCount: Integer): Boolean;
 const
-  STRETCH_WINDOW_FRAMES  = 2048; // ŠÈˆÕ time-stretch ‚ÅØ‚è“\‚è‚·‚é‘‹•ƒtƒŒ[ƒ€”
-  STRETCH_OVERLAP_FRAMES = 512;  // ‘‹“¯m‚ğƒNƒƒXƒtƒF[ƒh‚·‚éd‚È‚èƒtƒŒ[ƒ€”
+  STRETCH_WINDOW_FRAMES  = 2048; // ç°¡æ˜“ time-stretch ã§åˆ‡ã‚Šè²¼ã‚Šã™ã‚‹çª“å¹…ãƒ•ãƒ¬ãƒ¼ãƒ æ•°
+  STRETCH_OVERLAP_FRAMES = 512;  // çª“åŒå£«ã‚’ã‚¯ãƒ­ã‚¹ãƒ•ã‚§ãƒ¼ãƒ‰ã™ã‚‹é‡ãªã‚Šãƒ•ãƒ¬ãƒ¼ãƒ æ•°
 var
   Channel: Integer;
   ExistingValue: Integer;

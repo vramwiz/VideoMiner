@@ -1,14 +1,14 @@
-unit FFmpegDecoderSeekYc48;
+﻿unit FFmpegDecoderSeekYc48;
 
-// �w�莞���փV�[�N���A����t���[���� YC48 �o�b�t�@�֕ϊ�����B
-// �`���ʂ̔C�ӈʒu�擾�����Ƃ��� BGRX32 �n���番������B
+// 指定時刻へシークし、動画フレームを YC48 バッファへ変換する。
+// 形式別の任意位置取得処理として BGRX32 系から分離する。
 
 interface
 
 uses
   FFmpegDecoderContext;
 
-// �w�莞���̓���t���[���� YC48 �o�b�t�@�֎擾����B
+// 指定時刻の動画フレームを YC48 バッファへ取得する。
 function DecodeFrameToYc48(
   Context: TFFmpegDecoderContext;
   PositionMs: Integer;
@@ -23,7 +23,7 @@ uses
   System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegStreamInfo;
 
 
-// �w�莞���̓���t���[���� YC48 �o�b�t�@�֎擾����B
+// 指定時刻の動画フレームを YC48 バッファへ取得する。
 function DecodeFrameToYc48(
   Context: TFFmpegDecoderContext;
   PositionMs: Integer;
