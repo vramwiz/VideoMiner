@@ -1,7 +1,7 @@
-unit VideoMinerVideoView;
+ï»¿unit VideoMinerVideoView;
 
-// ƒƒCƒ“ƒtƒH[ƒ€‚â controller ‚©‚ç“®‰æ•\¦ƒT[ƒtƒFƒX‚ğˆµ‚¤‚½‚ß‚Ì”–‚¢‘‹ŒûB
-// ƒtƒŒ[ƒ€ƒfƒR[ƒhæ‚Ì€”õAƒT[ƒtƒFƒX‚Ö‚Ì•\¦Aoverlay ó‘Ô‚ÆƒCƒxƒ“ƒg‚Ì’†Œp‚ğ’S“–‚·‚éB
+// ãƒ¡ã‚¤ãƒ³ãƒ•ã‚©ãƒ¼ãƒ ã‚„ controller ã‹ã‚‰å‹•ç”»è¡¨ç¤ºã‚µãƒ¼ãƒ•ã‚§ã‚¹ã‚’æ‰±ã†ãŸã‚ã®è–„ã„çª“å£ã€‚
+// ãƒ•ãƒ¬ãƒ¼ãƒ ãƒ‡ã‚³ãƒ¼ãƒ‰å…ˆã®æº–å‚™ã€ã‚µãƒ¼ãƒ•ã‚§ã‚¹ã¸ã®è¡¨ç¤ºã€overlay çŠ¶æ…‹ã¨ã‚¤ãƒ™ãƒ³ãƒˆã®ä¸­ç¶™ã‚’æ‹…å½“ã™ã‚‹ã€‚
 
 interface
 
@@ -13,126 +13,126 @@ uses
 type
   TVideoMinerVideoView = class
   private
-    FDecodeScratch           : TBitmap;                 // •\¦‚¹‚¸‚ÉŸƒtƒŒ[ƒ€‚ğŠm”F‚·‚é‚½‚ß‚Ìì‹Æ—p Bitmap
-    FShownFrameCache         : TBitmap;                 // ’¼‹ß‚Ì–¾¦•\¦ƒtƒŒ[ƒ€‚ğ‘¦Ä•\¦‚·‚é‚½‚ß‚ÌƒLƒƒƒbƒVƒ…
-    FShownFrameCachePosition : Integer;                 // ƒLƒƒƒbƒVƒ…‚µ‚Ä‚¢‚é–¾¦•\¦ƒtƒŒ[ƒ€‚ÌˆÊ’u ms
-    FSurface                 : TVideoMinerVideoSurface; // ÀÛ‚Ì“®‰æ•\¦‚Æ overlay •`‰æ‚ğ‚ÂƒT[ƒtƒFƒX
-    // Œ»İ‚Ì•\¦ƒtƒŒ[ƒ€‚ğw’èˆÊ’u‚Ì‘¦Ä•\¦—p‚É•Û‘¶‚·‚é
+    FDecodeScratch           : TBitmap;                 // è¡¨ç¤ºã›ãšã«æ¬¡ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ç¢ºèªã™ã‚‹ãŸã‚ã®ä½œæ¥­ç”¨ Bitmap
+    FShownFrameCache         : TBitmap;                 // ç›´è¿‘ã®æ˜ç¤ºè¡¨ç¤ºãƒ•ãƒ¬ãƒ¼ãƒ ã‚’å³æ™‚å†è¡¨ç¤ºã™ã‚‹ãŸã‚ã®ã‚­ãƒ£ãƒƒã‚·ãƒ¥
+    FShownFrameCachePosition : Integer;                 // ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã—ã¦ã„ã‚‹æ˜ç¤ºè¡¨ç¤ºãƒ•ãƒ¬ãƒ¼ãƒ ã®ä½ç½® ms
+    FSurface                 : TVideoMinerVideoSurface; // å®Ÿéš›ã®å‹•ç”»è¡¨ç¤ºã¨ overlay æç”»ã‚’æŒã¤ã‚µãƒ¼ãƒ•ã‚§ã‚¹
+    // ç¾åœ¨ã®è¡¨ç¤ºãƒ•ãƒ¬ãƒ¼ãƒ ã‚’æŒ‡å®šä½ç½®ã®å³æ™‚å†è¡¨ç¤ºç”¨ã«ä¿å­˜ã™ã‚‹
     procedure CacheShownFrame(PositionMs: Integer);
-    // ƒtƒH[ƒ€‘¤‚ÅeqŠÖŒW‚âƒtƒH[ƒJƒX‘ÎÛ‚Æ‚µ‚Äˆµ‚¤ƒT[ƒtƒFƒX‚ğ•Ô‚·
+    // ãƒ•ã‚©ãƒ¼ãƒ å´ã§è¦ªå­é–¢ä¿‚ã‚„ãƒ•ã‚©ãƒ¼ã‚«ã‚¹å¯¾è±¡ã¨ã—ã¦æ‰±ã†ã‚µãƒ¼ãƒ•ã‚§ã‚¹ã‚’è¿”ã™
     function GetSurfaceControl: TWinControl;
-    // Œ»İ•\¦’†‚Ì“®‰æƒtƒŒ[ƒ€ Bitmap ‚ğ•Ô‚·
+    // ç¾åœ¨è¡¨ç¤ºä¸­ã®å‹•ç”»ãƒ•ãƒ¬ãƒ¼ãƒ  Bitmap ã‚’è¿”ã™
     function GetCurrentFrameBitmap: TBitmap;
-    // Bitmap ‚ğ BGRX32 ƒfƒR[ƒhæ‚Æ‚µ‚Äg‚¦‚éó‘Ô‚É‚·‚é
+    // Bitmap ã‚’ BGRX32 ãƒ‡ã‚³ãƒ¼ãƒ‰å…ˆã¨ã—ã¦ä½¿ãˆã‚‹çŠ¶æ…‹ã«ã™ã‚‹
     function PrepareBitmapFrameBuffer(Bitmap: TBitmap; Width, Height: Integer;
       out Buffer: Pointer; out BufferStride: Integer): Boolean;
-    // •\¦ƒT[ƒtƒFƒX‚ğ BGRX32 ƒfƒR[ƒhæ‚Æ‚µ‚Äg‚¦‚éó‘Ô‚É‚·‚é
+    // è¡¨ç¤ºã‚µãƒ¼ãƒ•ã‚§ã‚¹ã‚’ BGRX32 ãƒ‡ã‚³ãƒ¼ãƒ‰å…ˆã¨ã—ã¦ä½¿ãˆã‚‹çŠ¶æ…‹ã«ã™ã‚‹
     function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
       out BufferStride: Integer; out ErrorMessage: string): Boolean;
-    // w’èˆÊ’u‚ÌƒLƒƒƒbƒVƒ…‚ª‚ ‚ê‚ÎAƒfƒR[ƒhŠ®—¹‚ğ‘Ò‚½‚¸‚É•\¦‚·‚é
+    // æŒ‡å®šä½ç½®ã®ã‚­ãƒ£ãƒƒã‚·ãƒ¥ãŒã‚ã‚Œã°ã€ãƒ‡ã‚³ãƒ¼ãƒ‰å®Œäº†ã‚’å¾…ãŸãšã«è¡¨ç¤ºã™ã‚‹
     function TryPresentCachedFrame(PositionMs: Integer): Boolean;
-    // ƒ{ƒX‚ª—ˆ‚½ƒ‚[ƒh‚Ì•\¦ó‘Ô‚ğƒT[ƒtƒFƒX‚Ö“n‚·
+    // ãƒœã‚¹ãŒæ¥ãŸãƒ¢ãƒ¼ãƒ‰ã®è¡¨ç¤ºçŠ¶æ…‹ã‚’ã‚µãƒ¼ãƒ•ã‚§ã‚¹ã¸æ¸¡ã™
     procedure SetBossMode(Value: Boolean);
-    // Ÿ“®‰æ‚ÖˆÚ“®‚Å‚«‚é‚©‚ğ overlay •\¦‚Ö“n‚·
+    // æ¬¡å‹•ç”»ã¸ç§»å‹•ã§ãã‚‹ã‹ã‚’ overlay è¡¨ç¤ºã¸æ¸¡ã™
     procedure SetCanNavigateNext(Value: Boolean);
-    // ‘O“®‰æ‚ÖˆÚ“®‚Å‚«‚é‚©‚ğ overlay •\¦‚Ö“n‚·
+    // å‰å‹•ç”»ã¸ç§»å‹•ã§ãã‚‹ã‹ã‚’ overlay è¡¨ç¤ºã¸æ¸¡ã™
     procedure SetCanNavigatePrevious(Value: Boolean);
-    // Check ‘€ì‚Ì—LŒøó‘Ô‚ğ overlay •\¦‚Ö“n‚·
+    // Check æ“ä½œã®æœ‰åŠ¹çŠ¶æ…‹ã‚’ overlay è¡¨ç¤ºã¸æ¸¡ã™
     procedure SetCheckEnabled(Value: Boolean);
-    // •\¦—pƒ`ƒƒƒvƒ^[ˆÊ’u‚ğ overlay •\¦‚Ö“n‚·
+    // è¡¨ç¤ºç”¨ãƒãƒ£ãƒ—ã‚¿ãƒ¼ä½ç½®ã‚’ overlay è¡¨ç¤ºã¸æ¸¡ã™
     procedure SetChapters(const Value: TVideoMinerOverlayChapters);
-    // I’[“’B“®ì‚Ì•\¦•¶š—ñ‚ğ overlay •\¦‚Ö“n‚·
+    // çµ‚ç«¯åˆ°é”æ™‚å‹•ä½œã®è¡¨ç¤ºæ–‡å­—åˆ—ã‚’ overlay è¡¨ç¤ºã¸æ¸¡ã™
     procedure SetEndActionText(const Value: string);
-    // ‘S‰æ–Êó‘Ô‚ğƒT[ƒtƒFƒX‚Ö“n‚·
+    // å…¨ç”»é¢çŠ¶æ…‹ã‚’ã‚µãƒ¼ãƒ•ã‚§ã‚¹ã¸æ¸¡ã™
     procedure SetFullScreen(Value: Boolean);
-    // I’[“’B“®ìƒ{ƒ^ƒ“‚ÌƒNƒŠƒbƒNæ‚ğİ’è‚·‚é
+    // çµ‚ç«¯åˆ°é”æ™‚å‹•ä½œãƒœã‚¿ãƒ³ã®ã‚¯ãƒªãƒƒã‚¯å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnEndActionClick(Value: TNotifyEvent);
-    // æ“ªƒtƒŒ[ƒ€ƒ{ƒ^ƒ“‚ÌƒNƒŠƒbƒNæ‚ğİ’è‚·‚é
+    // å…ˆé ­ãƒ•ãƒ¬ãƒ¼ãƒ ãƒœã‚¿ãƒ³ã®ã‚¯ãƒªãƒƒã‚¯å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnFirstFrameClick(Value: TNotifyEvent);
-    // ‘S‰æ–Êƒ{ƒ^ƒ“‚ÌƒNƒŠƒbƒNæ‚ğİ’è‚·‚é
+    // å…¨ç”»é¢ãƒœã‚¿ãƒ³ã®ã‚¯ãƒªãƒƒã‚¯å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnFullScreenClick(Value: TNotifyEvent);
-    // ––”öƒtƒŒ[ƒ€ƒ{ƒ^ƒ“‚ÌƒNƒŠƒbƒNæ‚ğİ’è‚·‚é
+    // æœ«å°¾ãƒ•ãƒ¬ãƒ¼ãƒ ãƒœã‚¿ãƒ³ã®ã‚¯ãƒªãƒƒã‚¯å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnLastFrameClick(Value: TNotifyEvent);
-    // ƒ~ƒ…[ƒgó‘Ô‚ğ overlay •\¦‚Ö“n‚·
+    // ãƒŸãƒ¥ãƒ¼ãƒˆçŠ¶æ…‹ã‚’ overlay è¡¨ç¤ºã¸æ¸¡ã™
     procedure SetMuted(Value: Boolean);
-    // ƒ{ƒX‚ª—ˆ‚½ƒ‚[ƒh‰ğœƒ{ƒ^ƒ“‚ÌƒNƒŠƒbƒNæ‚ğİ’è‚·‚é
+    // ãƒœã‚¹ãŒæ¥ãŸãƒ¢ãƒ¼ãƒ‰è§£é™¤ãƒœã‚¿ãƒ³ã®ã‚¯ãƒªãƒƒã‚¯å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnBossExitClick(Value: TNotifyEvent);
-    // ƒ{ƒX‚ª—ˆ‚½ƒ‚[ƒh”­“®ƒWƒFƒXƒ`ƒƒ[‚Ì’Ê’mæ‚ğİ’è‚·‚é
+    // ãƒœã‚¹ãŒæ¥ãŸãƒ¢ãƒ¼ãƒ‰ç™ºå‹•ã‚¸ã‚§ã‚¹ãƒãƒ£ãƒ¼ã®é€šçŸ¥å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnBossGesture(Value: TNotifyEvent);
-    // ƒ`ƒƒƒvƒ^[’Ç‰Áƒ{ƒ^ƒ“‚ÌƒNƒŠƒbƒNæ‚ğİ’è‚·‚é
+    // ãƒãƒ£ãƒ—ã‚¿ãƒ¼è¿½åŠ ãƒœã‚¿ãƒ³ã®ã‚¯ãƒªãƒƒã‚¯å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnAddChapterClick(Value: TNotifyEvent);
-    // Check ƒ{ƒ^ƒ“‚ÌƒNƒŠƒbƒNæ‚ğİ’è‚·‚é
+    // Check ãƒœã‚¿ãƒ³ã®ã‚¯ãƒªãƒƒã‚¯å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnCheckClick(Value: TNotifyEvent);
-    // ƒ`ƒƒƒvƒ^[íœƒ{ƒ^ƒ“‚ÌƒNƒŠƒbƒNæ‚ğİ’è‚·‚é
+    // ãƒãƒ£ãƒ—ã‚¿ãƒ¼å‰Šé™¤ãƒœã‚¿ãƒ³ã®ã‚¯ãƒªãƒƒã‚¯å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnDeleteChapterClick(Value: TNotifyEvent);
-    // ƒ~ƒ…[ƒgƒ{ƒ^ƒ“‚ÌƒNƒŠƒbƒNæ‚ğİ’è‚·‚é
+    // ãƒŸãƒ¥ãƒ¼ãƒˆãƒœã‚¿ãƒ³ã®ã‚¯ãƒªãƒƒã‚¯å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnMuteClick(Value: TNotifyEvent);
-    // Ÿ“®‰æƒ{ƒ^ƒ“‚ÌƒNƒŠƒbƒNæ‚ğİ’è‚·‚é
+    // æ¬¡å‹•ç”»ãƒœã‚¿ãƒ³ã®ã‚¯ãƒªãƒƒã‚¯å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnNavigateNextClick(Value: TNotifyEvent);
-    // ‘O“®‰æƒ{ƒ^ƒ“‚ÌƒNƒŠƒbƒNæ‚ğİ’è‚·‚é
+    // å‰å‹•ç”»ãƒœã‚¿ãƒ³ã®ã‚¯ãƒªãƒƒã‚¯å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnNavigatePreviousClick(Value: TNotifyEvent);
-    // Ä¶‘¬“xƒ{ƒ^ƒ“‚ÌƒNƒŠƒbƒNæ‚ğİ’è‚·‚é
+    // å†ç”Ÿé€Ÿåº¦ãƒœã‚¿ãƒ³ã®ã‚¯ãƒªãƒƒã‚¯å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnPlaybackRateClick(Value: TNotifyEvent);
-    // Ä¶/ˆê’â~ƒ{ƒ^ƒ“‚ÌƒNƒŠƒbƒNæ‚ğİ’è‚·‚é
+    // å†ç”Ÿ/ä¸€æ™‚åœæ­¢ãƒœã‚¿ãƒ³ã®ã‚¯ãƒªãƒƒã‚¯å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
-    // ƒTƒ€ƒlƒCƒ‹ˆê——•\¦‰EƒNƒŠƒbƒN‚Ì’Ê’mæ‚ğİ’è‚·‚é
+    // ã‚µãƒ ãƒã‚¤ãƒ«ä¸€è¦§è¡¨ç¤ºå³ã‚¯ãƒªãƒƒã‚¯ã®é€šçŸ¥å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnThumbnailBrowserClick(Value: TNotifyEvent);
-    // ƒV[ƒNƒo[‘€ì‚Ì’Ê’mæ‚ğİ’è‚·‚é
+    // ã‚·ãƒ¼ã‚¯ãƒãƒ¼æ“ä½œã®é€šçŸ¥å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
-    // ƒV[ƒNƒo[ãƒzƒC[ƒ‹‘€ì‚Ì’Ê’mæ‚ğİ’è‚·‚é
+    // ã‚·ãƒ¼ã‚¯ãƒãƒ¼ä¸Šãƒ›ã‚¤ãƒ¼ãƒ«æ“ä½œã®é€šçŸ¥å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnSeekByWheel(Value: TVideoMinerOverlaySeekEvent);
-    // 10 •b–ß‚µƒ{ƒ^ƒ“‚ÌƒNƒŠƒbƒNæ‚ğİ’è‚·‚é
+    // 10 ç§’æˆ»ã—ãƒœã‚¿ãƒ³ã®ã‚¯ãƒªãƒƒã‚¯å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnSkipBackwardClick(Value: TNotifyEvent);
-    // 10 •bi‚İƒ{ƒ^ƒ“‚ÌƒNƒŠƒbƒNæ‚ğİ’è‚·‚é
+    // 10 ç§’é€²ã¿ãƒœã‚¿ãƒ³ã®ã‚¯ãƒªãƒƒã‚¯å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnSkipForwardClick(Value: TNotifyEvent);
-    // ‰¹—Ê•ÏX‚Ì’Ê’mæ‚ğİ’è‚·‚é
+    // éŸ³é‡å¤‰æ›´ã®é€šçŸ¥å…ˆã‚’è¨­å®šã™ã‚‹
     procedure SetOnVolumeChange(Value: TVideoMinerOverlayVolumeEvent);
-    // Ä¶’†‚©‚Ç‚¤‚©‚ğ overlay •\¦‚Ö“n‚·
+    // å†ç”Ÿä¸­ã‹ã©ã†ã‹ã‚’ overlay è¡¨ç¤ºã¸æ¸¡ã™
     procedure SetPlaybackActive(Value: Boolean);
-    // Ä¶‘¬“x‚Ì•\¦•¶š—ñ‚ğ overlay •\¦‚Ö“n‚·
+    // å†ç”Ÿé€Ÿåº¦ã®è¡¨ç¤ºæ–‡å­—åˆ—ã‚’ overlay è¡¨ç¤ºã¸æ¸¡ã™
     procedure SetPlaybackRateText(const Value: string);
-    // Œ»İ‚Ì“®‰æ‚ª alpha ‚ğ‚Â‚©‚ğ•\¦–Ê‚Ö“n‚·
+    // ç¾åœ¨ã®å‹•ç”»ãŒ alpha ã‚’æŒã¤ã‹ã‚’è¡¨ç¤ºé¢ã¸æ¸¡ã™
     procedure SetSourceHasAlpha(Value: Boolean);
-    // Check ’†ƒzƒC[ƒ‹ƒV[ƒN‚Ì 1 ƒXƒeƒbƒv•‚ğİ’è‚·‚é
+    // Check ä¸­ãƒ›ã‚¤ãƒ¼ãƒ«ã‚·ãƒ¼ã‚¯ã® 1 ã‚¹ãƒ†ãƒƒãƒ—å¹…ã‚’è¨­å®šã™ã‚‹
     procedure SetSeekWheelFrameStepMs(Value: Integer);
-    // 90% ƒZ[ƒtƒGƒŠƒAŠm”F˜g‚Ì•\¦ó‘Ô‚ğİ’è‚·‚é
+    // 90% ã‚»ãƒ¼ãƒ•ã‚¨ãƒªã‚¢ç¢ºèªæ ã®è¡¨ç¤ºçŠ¶æ…‹ã‚’è¨­å®šã™ã‚‹
     procedure SetSafeAreaVisible(Value: Boolean);
-    // ‰¹—Êƒp[ƒZƒ“ƒg‚ğ overlay •\¦‚Ö“n‚·
+    // éŸ³é‡ãƒ‘ãƒ¼ã‚»ãƒ³ãƒˆã‚’ overlay è¡¨ç¤ºã¸æ¸¡ã™
     procedure SetVolumePercent(Value: Integer);
   public
-    // Šù‘¶‚Ì TImage ”z’u‚ğˆø‚«Œp‚¢‚Åê—pƒT[ƒtƒFƒX‚Ö·‚µ‘Ö‚¦‚é
+    // æ—¢å­˜ã® TImage é…ç½®ã‚’å¼•ãç¶™ã„ã§å°‚ç”¨ã‚µãƒ¼ãƒ•ã‚§ã‚¹ã¸å·®ã—æ›¿ãˆã‚‹
     constructor Create(Image: TImage);
-    // ƒT[ƒtƒFƒX‚Æ scratch frame ‚ğ‰ğ•ú‚·‚é
+    // ã‚µãƒ¼ãƒ•ã‚§ã‚¹ã¨ scratch frame ã‚’è§£æ”¾ã™ã‚‹
     destructor Destroy; override;
-    // •\¦ƒtƒŒ[ƒ€‚Æ scratch frame ‚ğ‹ó‚É‚·‚é
+    // è¡¨ç¤ºãƒ•ãƒ¬ãƒ¼ãƒ ã¨ scratch frame ã‚’ç©ºã«ã™ã‚‹
     procedure Clear;
-    // ƒ{ƒX‚ª—ˆ‚½ƒ‚[ƒh’†‚Ìƒwƒ‹ƒvƒy[ƒW‚ğ‘OŒã‚ÖØ‚è‘Ö‚¦‚é
+    // ãƒœã‚¹ãŒæ¥ãŸãƒ¢ãƒ¼ãƒ‰ä¸­ã®ãƒ˜ãƒ«ãƒ—ãƒšãƒ¼ã‚¸ã‚’å‰å¾Œã¸åˆ‡ã‚Šæ›¿ãˆã‚‹
     procedure ChangeBossHelpPage(Delta: Integer);
-    // w’èˆÊ’u‚ÌƒtƒŒ[ƒ€‚ğƒfƒR[ƒh‚µA•K—v‚È‚ç•\¦‚Ö”½‰f‚·‚é
+    // æŒ‡å®šä½ç½®ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ãƒ‡ã‚³ãƒ¼ãƒ‰ã—ã€å¿…è¦ãªã‚‰è¡¨ç¤ºã¸åæ˜ ã™ã‚‹
     function ShowFrameAt(Decoder: TFFmpegDecoder; PositionMs: Integer;
       out ErrorMessage: string; PresentFrame: Boolean = True;
       FastSeek: Boolean = False): Boolean;
-    // ŸƒtƒŒ[ƒ€‚ğ“Ç‚İA•K—v‚È‚ç•\¦—p BGRX32 ‚Ö•ÏŠ·‚·‚é
+    // æ¬¡ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’èª­ã¿ã€å¿…è¦ãªã‚‰è¡¨ç¤ºç”¨ BGRX32 ã¸å¤‰æ›ã™ã‚‹
     function DecodeNextFrame(Decoder: TFFmpegDecoder; ConvertFrame: Boolean;
       out PositionMs: Integer; out ErrorMessage: string): Boolean;
-    // ŸƒtƒŒ[ƒ€‚ğ‰æ–Ê‚É‚Ío‚³‚¸ scratch frame ‚ÖƒfƒR[ƒh‚·‚é
+    // æ¬¡ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ç”»é¢ã«ã¯å‡ºã•ãš scratch frame ã¸ãƒ‡ã‚³ãƒ¼ãƒ‰ã™ã‚‹
     function DecodeNextFrameToScratch(Decoder: TFFmpegDecoder;
       out PositionMs: Integer; out ErrorMessage: string): Boolean;
-    // Œ»İ•\¦’†ƒtƒŒ[ƒ€‚Ìl‹÷‚ªˆÃ‚¢‚©•Ô‚·
+    // ç¾åœ¨è¡¨ç¤ºä¸­ãƒ•ãƒ¬ãƒ¼ãƒ ã®å››éš…ãŒæš—ã„ã‹è¿”ã™
     function CurrentFrameCornersMostlyDark: Boolean;
-    // Œ»İ•\¦’†ƒtƒŒ[ƒ€‚ÌŠÈˆÕ–¼‚ğ•Ô‚·
+    // ç¾åœ¨è¡¨ç¤ºä¸­ãƒ•ãƒ¬ãƒ¼ãƒ ã®ç°¡æ˜“ç½²åã‚’è¿”ã™
     function CurrentFrameSignature(out Signature: TVideoMinerFrameSignature): Boolean;
-    // ƒT[ƒtƒFƒXã‚ÌƒzƒC[ƒ‹‘€ì‚ğƒY[ƒ€/ƒV[ƒN‚Æ‚µ‚Äˆ—‚·‚é
+    // ã‚µãƒ¼ãƒ•ã‚§ã‚¹ä¸Šã®ãƒ›ã‚¤ãƒ¼ãƒ«æ“ä½œã‚’ã‚ºãƒ¼ãƒ /ã‚·ãƒ¼ã‚¯ã¨ã—ã¦å‡¦ç†ã™ã‚‹
     function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer;MousePos: TPoint): Boolean;
-    // ŸƒtƒŒ[ƒ€‚ğ“Ç‚İ‚ñ‚Å•\¦‚·‚é
+    // æ¬¡ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’èª­ã¿è¾¼ã‚“ã§è¡¨ç¤ºã™ã‚‹
     function ShowNextFrame(Decoder: TFFmpegDecoder; out PositionMs: Integer; out ErrorMessage: string): Boolean;
-    // scratch frame ‚É‚ ‚éƒtƒŒ[ƒ€‚ğŒ»İ•\¦‚Ö”½‰f‚·‚é
+    // scratch frame ã«ã‚ã‚‹ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ç¾åœ¨è¡¨ç¤ºã¸åæ˜ ã™ã‚‹
     function PresentScratchFrame(out ErrorMessage: string): Boolean;
-    // ƒT[ƒtƒFƒX‚ÌŒ»İ Bitmap ‚ğ’Êí‚Ì•`‰æƒ^ƒCƒ~ƒ“ƒO‚Å•\¦‚·‚é
+    // ã‚µãƒ¼ãƒ•ã‚§ã‚¹ã®ç¾åœ¨ Bitmap ã‚’é€šå¸¸ã®æç”»ã‚¿ã‚¤ãƒŸãƒ³ã‚°ã§è¡¨ç¤ºã™ã‚‹
     procedure Present(Bitmap: TBitmap);
-    // ƒT[ƒtƒFƒX‚ÌŒ»İ Bitmap ‚ğ‘¦•\¦‚·‚é
+    // ã‚µãƒ¼ãƒ•ã‚§ã‚¹ã®ç¾åœ¨ Bitmap ã‚’å³æ™‚è¡¨ç¤ºã™ã‚‹
     procedure PresentImmediate(Bitmap: TBitmap);
-    // overlay ‚ÌƒV[ƒNi’»‚ğXV‚·‚é
+    // overlay ã®ã‚·ãƒ¼ã‚¯é€²æ—ã‚’æ›´æ–°ã™ã‚‹
     procedure SetSeekProgress(PositionMs, MaxMs: Integer);
     property BossMode: Boolean write SetBossMode;
     property CanNavigateNext: Boolean write SetCanNavigateNext;
@@ -591,8 +591,6 @@ begin
     PresentImmediate(FSurface.Bitmap);
     CacheShownFrame(PositionMs);
   end;
-  if (not PresentFrame) and (FSurface <> nil) then
-    FSurface.PresentImmediate;
   Result := True;
 end;
 

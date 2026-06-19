@@ -1,8 +1,8 @@
-unit VideoMinerPlaybackController;
+ï»¿unit VideoMinerPlaybackController;
 
-// “®‰æÄ¶‚ÌŠJnA’â~AseekAtickA‰¹º“¯ŠúAI’[ˆ—‚ğ’S“–‚·‚éB
-// ƒƒCƒ“ƒtƒH[ƒ€‚©‚çÄ¶’†‚Ìó‘ÔŠÇ—‚ğ•ª—£‚µAƒfƒR[ƒ_A‰¹ºÄ¶A
-// “®‰æƒrƒ…[Aƒ`ƒƒƒvƒ^[ŠÇ—‚ğ‚Â‚È‚¢‚Å 1 tick ‚²‚Æ‚ÌÄ¶§Œä‚ği‚ß‚éB
+// å‹•ç”»å†ç”Ÿã®é–‹å§‹ã€åœæ­¢ã€seekã€tickã€éŸ³å£°åŒæœŸã€çµ‚ç«¯å‡¦ç†ã‚’æ‹…å½“ã™ã‚‹ã€‚
+// ãƒ¡ã‚¤ãƒ³ãƒ•ã‚©ãƒ¼ãƒ ã‹ã‚‰å†ç”Ÿä¸­ã®çŠ¶æ…‹ç®¡ç†ã‚’åˆ†é›¢ã—ã€ãƒ‡ã‚³ãƒ¼ãƒ€ã€éŸ³å£°å†ç”Ÿã€
+// å‹•ç”»ãƒ“ãƒ¥ãƒ¼ã€ãƒãƒ£ãƒ—ã‚¿ãƒ¼ç®¡ç†ã‚’ã¤ãªã„ã§ 1 tick ã”ã¨ã®å†ç”Ÿåˆ¶å¾¡ã‚’é€²ã‚ã‚‹ã€‚
 
 interface
 
@@ -12,96 +12,96 @@ uses
   VideoMinerVideoView;
 
 type
-  // Ä¶I’[‚É“’B‚µ‚½‚É caller ‚ªs‚¤ˆ—
+  // å†ç”Ÿçµ‚ç«¯ã«åˆ°é”ã—ãŸæ™‚ã« caller ãŒè¡Œã†å‡¦ç†
   TVideoMinerPlaybackEndResult = (perStop, perLoop, perNext);
-  // 1 ƒtƒŒ[ƒ€“Ç‚İæ‚è‚ÌŒ‹‰Ê
+  // 1 ãƒ•ãƒ¬ãƒ¼ãƒ èª­ã¿å–ã‚Šã®çµæœ
   TVideoMinerPlaybackDecodeResult = (pdrFrame, pdrEndOfStream, pdrError);
-  // ‰¹º‚æ‚è’x‚ê‚½“®‰æƒtƒŒ[ƒ€‚Ì•â³Œ‹‰Ê
+  // éŸ³å£°ã‚ˆã‚Šé…ã‚ŒãŸå‹•ç”»ãƒ•ãƒ¬ãƒ¼ãƒ ã®è£œæ­£çµæœ
   TVideoMinerLaggingVideoResult = (lvrNoAction, lvrDropped, lvrSyncedToAudio,
     lvrError);
-  // seek guard ‚ª‰ŠúƒtƒŒ[ƒ€‚ğ‚Ç‚¤ˆµ‚Á‚½‚©
+  // seek guard ãŒåˆæœŸãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ã©ã†æ‰±ã£ãŸã‹
   TVideoMinerSeekGuardResult = (sgrNotGuarded, sgrAccepted, sgrContinue,
     sgrSyncedToTarget, sgrGuardError, sgrPresentError);
-  // ˆø”‚È‚µ‚Å main form ‘¤‚Ìˆ—‚ğŒÄ‚Ñ–ß‚· callback
+  // å¼•æ•°ãªã—ã§ main form å´ã®å‡¦ç†ã‚’å‘¼ã³æˆ»ã™ callback
   TVideoMinerPlaybackNotifyProc = procedure of object;
-  // Ä¶ˆÊ’u ms ‚ğ main form ‘¤‚Ö“n‚· callback
+  // å†ç”Ÿä½ç½® ms ã‚’ main form å´ã¸æ¸¡ã™ callback
   TVideoMinerPlaybackPositionProc = procedure(PositionMs: Integer) of object;
-  // Ä¶ó‘Ô•\¦•¶š—ñ‚ğ main form ‘¤‚Ö“n‚· callback
+  // å†ç”ŸçŠ¶æ…‹è¡¨ç¤ºæ–‡å­—åˆ—ã‚’ main form å´ã¸æ¸¡ã™ callback
   TVideoMinerPlaybackStatusProc = procedure(const Text: string) of object;
-  // w’èˆÊ’u‚ÌƒtƒŒ[ƒ€•\¦‚ğ main form ‘¤‚ÖˆË—Š‚·‚é callback
+  // æŒ‡å®šä½ç½®ã®ãƒ•ãƒ¬ãƒ¼ãƒ è¡¨ç¤ºã‚’ main form å´ã¸ä¾é ¼ã™ã‚‹ callback
   TVideoMinerPlaybackFrameFunc = function(const PositionMs: Integer): Boolean of object;
-  // w’èˆÊ’u‚©‚ç‚ÌÄ¶ŠJn‚ğ main form ‘¤‚ÖˆË—Š‚·‚é callback
+  // æŒ‡å®šä½ç½®ã‹ã‚‰ã®å†ç”Ÿé–‹å§‹ã‚’ main form å´ã¸ä¾é ¼ã™ã‚‹ callback
   TVideoMinerPlaybackStartProc = procedure(PositionMs: Integer;
     FrameAlreadyShown: Boolean) of object;
 
   TVideoMinerPlaybackController = class
   private
-    FAudioPlayback            : TVideoMinerAudioPlayback; // ‰¹ºŠJn/’â~‚Æ‰¹ºˆÊ’uæ“¾‚ğs‚¤Ä¶ƒ‰ƒbƒp
-    FPlaybackRate             : Double;                   // Œ»İ‚ÌÄ¶‘¬“x”{—¦
-    FRestartFastSeek          : Boolean;                  // ÄŠJ—\–ñ‚ÉŒy‚¢ seek ‚Æ‚µ‚Äˆµ‚¤‚©
-    FRestartFrameAlreadyShown : Boolean;                  // ÄŠJˆÊ’u‚ÌƒtƒŒ[ƒ€‚ª‚·‚Å‚É•\¦Ï‚İ‚©
-    FRestartPending           : Boolean;                  // seek Œã‚ÌÄ¶ÄŠJ—\–ñ‚ª‚ ‚é‚©
-    FRestartPositionMs        : Integer;                  // ÄŠJ—\–ñ‚³‚ê‚½Ä¶ˆÊ’u ms
-    FRestartTimer             : TTimer;                   // seek Œã‚Ì’x‰„ÄŠJ‚ğ”­‰Î‚·‚é timer
-    FRateClock                : TStopwatch;               // ”{‘¬Ä¶‚Ì‰f‘œˆÊ’u‚ği‚ß‚é’P’²Œv
-    FRateClockActive          : Boolean;                  // ”{‘¬—p’P’²Œv‚ª—LŒø‚©
-    FRateClockBaseMs          : Integer;                  // ”{‘¬—p’P’²Œv‚ÌŠJnˆÊ’u ms
-    FVideoView                : TVideoMinerVideoView;     // •\¦XV‚Æ scratch frame •\¦‚ğs‚¤“®‰æƒrƒ…[
-    FPlaybackTimer            : TTimer;                   // Ä¶ tick ‚ğ”­‰Î‚·‚é timer
-    FPreviewDecoder           : TFFmpegDecoder;           // seek preview —p‚Ég‚¤ƒfƒR[ƒ_
+    FAudioPlayback            : TVideoMinerAudioPlayback; // éŸ³å£°é–‹å§‹/åœæ­¢ã¨éŸ³å£°ä½ç½®å–å¾—ã‚’è¡Œã†å†ç”Ÿãƒ©ãƒƒãƒ‘
+    FPlaybackRate             : Double;                   // ç¾åœ¨ã®å†ç”Ÿé€Ÿåº¦å€ç‡
+    FRestartFastSeek          : Boolean;                  // å†é–‹äºˆç´„æ™‚ã«è»½ã„ seek ã¨ã—ã¦æ‰±ã†ã‹
+    FRestartFrameAlreadyShown : Boolean;                  // å†é–‹ä½ç½®ã®ãƒ•ãƒ¬ãƒ¼ãƒ ãŒã™ã§ã«è¡¨ç¤ºæ¸ˆã¿ã‹
+    FRestartPending           : Boolean;                  // seek å¾Œã®å†ç”Ÿå†é–‹äºˆç´„ãŒã‚ã‚‹ã‹
+    FRestartPositionMs        : Integer;                  // å†é–‹äºˆç´„ã•ã‚ŒãŸå†ç”Ÿä½ç½® ms
+    FRestartTimer             : TTimer;                   // seek å¾Œã®é…å»¶å†é–‹ã‚’ç™ºç«ã™ã‚‹ timer
+    FRateClock                : TStopwatch;               // å€é€Ÿå†ç”Ÿæ™‚ã®æ˜ åƒä½ç½®ã‚’é€²ã‚ã‚‹å˜èª¿æ™‚è¨ˆ
+    FRateClockActive          : Boolean;                  // å€é€Ÿç”¨å˜èª¿æ™‚è¨ˆãŒæœ‰åŠ¹ã‹
+    FRateClockBaseMs          : Integer;                  // å€é€Ÿç”¨å˜èª¿æ™‚è¨ˆã®é–‹å§‹ä½ç½® ms
+    FVideoView                : TVideoMinerVideoView;     // è¡¨ç¤ºæ›´æ–°ã¨ scratch frame è¡¨ç¤ºã‚’è¡Œã†å‹•ç”»ãƒ“ãƒ¥ãƒ¼
+    FPlaybackTimer            : TTimer;                   // å†ç”Ÿ tick ã‚’ç™ºç«ã™ã‚‹ timer
+    FPreviewDecoder           : TFFmpegDecoder;           // seek preview ç”¨ã«ä½¿ã†ãƒ‡ã‚³ãƒ¼ãƒ€
   public
-    // timerA‰¹ºÄ¶A“®‰æƒrƒ…[Apreview decoder ‚ğó‚¯æ‚é
+    // timerã€éŸ³å£°å†ç”Ÿã€å‹•ç”»ãƒ“ãƒ¥ãƒ¼ã€preview decoder ã‚’å—ã‘å–ã‚‹
     constructor Create(PlaybackTimer, RestartTimer: TTimer;
       AudioPlayback: TVideoMinerAudioPlayback; VideoView: TVideoMinerVideoView;
       PreviewDecoder: TFFmpegDecoder);
-    // Ä¶’†A‚Ü‚½‚Í seek Œã‚ÌÄŠJ‘Ò‚¿‚©‚ğ•Ô‚·
+    // å†ç”Ÿä¸­ã€ã¾ãŸã¯ seek å¾Œã®å†é–‹å¾…ã¡ã‹ã‚’è¿”ã™
     function ActiveOrPending: Boolean;
-    // seek Œã‚ÌÄŠJ—\–ñ‚ğ”jŠü‚·‚é
+    // seek å¾Œã®å†é–‹äºˆç´„ã‚’ç ´æ£„ã™ã‚‹
     procedure ClearRestart;
-    // ÄŠJ—\–ñ‚ğæ‚èo‚µAæ‚èo‚µ‚½—\–ñ‚ğƒNƒŠƒA‚·‚é
+    // å†é–‹äºˆç´„ã‚’å–ã‚Šå‡ºã—ã€å–ã‚Šå‡ºã—ãŸäºˆç´„ã‚’ã‚¯ãƒªã‚¢ã™ã‚‹
     function ConsumeRestart(out PositionMs: Integer;
       out FrameAlreadyShown: Boolean; out FastSeek: Boolean): Boolean;
-    // UI •\¦‚â•Û‘¶‚Ég‚¤Œ»İÄ¶ˆÊ’u‚ğŒˆ‚ß‚é
+    // UI è¡¨ç¤ºã‚„ä¿å­˜ã«ä½¿ã†ç¾åœ¨å†ç”Ÿä½ç½®ã‚’æ±ºã‚ã‚‹
     function CurrentPositionMs(UsePlaybackPosition: Boolean;
       SeekPositionMs, CurrentVideoPositionMs, SeekMaxMs: Integer): Integer;
-    // Ÿ‚Ì“®‰æƒtƒŒ[ƒ€‚ğ“Ç‚İAI’[‚âƒGƒ‰[‚ğŒ‹‰Ê‚Å•Ô‚·
+    // æ¬¡ã®å‹•ç”»ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’èª­ã¿ã€çµ‚ç«¯ã‚„ã‚¨ãƒ©ãƒ¼ã‚’çµæœã§è¿”ã™
     function DecodeNextFrame(Decoder: TFFmpegDecoder; UseScratchFrame: Boolean;
       var ConvertFrame: Boolean; out PositionMs: Integer;
       out ErrorMessage: string): TVideoMinerPlaybackDecodeResult;
-    // seek ’¼Œã‚ÉŒÃ‚¢ƒtƒŒ[ƒ€‚ª•Ô‚éê‡‚Ì‰Šú”jŠü‚Æ•â³‚ğs‚¤
+    // seek ç›´å¾Œã«å¤ã„ãƒ•ãƒ¬ãƒ¼ãƒ ãŒè¿”ã‚‹å ´åˆã®åˆæœŸç ´æ£„ã¨è£œæ­£ã‚’è¡Œã†
     function HandleSeekGuard(Decoder: TFFmpegDecoder; const VideoFile: string;
       DebugLogEnabled: Boolean; SeekGuardTargetMs: Integer;
       var SeekGuardRemaining: Integer; var PositionMs: Integer;
       var CurrentVideoPositionMs: Integer; var ConvertFrame: Boolean;
       out ErrorMessage: string): TVideoMinerSeekGuardResult;
-    // ‰¹º‚æ‚è’x‚ê‚½“®‰æ‚ğƒtƒŒ[ƒ€”jŠü‚Ü‚½‚Í‰¹ºˆÊ’u seek ‚Å•â³‚·‚é
+    // éŸ³å£°ã‚ˆã‚Šé…ã‚ŒãŸå‹•ç”»ã‚’ãƒ•ãƒ¬ãƒ¼ãƒ ç ´æ£„ã¾ãŸã¯éŸ³å£°ä½ç½® seek ã§è£œæ­£ã™ã‚‹
     function HandleLaggingVideo(Decoder: TFFmpegDecoder; SeekMaxMs,
       AudioPositionMs, DropElapsedMs: Integer; var DropCount: Integer;
       var CurrentVideoPositionMs: Integer; var PositionMs: Integer;
       var ConvertFrame: Boolean; out ErrorMessage: string):
       TVideoMinerLaggingVideoResult;
-    // scratch decode ‚ÅŒ»İˆÊ’u‚æ‚è–ß‚Á‚½ƒtƒŒ[ƒ€‚ğ”jŠü‚·‚×‚«‚©”»’è‚·‚é
+    // scratch decode ã§ç¾åœ¨ä½ç½®ã‚ˆã‚Šæˆ»ã£ãŸãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ç ´æ£„ã™ã¹ãã‹åˆ¤å®šã™ã‚‹
     function ShouldDropBackwardScratchFrame(const VideoFile: string;
       DebugLogEnabled: Boolean; CurrentVideoPositionMs, PositionMs: Integer):
       Boolean;
-    // scratch buffer ‚É“Ç‚ñ‚¾ƒtƒŒ[ƒ€‚ğ“®‰æƒrƒ…[‚Ö•\¦‚·‚é
+    // scratch buffer ã«èª­ã‚“ã ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’å‹•ç”»ãƒ“ãƒ¥ãƒ¼ã¸è¡¨ç¤ºã™ã‚‹
     function PresentScratchFrame(var ConvertFrame: Boolean;
       out ErrorMessage: string): Boolean;
-    // ‰¹ºˆÊ’u‚Æ“®‰æˆÊ’u‚Ì·•ª ms ‚ğ•Ô‚·
+    // éŸ³å£°ä½ç½®ã¨å‹•ç”»ä½ç½®ã®å·®åˆ† ms ã‚’è¿”ã™
     function PlaybackLagMs(AudioPositionMs, PositionMs: Integer): Integer;
-    // ‰¹ºÄ¶ƒ‰ƒbƒp‚©‚çŒ©‚½Œ»İ‚ÌÄ¶ˆÊ’u ms ‚ğ•Ô‚·
+    // éŸ³å£°å†ç”Ÿãƒ©ãƒƒãƒ‘ã‹ã‚‰è¦‹ãŸç¾åœ¨ã®å†ç”Ÿä½ç½® ms ã‚’è¿”ã™
     function PlaybackPositionMs: Integer;
-    // ”{‘¬—p’P’²Œv‚©‚çŒ»İ‚ÌÄ¶ˆÊ’u ms ‚ğ‹‚ß‚é
+    // å€é€Ÿç”¨å˜èª¿æ™‚è¨ˆã‹ã‚‰ç¾åœ¨ã®å†ç”Ÿä½ç½® ms ã‚’æ±‚ã‚ã‚‹
     function RateClockPositionMs(SeekMaxMs: Integer): Integer;
-    // I—¹“®ì‚ğ overlay •\¦—p‚Ì•¶š—ñ‚Ö•ÏŠ·‚·‚é
+    // çµ‚äº†æ™‚å‹•ä½œã‚’ overlay è¡¨ç¤ºç”¨ã®æ–‡å­—åˆ—ã¸å¤‰æ›ã™ã‚‹
     function EndActionText(EndAction: TVideoMinerEndAction): string;
-    // I—¹“®ì‚ğŸ‚Ìİ’è’l‚Öi‚ß‚é
+    // çµ‚äº†æ™‚å‹•ä½œã‚’æ¬¡ã®è¨­å®šå€¤ã¸é€²ã‚ã‚‹
     function NextEndAction(EndAction: TVideoMinerEndAction):
       TVideoMinerEndAction;
-    // I’[“’B‚É stop / loop / next ‚Ì‚Ç‚ê‚ğs‚¤‚©Œˆ‚ß‚é
+    // çµ‚ç«¯åˆ°é”æ™‚ã« stop / loop / next ã®ã©ã‚Œã‚’è¡Œã†ã‹æ±ºã‚ã‚‹
     function FinishResult(EndAction: TVideoMinerEndAction;
       CanNavigateNext: Boolean): TVideoMinerPlaybackEndResult;
-    // I’[“’B‚Ì’â~Aƒ‹[ƒvÄŠJAŸƒtƒ@ƒCƒ‹ˆÚ“®‚ğÀs‚·‚é
+    // çµ‚ç«¯åˆ°é”æ™‚ã®åœæ­¢ã€ãƒ«ãƒ¼ãƒ—å†é–‹ã€æ¬¡ãƒ•ã‚¡ã‚¤ãƒ«ç§»å‹•ã‚’å®Ÿè¡Œã™ã‚‹
     procedure FinishAtEnd(EndAction: TVideoMinerEndAction;
       CanNavigateNext: Boolean; LoopStartMs, SeekMaxMs: Integer;
       var SeekPositionMs: Integer; var UpdatingSeek: Boolean;
@@ -109,36 +109,36 @@ type
       StartPlaybackAtMs: TVideoMinerPlaybackStartProc;
       NavigateNext: TVideoMinerPlaybackNotifyProc;
       UpdateInfo: TVideoMinerPlaybackNotifyProc);
-    // Œ»İˆÊ’u‚Æƒ`ƒƒƒvƒ^[ó‘Ô‚©‚çƒ‹[ƒv‹æŠÔ‚ğXV‚·‚é
+    // ç¾åœ¨ä½ç½®ã¨ãƒãƒ£ãƒ—ã‚¿ãƒ¼çŠ¶æ…‹ã‹ã‚‰ãƒ«ãƒ¼ãƒ—åŒºé–“ã‚’æ›´æ–°ã™ã‚‹
     procedure ConfigureLoopSegment(EndAction: TVideoMinerEndAction;
       ChapterManager: TVideoMinerChapterManager; PositionMs, SeekMaxMs,
       LastFrameSeekPositionMs: Integer; var LoopSegmentStartMs,
       LoopSegmentEndMs: Integer);
-    // Ä¶ tick ‚Ìå—v‚ÈŠ—vŠÔ‚Æ“¯Šúó‘Ô‚ğ debug log ‚Öo—Í‚·‚é
+    // å†ç”Ÿ tick ã®ä¸»è¦ãªæ‰€è¦æ™‚é–“ã¨åŒæœŸçŠ¶æ…‹ã‚’ debug log ã¸å‡ºåŠ›ã™ã‚‹
     procedure LogPlaybackTick(const VideoFile: string; AudioPositionMs,
       PositionMs, LagMs, DropCount: Integer; DidSeekToAudio: Boolean;
       PumpMs, DecodeMs, SyncMs, TotalMs: Double; TimerInterval: Integer);
-    // tick ‘O‚ÉÄ¶‰Â”\ó‘ÔA‰¹º pumpA‰¹ºˆÊ’u‚ğ€”õ‚·‚é
+    // tick å‰ã«å†ç”Ÿå¯èƒ½çŠ¶æ…‹ã€éŸ³å£° pumpã€éŸ³å£°ä½ç½®ã‚’æº–å‚™ã™ã‚‹
     function PrepareTick(IsSeeking, HasVideo: Boolean; SeekMaxMs: Integer;
       out AudioPositionMs: Integer; out ErrorMessage: string): Boolean;
-    // tick Œã‚ÉƒV[ƒNƒo[‚Ö”½‰f‚·‚éˆÊ’u‚ğ‹‚ß‚é
+    // tick å¾Œã«ã‚·ãƒ¼ã‚¯ãƒãƒ¼ã¸åæ˜ ã™ã‚‹ä½ç½®ã‚’æ±‚ã‚ã‚‹
     function SeekPositionForTick(PositionMs, AudioPositionMs,
       SeekMaxMs: Integer): Integer;
-    // seek Œã‚Éw’èˆÊ’u‚©‚çÄ¶‚ğÄŠJ‚·‚é—\–ñ‚ğ“ü‚ê‚é
+    // seek å¾Œã«æŒ‡å®šä½ç½®ã‹ã‚‰å†ç”Ÿã‚’å†é–‹ã™ã‚‹äºˆç´„ã‚’å…¥ã‚Œã‚‹
     procedure ScheduleRestart(PositionMs: Integer; FrameAlreadyShown: Boolean = True;
       FastSeek: Boolean = False);
-    // Ä¶‘¬“x‚ğİ’è‚µA”{‘¬—p’P’²Œv‚Ìó‘Ô‚ğXV‚·‚é
+    // å†ç”Ÿé€Ÿåº¦ã‚’è¨­å®šã—ã€å€é€Ÿç”¨å˜èª¿æ™‚è¨ˆã®çŠ¶æ…‹ã‚’æ›´æ–°ã™ã‚‹
     procedure SetPlaybackRate(Value: Double);
-    // Œ»İ‚Ìƒ‹[ƒv‹æŠÔI’[‚É“’B‚µ‚½‚©”»’è‚µA–ß‚èæ‚ğ•Ô‚·
+    // ç¾åœ¨ã®ãƒ«ãƒ¼ãƒ—åŒºé–“çµ‚ç«¯ã«åˆ°é”ã—ãŸã‹åˆ¤å®šã—ã€æˆ»ã‚Šå…ˆã‚’è¿”ã™
     function ShouldRestartLoop(EndAction: TVideoMinerEndAction;
       LoopSegmentStartMs, LoopSegmentEndMs, CurrentVideoPositionMs: Integer;
       out TargetMs: Integer): Boolean;
-    // ƒfƒR[ƒ_‚Æ‰¹ºÄ¶‚ğw’èˆÊ’u‚©‚çŠJn‚·‚é
+    // ãƒ‡ã‚³ãƒ¼ãƒ€ã¨éŸ³å£°å†ç”Ÿã‚’æŒ‡å®šä½ç½®ã‹ã‚‰é–‹å§‹ã™ã‚‹
     function StartAtMs(Decoder: TFFmpegDecoder; const VideoFile: string;
       const VideoInfo: TVideoInfo; SeekMaxMs, PositionMs: Integer;
       FrameAlreadyShown: Boolean; FastSeek: Boolean; out TargetMs: Integer;
       out ErrorMessage: string): Boolean;
-    // Ä¶ŠJn‚ÌˆÊ’uA‰¹ºAƒ‹[ƒv‹æŠÔAseek guardA•\¦ó‘Ô‚ğ‚Ü‚Æ‚ß‚ÄXV‚·‚é
+    // å†ç”Ÿé–‹å§‹æ™‚ã®ä½ç½®ã€éŸ³å£°ã€ãƒ«ãƒ¼ãƒ—åŒºé–“ã€seek guardã€è¡¨ç¤ºçŠ¶æ…‹ã‚’ã¾ã¨ã‚ã¦æ›´æ–°ã™ã‚‹
     procedure StartPlaybackAtMs(Decoder: TFFmpegDecoder; const VideoFile: string;
       const VideoInfo: TVideoInfo; EndAction: TVideoMinerEndAction;
       ChapterManager: TVideoMinerChapterManager; SeekMaxMs, PositionMs,
@@ -147,20 +147,20 @@ type
       var CurrentVideoPositionMs, SeekPositionMs, LoopSegmentStartMs,
       LoopSegmentEndMs, SeekGuardTargetMs, SeekGuardRemaining: Integer;
       SetStatus: TVideoMinerPlaybackStatusProc);
-    // “®‰æ‚ğ‰¹ºˆÊ’u‚Ö’Ç]‚³‚¹‚é‚½‚ßA•K—v‚ÈˆÊ’u‚ÌƒtƒŒ[ƒ€‚ğ•\¦‚·‚é
+    // å‹•ç”»ã‚’éŸ³å£°ä½ç½®ã¸è¿½å¾“ã•ã›ã‚‹ãŸã‚ã€å¿…è¦ãªä½ç½®ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’è¡¨ç¤ºã™ã‚‹
     function SyncVideoToAudio(Decoder: TFFmpegDecoder; SeekMaxMs: Integer;
       var PositionMs: Integer; out ErrorMessage: string): Boolean;
-    // w’èˆÊ’u•t‹ß‚ÌƒtƒŒ[ƒ€•\¦‚ğ‚µA¸”s‚Í‹ß‚¢ˆÊ’u‚Ö fallback ‚·‚é
+    // æŒ‡å®šä½ç½®ä»˜è¿‘ã®ãƒ•ãƒ¬ãƒ¼ãƒ è¡¨ç¤ºã‚’è©¦ã—ã€å¤±æ•—æ™‚ã¯è¿‘ã„ä½ç½®ã¸ fallback ã™ã‚‹
     function ShowFrameNearMs(PositionMs, SeekMaxMs: Integer;
       out ShownPositionMs: Integer; out ErrorMessage: string): Boolean;
-    // w’èˆÊ’u‚Ö seek ‚µA•K—v‚È‚çÄ¶ÄŠJ‚ğ—\–ñ‚·‚é
+    // æŒ‡å®šä½ç½®ã¸ seek ã—ã€å¿…è¦ãªã‚‰å†ç”Ÿå†é–‹ã‚’äºˆç´„ã™ã‚‹
     procedure SeekToMs(const VideoFile: string; PositionMs: Integer;
       ResumeIfPlaying: Boolean; SeekMaxMs: Integer;
       var CurrentVideoPositionMs, SeekPositionMs, SeekGuardTargetMs,
       SeekGuardRemaining: Integer; var UpdatingSeek, Seeking: Boolean;
       SetStatus: TVideoMinerPlaybackStatusProc;
       UpdateInfo: TVideoMinerPlaybackNotifyProc);
-    // Ä¶’†‚Ì 1 tick ‘S‘Ì‚ği‚ßA•\¦A“¯ŠúAI’[Aƒ`ƒFƒbƒN‚ğˆ—‚·‚é
+    // å†ç”Ÿä¸­ã® 1 tick å…¨ä½“ã‚’é€²ã‚ã€è¡¨ç¤ºã€åŒæœŸã€çµ‚ç«¯ã€ãƒã‚§ãƒƒã‚¯ã‚’å‡¦ç†ã™ã‚‹
     procedure Tick(Decoder: TFFmpegDecoder; const VideoFile: string;
       EndAction: TVideoMinerEndAction; IsSeeking: Boolean; SeekMaxMs,
       LoopSegmentStartMs, LoopSegmentEndMs: Integer;
@@ -171,11 +171,11 @@ type
       SeekToMs: TVideoMinerPlaybackPositionProc;
       UpdatePlaybackProgress: TVideoMinerPlaybackPositionProc;
       MaybeAutoCheckFrame: TVideoMinerPlaybackPositionProc);
-    // seek ‚Ì‚½‚ß‚ÉŒ»İ‚ÌÄ¶o—Í‚ğ’â~‚·‚é
+    // seek ã®ãŸã‚ã«ç¾åœ¨ã®å†ç”Ÿå‡ºåŠ›ã‚’åœæ­¢ã™ã‚‹
     procedure StopForSeek;
-    // I’[’â~‚Ì timer ‚Æ•\¦ó‘Ô‚ğ’â~ó‘Ô‚Ö–ß‚·
+    // çµ‚ç«¯åœæ­¢æ™‚ã® timer ã¨è¡¨ç¤ºçŠ¶æ…‹ã‚’åœæ­¢çŠ¶æ…‹ã¸æˆ»ã™
     procedure StopAtEnd;
-    // Ä¶ timerAÄŠJ—\–ñA‰¹ºo—Í‚ğ’â~‚·‚é
+    // å†ç”Ÿ timerã€å†é–‹äºˆç´„ã€éŸ³å£°å‡ºåŠ›ã‚’åœæ­¢ã™ã‚‹
     procedure StopPlayback;
     property PlaybackRate: Double read FPlaybackRate write SetPlaybackRate;
   end;
@@ -186,9 +186,9 @@ uses
   System.Math, System.SysUtils, VideoMinerDebugLog, VideoMinerPlaybackTiming;
 
 const
-  SLOW_PREVIEW_LOG_MS = 120; // preview frame •\¦‚ğ slow log ‚Éo‚·è‡’l ms
-  SLOW_START_LOG_MS   = 150; // Ä¶ŠJnˆ—‚ğ slow log ‚Éo‚·è‡’l ms
-  SLOW_TICK_LOG_MS    = 80;  // Ä¶ tick ‚ğ slow log ‚Éo‚·è‡’l ms
+  SLOW_PREVIEW_LOG_MS = 120; // preview frame è¡¨ç¤ºã‚’ slow log ã«å‡ºã™é–¾å€¤ ms
+  SLOW_START_LOG_MS   = 150; // å†ç”Ÿé–‹å§‹å‡¦ç†ã‚’ slow log ã«å‡ºã™é–¾å€¤ ms
+  SLOW_TICK_LOG_MS    = 80;  // å†ç”Ÿ tick ã‚’ slow log ã«å‡ºã™é–¾å€¤ ms
 
 constructor TVideoMinerPlaybackController.Create(PlaybackTimer,
   RestartTimer: TTimer; AudioPlayback: TVideoMinerAudioPlayback;
@@ -361,12 +361,10 @@ begin
   end;
 
   SeekGuardRemaining := 0;
-  if not FVideoView.ShowFrameAt(Decoder, PositionMs, ErrorMessage) then
-  begin
-    Result := sgrPresentError;
-    Exit;
-  end;
-
+  if DebugLogEnabled then
+    WriteVideoMinerDebugLog(Format(
+      'seek_guard_accept file="%s" target_ms=%d decoded_ms=%d present=False',
+      [ExtractFileName(VideoFile), SeekGuardTargetMs, PositionMs]));
   ConvertFrame := True;
   Result := sgrAccepted;
 end;
