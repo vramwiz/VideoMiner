@@ -84,7 +84,6 @@ uses
   System.IniFiles, System.Math, System.SysUtils, Winapi.ShlObj, Winapi.Windows;
 
 const
-  VIDEOMINER_DATA_DIR_USES_DOCUMENTS = True;      // True ならマイドキュメント配下へ設定を保存する
   SECTION_SETTINGS       = 'VideoMiner';         // アプリ全体設定の INI セクション
   KEY_DECODER_MODE       = 'VideoDecoderMode';   // デコード方式の INI キー
   SECTION_WINDOW         = 'MainForm';           // メインフォーム座標の INI セクション
@@ -120,19 +119,14 @@ var
 function SettingsFileName: string;
 var
   DataPath: array[0..MAX_PATH - 1] of Char;
-  FolderId: Integer;
   SettingsDir: string;
 begin
-  if VIDEOMINER_DATA_DIR_USES_DOCUMENTS then
-    FolderId := CSIDL_PERSONAL
-  else
-    FolderId := CSIDL_APPDATA;
-
-  if Succeeded(SHGetFolderPath(0, FolderId or CSIDL_FLAG_CREATE, 0,
+  if Succeeded(SHGetFolderPath(0, CSIDL_PERSONAL or CSIDL_FLAG_CREATE, 0,
     SHGFP_TYPE_CURRENT, DataPath)) then
     SettingsDir := IncludeTrailingPathDelimiter(DataPath) + 'VideoMiner'
   else
-    SettingsDir := IncludeTrailingPathDelimiter(GetEnvironmentVariable('TEMP')) + 'VideoMiner';
+    SettingsDir := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) +
+      'VideoMiner';
 
   ForceDirectories(SettingsDir);
   Result := IncludeTrailingPathDelimiter(SettingsDir) + 'VideoMiner.ini';

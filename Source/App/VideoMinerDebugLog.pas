@@ -21,7 +21,7 @@ function VideoMinerDebugLogFileName: string;
 implementation
 
 uses
-  Winapi.Windows, System.SysUtils;
+  Winapi.Windows, System.SysUtils, Winapi.ShlObj;
 
 const
   DEBUG_LOG_ENABLED = False; // 毎 tick 系の詳細ログを出すか
@@ -47,12 +47,29 @@ begin
 {$ENDIF}
 end;
 
-// %TEMP% 配下の固定ファイルへ再生調査ログを集約する
+// マイドキュメント配下の VideoMiner フォルダへ再生調査ログを集約する
 function VideoMinerDebugLogFileName: string;
+{$IFDEF DEBUG}
+var
+  DataPath: array[0..MAX_PATH - 1] of Char;
+  LogDir: string;
 begin
-  Result := IncludeTrailingPathDelimiter(GetEnvironmentVariable('TEMP')) +
+  if Succeeded(SHGetFolderPath(0, CSIDL_PERSONAL or CSIDL_FLAG_CREATE, 0,
+    SHGFP_TYPE_CURRENT, DataPath)) then
+    LogDir := IncludeTrailingPathDelimiter(DataPath) + 'VideoMiner'
+  else
+    LogDir := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) +
+      'VideoMiner';
+
+  ForceDirectories(LogDir);
+  Result := IncludeTrailingPathDelimiter(LogDir) +
     'VideoMiner_playback_debug.log';
 end;
+{$ELSE}
+begin
+  Result := '';
+end;
+{$ENDIF}
 
 // Debug ビルドで OutputDebugString とログファイルの両方へ 1 行出力する
 procedure WriteVideoMinerLogLine(const Msg: string);

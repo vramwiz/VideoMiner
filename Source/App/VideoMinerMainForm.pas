@@ -310,7 +310,6 @@ const
   FRAME_GUIDE_EDGE_SIZE         = 12;         // hover 枠を出すフォーム端の幅 px
   FRAME_GUIDE_LINE_SIZE         = 1;          // hover 枠 1 本ぶんの太さ px
   FRAME_GUIDE_TIMER_INTERVAL_MS = 80;         // hover 枠表示状態を確認する間隔 ms
-  SLOW_OPEN_LOG_MS              = 200;       // open 処理を slow log へ出す基準時間 ms
 
 {$R *.dfm}
 
@@ -318,9 +317,17 @@ const
 procedure TVideoMinerMainForm.FormCreate(Sender: TObject);
 var
   AudioSettings: TVideoMinerAudioSettings;
+{$IFDEF DEBUG}
+  StepWatch: TStopwatch;
+  TotalWatch: TStopwatch;
+{$ENDIF}
 begin
+{$IFDEF DEBUG}
+  TotalWatch := TStopwatch.StartNew;
+  StepWatch := TStopwatch.StartNew;
+  WriteVideoMinerSlowLog('form_create begin');
+{$ENDIF}
   OnKeyUp := FormKeyUp;
-  ClearVideoMinerDebugLog('form_create');
   PanelTitleBar.Color := TITLE_BAR_COLOR;
   PanelCloseButton.Color := TITLE_BAR_COLOR;
   PanelMaximizeButton.Color := TITLE_BAR_COLOR;
@@ -328,6 +335,11 @@ begin
   InitializeTitleIcon;
   InitializeFrameGuide;
   FEndAction := LoadEndAction;
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format('form_create base_ui_settings_ms=%.3f total_ms=%.3f',
+    [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds]));
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   FShortcuts := TShortcutAction.Create;
   FOleInitialized := OleInitialize(nil) >= 0;
   FDecoder := TFFmpegDecoder.Create;
@@ -338,6 +350,12 @@ begin
   FChapterManager := TVideoMinerChapterManager.Create;
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
   FVideoView.OnThumbnailBrowserClick := VideoSurfaceMouseDown;
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format('form_create core_objects_ms=%.3f total_ms=%.3f ole=%s',
+    [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds,
+     BoolToStr(FOleInitialized, True)]));
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   FThumbnailBrowser := TVideoMinerThumbnailBrowser.Create(Self);
   FThumbnailBrowser.Parent := FVideoView.SurfaceControl.Parent;
   FThumbnailBrowser.Align := FVideoView.SurfaceControl.Align;
@@ -347,6 +365,11 @@ begin
   FThumbnailBrowser.Anchors := FVideoView.SurfaceControl.Anchors;
   FThumbnailBrowser.OnSelected := ThumbnailBrowserSelected;
   FThumbnailBrowser.SetMediaList(FMediaList);
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format('form_create thumbnail_browser_ms=%.3f total_ms=%.3f',
+    [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds]));
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   FWindowModeController := TVideoMinerWindowModeController.Create(Self,
     PanelTitleBar, LabelMaximizeButton, FVideoView, StopPlayback);
   FCommandController := TVideoMinerCommandController.Create(FAudioPlayback,
@@ -371,6 +394,11 @@ begin
   FCommandController.BindVideoView;
   UpdateMaximizeButton;
   FWindowModeController.ApplySavedWindowBounds;
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format('form_create controllers_shortcuts_bounds_ms=%.3f total_ms=%.3f',
+    [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds]));
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   TResizeEdgeHelper.AttachEdges(PanelTitleBar, VIDEO_MINER_RESIZE_BORDER,
     [rdTop]);
   TResizeEdgeHelper.AttachEdges(FVideoView.SurfaceControl,
@@ -386,6 +414,11 @@ begin
   FVideoView.CheckEnabled := FChapterManager.CheckEnabled;
   RefreshChapterOverlay;
   FPendingOpenFiles := TStringList.Create;
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format('form_create overlays_resize_ms=%.3f total_ms=%.3f',
+    [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds]));
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   FRestartPlaybackTimer := TTimer.Create(Self);
   FRestartPlaybackTimer.Enabled := False;
   FRestartPlaybackTimer.Interval := SEEK_RESTART_DELAY_MS;
@@ -405,6 +438,11 @@ begin
     FRestartPlaybackTimer, FAudioPlayback, FVideoView, FPreviewDecoder);
   UpdateEndActionButton;
   UpdatePlaybackRateButton;
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format('form_create timers_watchers_playback_ms=%.3f total_ms=%.3f',
+    [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds]));
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   FCurrentVideoPositionMs := -1;
   FSeekPositionMs := 0;
   FSeekMaxMs := 0;
@@ -418,6 +456,11 @@ begin
     FVideoView.VolumePercent := 0
   else
     FVideoView.VolumePercent := FAudioPlayback.VolumePercent;
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format('form_create audio_settings_ms=%.3f total_ms=%.3f',
+    [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds]));
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   FDropAgent := TDropAgent.Create;
   if FOleInitialized then
   begin
@@ -426,6 +469,12 @@ begin
     FDropAgent.Attach(Self);
   end;
   SetStatusCaption('No video loaded');
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format('form_create drop_agent_status_ms=%.3f total_ms=%.3f',
+    [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds]));
+  WriteVideoMinerSlowLog(Format('form_create done total_ms=%.3f',
+    [TotalWatch.Elapsed.TotalMilliseconds]));
+{$ENDIF}
 end;
 
 // フォーム破棄時にデコーダを解放する
@@ -660,8 +709,12 @@ begin
   if FThumbnailBrowser = nil then
     Exit;
 
+  WriteVideoMinerSlowLog(Format('thumbnail toggle_begin visible=%s',
+    [BoolToStr(FThumbnailBrowser.Visible, True)]));
   FThumbnailBrowser.SetMediaList(FMediaList);
   FThumbnailBrowser.Toggle;
+  WriteVideoMinerSlowLog(Format('thumbnail toggle_end visible=%s',
+    [BoolToStr(FThumbnailBrowser.Visible, True)]));
 end;
 
 procedure TVideoMinerMainForm.CloseThumbnailBrowser;
@@ -1183,6 +1236,7 @@ function TVideoMinerMainForm.LoadVideoFile(const FileName: string;
 var
   ErrorMessage: string;
   OpenResult: TVideoMinerMediaOpenResult;
+{$IFDEF DEBUG}
   TotalWatch: TStopwatch;
   StepWatch: TStopwatch;
   ValidateMs: Double;
@@ -1190,15 +1244,18 @@ var
   OpenMs: Double;
   FirstFrameMs: Double;
   AutoPlayMs: Double;
+{$ENDIF}
 begin
   Result := False;
+{$IFDEF DEBUG}
   TotalWatch := TStopwatch.StartNew;
 
   StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   if not ValidateVideoMinerMediaFile(FileName, ErrorMessage) then
   begin
-    ValidateMs := StepWatch.Elapsed.TotalMilliseconds;
 {$IFDEF DEBUG}
+    ValidateMs := StepWatch.Elapsed.TotalMilliseconds;
     WriteVideoMinerSlowLog(Format(
       'open_failed step="validate" file="%s" drive="%s" autoplay=%s validate_ms=%.3f total_ms=%.3f err="%s"',
       [ExtractFileName(FileName), ExtractFileDrive(FileName),
@@ -1208,9 +1265,11 @@ begin
     SetStatusCaption(ErrorMessage);
     Exit;
   end;
+{$IFDEF DEBUG}
   ValidateMs := StepWatch.Elapsed.TotalMilliseconds;
 
   StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   if FReloadCurrentFileTimer <> nil then
     FReloadCurrentFileTimer.Enabled := False;
   FPendingReloadHasStamp := False;
@@ -1238,13 +1297,17 @@ begin
   finally
     FUpdatingSeek := False;
   end;
+{$IFDEF DEBUG}
   CleanupMs := StepWatch.Elapsed.TotalMilliseconds;
 
   StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   if not OpenVideoMinerMediaFile(FileName, FDecoder, FPreviewDecoder,
     FMediaList, OpenResult) then
   begin
+{$IFDEF DEBUG}
     OpenMs := StepWatch.Elapsed.TotalMilliseconds;
+{$ENDIF}
     FVideoFile := '';
     ConfigureCurrentFileWatch;
     UpdateCurrentFileStamp;
@@ -1262,7 +1325,9 @@ begin
 {$ENDIF}
     Exit;
   end;
+{$IFDEF DEBUG}
   OpenMs := StepWatch.Elapsed.TotalMilliseconds;
+{$ENDIF}
 
   FVideoInfo := OpenResult.Info;
   FVideoFile := OpenResult.FileName;
@@ -1290,28 +1355,31 @@ begin
     FThumbnailBrowser.SetMediaList(FMediaList);
   UpdateInfoLabel;
   RefreshChapterOverlay;
+{$IFDEF DEBUG}
   StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   if (not RestoreLoopPosition) or (not TryRestoreLoopPlaybackPosition) then
     ShowFrameAtMs(0);
+{$IFDEF DEBUG}
   FirstFrameMs := StepWatch.Elapsed.TotalMilliseconds;
 
   StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   if AutoPlay then
     PlayFromCurrentPosition;
+{$IFDEF DEBUG}
   AutoPlayMs := StepWatch.Elapsed.TotalMilliseconds;
+{$ENDIF}
 
   RememberVideoMinerMediaFile(FileName);
   Result := True;
 {$IFDEF DEBUG}
-  if (TotalWatch.Elapsed.TotalMilliseconds >= SLOW_OPEN_LOG_MS) or
-     (OpenMs >= SLOW_OPEN_LOG_MS) or (FirstFrameMs >= SLOW_OPEN_LOG_MS) or
-     (AutoPlayMs >= SLOW_OPEN_LOG_MS) then
-    WriteVideoMinerSlowLog(Format(
-      'open_done file="%s" drive="%s" autoplay=%s restore_loop=%s validate_ms=%.3f cleanup_ms=%.3f open_ms=%.3f first_frame_ms=%.3f autoplay_ms=%.3f total_ms=%.3f duration_ms=%d fps=%.3f',
-      [ExtractFileName(FVideoFile), ExtractFileDrive(FVideoFile),
-       BoolToStr(AutoPlay, True), BoolToStr(RestoreLoopPosition, True),
-       ValidateMs, CleanupMs, OpenMs, FirstFrameMs, AutoPlayMs,
-       TotalWatch.Elapsed.TotalMilliseconds, FSeekMaxMs, FVideoInfo.Fps]));
+  WriteVideoMinerSlowLog(Format(
+    'open_done file="%s" drive="%s" autoplay=%s restore_loop=%s validate_ms=%.3f cleanup_ms=%.3f open_ms=%.3f first_frame_ms=%.3f autoplay_ms=%.3f total_ms=%.3f duration_ms=%d fps=%.3f',
+    [ExtractFileName(FVideoFile), ExtractFileDrive(FVideoFile),
+     BoolToStr(AutoPlay, True), BoolToStr(RestoreLoopPosition, True),
+     ValidateMs, CleanupMs, OpenMs, FirstFrameMs, AutoPlayMs,
+     TotalWatch.Elapsed.TotalMilliseconds, FSeekMaxMs, FVideoInfo.Fps]));
 {$ENDIF}
 end;
 
@@ -1324,15 +1392,32 @@ function TVideoMinerMainForm.OpenRememberedFile: Boolean;
 var
   ErrorMessage: string;
   FileName: string;
+{$IFDEF DEBUG}
+  ResolveWatch: TStopwatch;
+{$ENDIF}
 begin
   Result := False;
 
+{$IFDEF DEBUG}
+  ResolveWatch := TStopwatch.StartNew;
+{$ENDIF}
   if not ResolveRememberedVideoMinerMediaFile(FileName, ErrorMessage) then
   begin
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format(
+      'startup remembered_resolve_failed resolve_ms=%.3f err="%s"',
+      [ResolveWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+{$ENDIF}
     if ErrorMessage <> '' then
       SetStatusCaption(ErrorMessage);
     Exit;
   end;
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format(
+    'startup remembered_resolve_done file="%s" drive="%s" resolve_ms=%.3f',
+    [ExtractFileName(FileName), ExtractFileDrive(FileName),
+     ResolveWatch.Elapsed.TotalMilliseconds]));
+{$ENDIF}
 
   Result := LoadVideoFile(FileName, False);
 end;
@@ -1931,6 +2016,7 @@ begin
   if (Message.CharCode = VK_TAB) and
      (KeyDataToShiftState(Message.KeyData) = []) then
   begin
+    WriteVideoMinerSlowLog('thumbnail tab_dialog_key');
     if (FWindowModeController <> nil) and
        (not FWindowModeController.BossMode) then
       ToggleThumbnailBrowser;

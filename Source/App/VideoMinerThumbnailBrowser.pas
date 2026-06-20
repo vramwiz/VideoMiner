@@ -8,7 +8,8 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.Classes, System.Math, System.SysUtils, System.Types,
   Vcl.Controls, Vcl.ExtCtrls, Vcl.Graphics, FFmpegDecoder, FFmpegDecoderTypes,
-  VideoMinerMediaList, VideoMinerSettings, VideoMinerThumbnailCache, VideoMinerWindowChrome;
+  VideoMinerDebugLog, VideoMinerMediaList, VideoMinerSettings,
+  VideoMinerThumbnailCache, VideoMinerWindowChrome;
 
 type
   TVideoMinerThumbnailSelectedEvent = procedure(Sender: TObject;
@@ -208,10 +209,19 @@ const
   THUMBNAIL_MAX_WIDTH            = 320;       // 生成サムネイルの最大幅 px
   THUMBNAIL_MAX_HEIGHT           = 180;       // 生成サムネイルの最大高さ px
   THUMBNAIL_CACHE_BURST          = 24;        // 1 tick で読み込むキャッシュ済みサムネイル数
-  PREVIEW_START_DELAY_MS         = 0;         // hover 後にプレビュー開始を待つ時間 ms
+  PREVIEW_START_DELAY_MS         = 350;       // hover 後にプレビュー開始を待つ時間 ms
   PREVIEW_FRAME_INTERVAL_MS      = 40;        // hover 本プレビューの更新間隔 ms
   PREVIEW_START_PERCENT          = 10;        // hover 本プレビューの開始位置 %
-  HOVER_REAL_PREVIEW_ENABLED     = True;      // False にすると入口を塞いでホバープレビューを止める
+  HOVER_REAL_PREVIEW_DEFAULT     = False;     // False にすると入口を塞いでホバープレビューを止める
+
+var
+  HoverRealPreviewEnabled: Boolean = HOVER_REAL_PREVIEW_DEFAULT;
+
+procedure WriteThumbnailLog(const Text: string);
+begin
+  if VideoMinerDebugLogEnabled then
+    WriteVideoMinerSlowLog('thumbnail ' + Text);
+end;
 
 constructor TVideoMinerThumbnailBrowser.Create(AOwner: TComponent);
 begin
@@ -435,7 +445,6 @@ begin
   Decoder := TFFmpegDecoder.Create;
   try
     try
-
       if not Decoder.Open(FileName, Info, ErrorMessage) then
       begin
         FThumbnailStates[Index] := tsFailed;
@@ -481,10 +490,10 @@ begin
       Dest := TBitmap.Create;
       try
         Dest.PixelFormat := pf32bit;
-          Dest.SetSize(ThumbWidth, ThumbHeight);
-          Dest.Canvas.Brush.Color := clBlack;
-          Dest.Canvas.FillRect(Rect(0, 0, ThumbWidth, ThumbHeight));
-          Dest.Canvas.StretchDraw(Rect(0, 0, ThumbWidth, ThumbHeight), Source);
+        Dest.SetSize(ThumbWidth, ThumbHeight);
+        Dest.Canvas.Brush.Color := clBlack;
+        Dest.Canvas.FillRect(Rect(0, 0, ThumbWidth, ThumbHeight));
+        Dest.Canvas.StretchDraw(Rect(0, 0, ThumbWidth, ThumbHeight), Source);
         FThumbnails[Index].Free;
         SaveVideoMinerThumbnailCache(FileName, Dest);
         FThumbnails[Index] := Dest;
@@ -519,7 +528,7 @@ var
   ThumbWidth: Integer;
 begin
   Result := False;
-  if (not HOVER_REAL_PREVIEW_ENABLED) or (Index < 0) or (FileName = '') then
+  if (not HoverRealPreviewEnabled) or (Index < 0) or (FileName = '') then
     Exit;
 
   if (FPreviewDecoder = nil) or (FPreviewFileName <> FileName) then
@@ -670,6 +679,12 @@ end;
 
 procedure TVideoMinerThumbnailBrowser.ResetPreview(Index: Integer);
 begin
+  if not HoverRealPreviewEnabled then
+  begin
+    StopPreview;
+    Exit;
+  end;
+
   if (FPreviewIndex = Index) and
      ((FPreviewBitmap <> nil) or
       ((FPreviewTimer <> nil) and FPreviewTimer.Enabled)) then
@@ -681,16 +696,7 @@ begin
 
   FPreviewIndex := Index;
   FPreviewStep := -1;
-  if PREVIEW_START_DELAY_MS <= 0 then
-  begin
-    PreviewTimer(FPreviewTimer);
-    if (FPreviewIndex = Index) and (FPreviewTimer <> nil) then
-    begin
-      FPreviewTimer.Interval := PREVIEW_FRAME_INTERVAL_MS;
-      FPreviewTimer.Enabled := True;
-    end;
-  end
-  else if FPreviewTimer <> nil then
+  if FPreviewTimer <> nil then
   begin
     FPreviewTimer.Interval := PREVIEW_START_DELAY_MS;
     FPreviewTimer.Enabled := True;
@@ -961,7 +967,6 @@ var
   MainIndex: Integer;
   MiddleIndex: Integer;
   PreviewRect: TRect;
-  RepresentativeFile: string;
   RepresentativeList: TVideoMinerMediaList;
   RepCount: Integer;
   RepIndexes: array[0..FOLDER_HISTORY_THUMB_COUNT - 1] of Integer;
@@ -1056,21 +1061,13 @@ begin
   Canvas.Brush.Color := FOLDER_HISTORY_COLOR;
   Canvas.FillRect(PreviewRect);
 
-  RepresentativeList := nil;
   if IsCurrentFolder then
     RepresentativeList := FMediaList
   else
-  begin
-    RepresentativeFile := TVideoMinerMediaList.FirstMediaFileInFolder(FolderPath);
-    if RepresentativeFile <> '' then
-    begin
-      RepresentativeList := TVideoMinerMediaList.Create;
-      RepresentativeList.BuildForFile(RepresentativeFile);
-    end;
-  end;
+    RepresentativeList := nil;
 
   if RepresentativeList <> nil then
-  try
+  begin
     RepCount := 0;
     MainIndex := StableMiddleIndex;
     MiddleIndex := RepresentativeList.Count div 2;
@@ -1099,10 +1096,9 @@ begin
       DrawFolderHistoryThumbnail(Canvas,
         RepresentativeList.FileAt(RepIndexes[I]), ThumbRect, IsCurrentFolder);
     end;
-  finally
-    if (RepresentativeList <> nil) and (RepresentativeList <> FMediaList) then
-      RepresentativeList.Free;
   end;
+  // 描画中に過去履歴フォルダを走査すると、ネットワーク履歴で UI が固まる。
+  // 過去フォルダの一覧は選択された時点の ShowFolderHistory でだけ読み込む。
 
   FolderName := ExtractFileName(FolderPath);
   if FolderName = '' then
@@ -1400,7 +1396,6 @@ begin
     FFolderHistoryHoverIndex := NewFolderHistoryHoverIndex;
     FZoomButtonHover := NewZoomButtonHover;
     Invalidate;
-    Update;
     ResetPreview(FHoverIndex);
   end
   else if (FHoverIndex >= 0) and (FZoomButtonHover = 0) and
@@ -1455,6 +1450,7 @@ end;
 
 procedure TVideoMinerThumbnailBrowser.Open;
 begin
+  WriteThumbnailLog('open_begin');
   if FMediaList <> nil then
     FCurrentIndex := FMediaList.CurrentIndex
   else
@@ -1467,6 +1463,8 @@ begin
   if (FThumbnailTimer <> nil) and (NextQueuedThumbnailIndex >= 0) then
     FThumbnailTimer.Enabled := True;
   Invalidate;
+  WriteThumbnailLog(Format('open_end count=%d current=%d queued=%d',
+    [Length(FThumbnailStates), FCurrentIndex, NextQueuedThumbnailIndex]));
 end;
 
 procedure TVideoMinerThumbnailBrowser.Paint;
@@ -1474,6 +1472,8 @@ var
   I: Integer;
   TextRect: TRect;
 begin
+  WriteThumbnailLog(Format('paint_begin visible=%s count=%d',
+    [BoolToStr(Visible, True), Length(FThumbnailStates)]));
   Canvas.Brush.Color := BROWSER_BACKGROUND_COLOR;
   Canvas.FillRect(ClientRect);
   DrawFolderHistoryRow(Canvas);
@@ -1500,6 +1500,7 @@ begin
   end;
   DrawFolderHistoryRow(Canvas);
   DrawZoomButtons(Canvas);
+  WriteThumbnailLog('paint_end');
 end;
 
 procedure TVideoMinerThumbnailBrowser.Resize;
@@ -1685,7 +1686,14 @@ procedure TVideoMinerThumbnailBrowser.SetMediaList(
   MediaList: TVideoMinerMediaList);
 var
   CurrentFolder: string;
+  MediaCount: Integer;
 begin
+  if MediaList <> nil then
+    MediaCount := MediaList.Count
+  else
+    MediaCount := 0;
+  WriteThumbnailLog(Format('set_media_begin media_count=%d visible=%s',
+    [MediaCount, BoolToStr(Visible, True)]));
   StopPreview;
   FreeAndNil(FOwnedMediaList);
   FMediaList := MediaList;
@@ -1717,6 +1725,8 @@ begin
   ClampScrollOffset;
   LayoutTiles;
   Invalidate;
+  WriteThumbnailLog(Format('set_media_end count=%d current=%d selected=%d',
+    [Length(FThumbnailStates), FCurrentIndex, FSelectedIndex]));
 end;
 
 procedure TVideoMinerThumbnailBrowser.ShowFolderHistory(Index: Integer;
@@ -1770,6 +1780,8 @@ begin
   ClampScrollOffset;
   LayoutTiles;
   Invalidate;
+  WriteThumbnailLog(Format('set_media_end count=%d current=%d selected=%d',
+    [Length(FThumbnailStates), FCurrentIndex, FSelectedIndex]));
 end;
 
 procedure TVideoMinerThumbnailBrowser.Toggle;

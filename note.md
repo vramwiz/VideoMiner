@@ -123,7 +123,7 @@ VideoMiner は、素材確認・動画確認・編集チェックを軽く行え
   - どのキーをどの操作へ結びつけるかを持ち、`VideoMinerMainForm` からキー割り当ての詳細を分離する。
 - `VideoMinerDebugLog.pas`
   - Debug ビルド専用の調査ログ。
-  - 再生同期、描画負荷、音声キューなどの調査用ログを `%TEMP%\VideoMiner_playback_debug.log` へ出す。
+  - 再生同期、描画負荷、音声キューなどの調査用ログを `マイドキュメント\VideoMiner\VideoMiner_playback_debug.log` へ出す。
 - `VideoMinerBossGesture.pas`
   - ボスが来たモードへ入るためのマウスジェスチャー検出。
   - 方向反転型と A-B-A 往復型の検出を持ち、発動判定だけを担当する。
@@ -336,7 +336,7 @@ function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
     - 一覧表示中はフォームの `DoMouseWheel` からサムネイルブラウザへ優先的にホイール入力を渡し、縦スクロールできるようにした。
     - サムネイル生成は `DecodeFrameToBitmap` ではなく通常表示と同じ `DecodeFrameToBgrx32` 経路へ寄せ、swscale 例外はタイル単位の `Failed` に閉じ込めるようにした。
   - 2026-06-17 の次段階で、サムネイルのディスクキャッシュを追加した。
-    - `%APPDATA%\VideoMiner\ThumbnailCache` に縮小済み BMP を保存する。
+    - `マイドキュメント\VideoMiner\ThumbnailCache` に縮小済み PNG を保存する。
     - キャッシュキーは元ファイルの展開パス、更新日時、ファイルサイズから作る。
     - 起動後に同じファイルを表示する場合、元ファイルが変わっていなければ再デコードせずキャッシュ画像を読む。
     - キャッシュヒット時は 1 tick で最大 24 枚までまとめて読み込み、キャッシュミス時の実デコードは従来通り 1 枚ずつ行う。
@@ -409,7 +409,7 @@ function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
 - 2026-06-12 に `avfilter-11.dll` を `Win64\Debug` / `Win64\Release` へ追加し、FFmpeg filter の `atempo` を優先して使う `FFmpegAudioTempo.pas` を追加した。
 - `TVideoMinerAudioPlayback.TransformPcmForPlaybackRate` は、まず `atempo` 変換を試し、失敗した場合だけ簡易 time-stretch へフォールバックする。
 - `TVideoMinerAudioPlayback` は入力側のデコード済みサンプル数と waveOut へ積んだ出力サンプル数を分けて扱う。
-- `avfilter-11.dll` は `LoadLibrary` 確認済み。実動画で音質や同期を確認し、問題があれば `%TEMP%\VideoMiner_playback_debug.log` の `audio_tempo_fallback` と `audio_pump` を見る。
+- `avfilter-11.dll` は `LoadLibrary` 確認済み。実動画で音質や同期を確認し、問題があれば `マイドキュメント\VideoMiner\VideoMiner_playback_debug.log` の `audio_tempo_fallback` と `audio_pump` を見る。
 - `TempoSmokeTest` で 48kHz/stereo/s16 の 1 秒 PCM を `atempo=1.5` に通し、`input=48000` / `output=32080` の出力を確認済み。
 
 ## ビルド
@@ -471,7 +471,7 @@ powershell -ExecutionPolicy Bypass -File tools\InstallGitHooks.ps1
 - バージョンリソースは `Version.inc` と `Version.rc` を git 管理し、`Version.res` は生成物として除外する。
   - `VideoMiner.dpr` は `{$R Version.res}` を参照する。
   - `VideoMiner.dproj` の `BuildVideoMinerVersionResource` ターゲットが `Version.rc`/`Version.inc` から `Version.res` を生成する。
-- Debug ビルド時のみ、再生同期調査ログを `%TEMP%\VideoMiner_playback_debug.log` に出力する。
+- Debug ビルド時のみ、再生同期調査ログを `マイドキュメント\VideoMiner\VideoMiner_playback_debug.log` に出力する。
   - 実装は `Source\App\VideoMinerDebugLog.pas`。
   - `VideoMiner.dproj` の Debug 構成は `DEBUG` define を持つため、ログ出力は `{$IFDEF DEBUG}` で Release ビルドには入れない。
   - 主な行は `playback_tick`、`paint`、`start_playback`、`restart_playback`。
@@ -841,7 +841,7 @@ powershell -ExecutionPolicy Bypass -File tools\InstallGitHooks.ps1
 ### 次に見る場合の確認点
 
 - 現状は安定しているため、同期処理を大きく変える必要はない。
-- もし再び音飛びや同期ズレを見る場合は、まず `%TEMP%\VideoMiner_playback_debug.log` の `audio_pump`、`playback_tick`、`seek`、`audio_start` を確認する。
+- もし再び音飛びや同期ズレを見る場合は、まず `マイドキュメント\VideoMiner\VideoMiner_playback_debug.log` の `audio_pump`、`playback_tick`、`seek`、`audio_start` を確認する。
 - `audio_pump` では `queued_before_ms`、`queued_after_ms`、`raw_queued_before_samples` が負になっていないかを見る。
 - `playback_tick` では `lag_ms` が継続的に増え続けていないか、`drop_count` と `seek_to_audio` が暴れていないかを見る。
 - `seek` では再生中シーク時に `was_playing=True` になり、古い再開予約が残っていないかを見る。
@@ -971,7 +971,7 @@ VideoMiner のチェック機能は、以下を主目的にする。
   - 今後見直す場合は、画面サイズごとの情報密度、実作業中らしさ、解除ボタンの目立ちすぎ防止、文字や行の自然さを調整する。
 - 映像再生が少しカクつくことがある。
   - 現状は同期ズレではなく、描画/デコード/タイマー周りの負荷や間隔が原因の可能性がある。
-  - 調査する場合は `%TEMP%\VideoMiner_playback_debug.log` の `playback_tick`、`paint`、`decode_ms`、`paint_ms`、`timer_interval` を確認する。
+  - 調査する場合は `マイドキュメント\VideoMiner\VideoMiner_playback_debug.log` の `playback_tick`、`paint`、`decode_ms`、`paint_ms`、`timer_interval` を確認する。
   - まずはログ量を絞り、描画負荷とフレーム取得間隔のどちらが支配的かを見る。
 - アプリ本体で使わない既存補助ユニットの必要性を整理し、不要なら外す。
 
@@ -1119,7 +1119,7 @@ VideoMiner のチェック機能は、以下を主目的にする。
 - サムネイルクリックで対象動画へ切り替え、現在動画をクリックした場合は一覧だけ閉じる。
 - 表示中タイルから順にサムネイルを遅延生成し、生成中は `Loading`、失敗時は `Failed` を表示する。
 - サムネイル生成は `DecodeFrameToBgrx32` 経路を使い、壊れた動画やデコード失敗はタイル単位で失敗表示に閉じ込める。
-- `%APPDATA%\VideoMiner\ThumbnailCache` にサムネイル BMP をディスクキャッシュし、起動後も再利用する。
+- `マイドキュメント\VideoMiner\ThumbnailCache` にサムネイル PNG をディスクキャッシュし、起動後も再利用する。
 - キャッシュヒット時は 1 tick 最大 24 枚までまとめて読み込み、一覧表示の体感速度を改善済み。
 - サムネイル一覧表示中もフォーム端でリサイズできるよう、左端/右端/下端のヒットテストを親フォームへ通す。
 - フォーム端のリサイズ判定幅は 12px に拡大済み。
@@ -1527,7 +1527,7 @@ VideoMiner のチェック機能は、以下を主目的にする。
 - `Debug Win64` / `Release Win64` ビルド成功。警告 0 / エラー 0。
 
 ## 2026-06-19 ループ滑らかさ低下のログ確認
-- `VIDEOMINER_DEBUG_LOG=1` / `VIDEOMINER_SLOW_LOG=1` を設定した Debug 実行で、`%TEMP%\VideoMiner_playback_debug.log` に詳細ログを出せるようにした。
+- `VIDEOMINER_DEBUG_LOG=1` / `VIDEOMINER_SLOW_LOG=1` を設定した Debug 実行で、`マイドキュメント\VideoMiner\VideoMiner_playback_debug.log` に詳細ログを出せるようにした。
 - `finish_loop_restart` / `show_playback_frame_near` / `seek_guard_accept` を追加し、ループ戻り時に表示した戻りフレーム、再生用デコーダの seek 結果、seek guard が受理した decoded_ms を確認できるようにした。
 - 実行ログでは、ループ戻り直後のフレーム位置は `1881 -> 1914 -> 1958 ...` のように戻り先以降へ進んでおり、無関係な前後フレーム混入ではなく、メインデコーダを戻す同期 seek が長いことが主因だった。
 - 例として `start_playback_done target_ms=1914 video_seek_ms=974.628 total_ms=976.871` が出ており、表示済みの戻りフレームから次の再生フレームへ進むまで約 1 秒止まっている。
@@ -1808,7 +1808,7 @@ seek 自体は速くても、そこから目的フレームまで再デコード
   - `preview_ms` と `restart_ms` がそれぞれ約 13ms で、プレビュー用デコーダと再生用デコーダの二重 seek になっていることを確認した。
   - ローカル全体ループでは大きな詰まりではないが、チャプター戻りやネットワーク上の動画ではこの二重 seek が効きやすい可能性がある。
 - ネットワーク上の動画を自動起動してログ取得しようとしたところ、環境側で大量のエラーダイアログが出たため、以後の自動 GUI 実行は控える。
-- 次に確認する場合は、ユーザー操作で対象動画を開いてループを数回発生させ、`%TEMP%\VideoMiner_playback_debug.log` の `loop_restart_request` / `loop_tick_seek` / `start_playback_done` を見る。
+- 次に確認する場合は、ユーザー操作で対象動画を開いてループを数回発生させ、`マイドキュメント\VideoMiner\VideoMiner_playback_debug.log` の `loop_restart_request` / `loop_tick_seek` / `start_playback_done` を見る。
 
 ## 2026-06-19 Release から調査ログ文字列を除去
 - Smart App Control 対策の一環として、Release 版 `VideoMiner.exe` に調査ログ用の文字列が残らないよう、ログ呼び出しを `{$IFDEF DEBUG}` 側へ寄せた。
@@ -1829,7 +1829,7 @@ seek 自体は速くても、そこから目的フレームまで再デコード
 - ただし Smart App Control の主因は未署名・低 reputation の可能性が高く、ログ文字列除去は「疑われにくくする」ための整理に留まる。
 
 ## 2026-06-19 サムネイルのディスクキャッシュ
-- Smart App Control 対策として、サムネイルの BMP ディスクキャッシュは無効に戻した。
+- Smart App Control 対策として、サムネイルの PNG ディスクキャッシュは無効に戻した。
 - 現在の設定:
   - `Source\App\VideoMinerThumbnailCache.pas`
   - `{.$DEFINE THUMBNAIL_DISK_CACHE_ENABLED}`
@@ -1846,3 +1846,205 @@ seek 自体は速くても、そこから目的フレームまで再デコード
 - `False` に戻すと、従来どおり `%APPDATA%\VideoMiner\VideoMiner.ini` に保存する。
 - この変更で Smart App Control 回避に効果があったため、`%APPDATA%` 書き込みを避ける方針にする。
 - サムネイルディスクキャッシュの再有効化は悪化したため、設定ファイルのみ Documents 保存を維持する。
+
+## 2026-06-20 Smart App Control 対策の現状
+- 効果があった変更:
+  - 設定ファイルの保存先を `%APPDATA%\VideoMiner\VideoMiner.ini` から `マイドキュメント\VideoMiner\VideoMiner.ini` へ変更。
+  - `Source\App\VideoMinerSettings.pas`
+  - `VIDEOMINER_DATA_DIR_USES_DOCUMENTS = True`
+- 悪化した変更:
+  - サムネイルの PNG ディスクキャッシュを再有効化し、`マイドキュメント\VideoMiner\ThumbnailCache` に保存する形。
+  - この構成では Smart App Control の状況がさらに悪化したため、キャッシュは再び無効にした。
+- 現在の方針:
+  - 設定ファイルだけ Documents 保存を維持する。
+  - サムネイルディスクキャッシュは無効にする。
+  - キャッシュ無効時は `System.IOUtils` / `Winapi.ShlObj` / `CSIDL_APPDATA` を含むキャッシュ実装をコンパイル対象から外す。
+- 注意:
+  - ソースを戻しても、既存の `Win64\Release\VideoMiner.exe` や `Setup\Output` 配下の生成物が古い状態のままだと、Smart App Control の確認結果も古い状態を見てしまう。
+  - 生成済み Release exe を確認した時点では、`.png` / `VideoMiner.ini` / `VideoMiner_playback_debug.log` / `loop_tick_seek` はバイナリ内に見つからなかった。
+  - `ThumbnailCache` 文字列は `VideoMinerThumbnailCache` という unit 名の一部として残ることがあるため、フォルダ名として残っているかは周辺文字列で確認する。
+- 次に試すなら:
+  - 最新ソースで Release を再ビルドし、その exe で再確認する。
+  - それでも悪化する場合は、`VideoMinerSettings.pas` の Documents 保存も一度戻し、ログ文字列除去だけの状態へ戻して比較する。
+
+## 2026-06-20 起動時間調査ログ追加
+- 起動が遅くなった気がするため、Debug 版の slow log に起動段階ごとの計測を追加した。
+- ログ出力先は `マイドキュメント\VideoMiner\VideoMiner_playback_debug.log`。
+- 追加した主なログ:
+  - `startup begin`: mutex 作成後、アプリ初期化前。
+  - `startup application_initialize_ms`: `Application.Initialize` の時間。
+  - `form_create ...`: `FormCreate` 内の UI/設定/各 controller/サムネイルブラウザ/DropAgent 生成時間。
+  - `startup remembered_resolve_done`: 前回ファイルの INI 読み込み、フォルダ/ファイル存在確認時間。
+  - `decoder_open_detail`: FFmpeg open 内の `EnsureLoaded`、`avformat_open_input`、`avformat_find_stream_info`、codec open、audio open の時間。
+  - `media_open_done`: メインデコーダ、プレビューデコーダ、同一フォルダ一覧作成の時間。
+  - `open_done`: 初期フレーム表示まで含めた `LoadVideoFile` 全体時間。Debug では速い場合も常に出す。
+  - `startup initial_open_ms`: 起動直後の引数ファイル/前回ファイル open 全体時間。
+- 実測対象:
+  - 前回ファイル `D:\VoiceroidProj\main_14\59\06\grok-video-a2e52439-17cb-40fc-a04b-cc2cda06007d (1).mp4`
+  - 同一フォルダ内動画数 15。
+- 1 回目の実測では `startup initial_open_ms=425ms`、`startup total_ms=525ms` 程度だった。
+  - `media_open_done total_ms=378ms`。
+  - 内訳では `decoder_open_ms=362ms` が大半。
+  - この時点では FFmpeg 内訳ログ追加前だったため、さらに細かい原因は未取得。
+- その後の再実行では `startup initial_open_ms=45ms`、`startup total_ms=89ms` 程度まで下がった。
+  - `media_open_done total_ms=26ms`。
+  - メインデコーダの `decoder_open_detail total_ms=18ms`。
+  - その内訳は `api_load_ms=10ms`、`stream_info_ms=7ms` が中心。
+  - プレビューデコーダは `total_ms=6ms` 程度。
+  - `first_frame_ms=13ms`。
+- 現時点の見立て:
+  - フォーム生成や INI 読み込みは主因ではない。
+  - 遅い場合は動画 open、特に最初のメインデコーダ open に寄っている。
+  - 2 回目以降がかなり速いので、OS ファイルキャッシュ、FFmpeg DLL 初回ロード、セキュリティスキャン、Smart App Control/Defender の初回確認が絡んでいる可能性が高い。
+- 次に見るなら:
+  - PC 起動直後または Release 再ビルド直後の初回起動で `decoder_open_detail` を取る。
+  - Release 版で体感だけ遅い場合は、Debug の数値と Release の体感差から Smart App Control/Defender 側の影響を疑う。
+  - もし `media_list_ms` が大きいログが出る場合は、フォルダ内ファイル数や作成日時取得を疑う。
+
+## 2026-06-20 ネットワーク越し起動/オープン調査ログ追加
+- ネットワーク越しの動画が少し重く感じるため、Debug 版の open ログをネットワーク調査向けに追加した。
+- `media_open_done` / `media_open_failed` に `path_kind` を追加した。
+  - `remote`: ネットワークドライブまたは UNC として Windows が返したパス。
+  - `fixed`: ローカル固定ドライブ。
+  - ほかに `removable` / `cdrom` / `unknown` なども出る。
+- `TVideoMinerMediaList.BuildForFile` に `media_list_build` ログを追加した。
+  - `collect_ms`: フォルダ内の動画ファイル収集時間。ネットワーク越しで重くなりやすい。
+  - `sort_ms`: 作成日時順ソート時間。
+  - `copy_ms`: 内部配列へのコピーと現在位置決定時間。
+  - `count`: 対象動画数。
+- ネットワーク越しで重い場合に見る順番:
+  - `startup remembered_resolve_done`: 前回フォルダ/ファイル存在確認が遅いか。
+  - `media_open_done path_kind=remote`: 全体としてネットワーク扱いか。
+  - `decoder_open_detail`: `format_open_ms` / `stream_info_ms` が大きい場合は動画本体の読み取りや FFmpeg のストリーム解析が重い。
+  - `media_list_build collect_ms`: 大きい場合は同一フォルダの走査や作成日時取得が重い。
+  - `open_done first_frame_ms`: 初期フレーム表示だけが遅いか。
+- 注意:
+  - ネットワーク動画の自動 GUI 実行は過去に大量ダイアログが出たため控える。
+  - 確認時はユーザー操作で Debug 版を起動し、対象のネットワーク動画を開いて `マイドキュメント\VideoMiner\VideoMiner_playback_debug.log` を見る。
+
+## 2026-06-20 Debug ログ保存先を Documents へ変更
+- Smart App Control 対策と一時フォルダ痕跡の削減のため、Debug 調査ログの保存先を一時フォルダ配下から `マイドキュメント\VideoMiner` 配下へ変更した。
+- 現在の Debug ログ:
+  - `マイドキュメント\VideoMiner\VideoMiner_playback_debug.log`
+  - 実装は `Source\App\VideoMinerDebugLog.pas`。
+- `VideoMinerSettings.pas` の設定フォルダ取得失敗時フォールバックも、一時フォルダではなく exe 配下の `VideoMiner` フォルダへ変更した。
+  - 通常は従来どおり `CSIDL_PERSONAL` の `マイドキュメント\VideoMiner` を使う。
+  - `SHGetFolderPath` が失敗した場合だけ exe 配下へ落とす。
+- 無効中の `VideoMinerThumbnailCache.pas` についても、将来ディスクキャッシュを再有効化しても一時フォルダや AppData へ戻らないよう、保存先を `CSIDL_PERSONAL` ベースへ変更した。
+- ソースと note から一時フォルダ環境変数への参照が残らないことを確認する。
+
+## 2026-06-20 サムネイルキャッシュ実ファイルを Documents へ移動
+- 過去に作成されたサムネイルキャッシュが旧保存先に残っていたため、実ファイルを `マイドキュメント\VideoMiner\ThumbnailCache` へ移動した。
+  - 移動件数: 182 件。
+  - 移動後サイズ: 37,077,908 bytes。
+- 旧 `AppData\Roaming\VideoMiner\ThumbnailCache` は削除済み。
+- 旧設定ファイルは現在の実行コードから参照されないが、念のため `マイドキュメント\VideoMiner\VideoMiner_legacy_settings.ini` へ退避した。
+- `VideoMinerSettings.pas` は保存先切替フラグを廃止し、設定保存先を `CSIDL_PERSONAL` の `マイドキュメント\VideoMiner` 固定にした。
+- ソース側に `CSIDL_APPDATA` / `%APPDATA%` / 一時フォルダ参照が残っていないことを確認する。
+
+## 2026-06-20 サムネイルキャッシュ形式を PNG へ変更
+- `VideoMinerThumbnailCache.pas` のディスクキャッシュ形式を BMP から PNG へ変更した。
+  - キャッシュファイル名の拡張子は `.png`。
+  - 保存は `TPngImage.Assign(Bitmap)` から `SaveToFile`。
+  - 読み込みは `TPngImage.LoadFromFile` から `Bitmap.Assign`。
+- 既存の `マイドキュメント\VideoMiner\ThumbnailCache` 配下の `.bmp` 182 件を `.png` へ変換し、変換成功後に元 BMP を削除した。
+  - 変換後 PNG: 182 件。
+  - 変換後サイズ: 21,400,920 bytes。
+  - 残存 BMP: 0 件。
+
+## 2026-06-20 サムネイル生成をバックグラウンド化
+- サムネイル一覧の生成を、UI タイマー内の同期生成からバックグラウンドワーカー方式へ変更した。
+- `TVideoMinerThumbnailBrowser` はサムネイル一覧を開いた時点で、現在フォルダ内のサムネイルを全件キューへ積む。
+  - 起動直後や非表示状態の `SetMediaList` では全件キューを開始しない。
+  - 動画再生中にサムネイル一覧を開いている間は、1 本のワーカーで 1 枚ずつ生成するため、再生タイマー側を大きく止めにくい。
+- ワーカーは同時に 1 本だけ動かし、1 枚完了したら次の予約を処理する。
+  - 古い一覧に対する結果は index と file name が現在の状態と一致する場合だけ反映する。
+  - 一覧差し替えや終了時は実行中ワーカーを停止してからサムネイル配列を破棄する。
+- `Loading` 表示は `tsQueued` と `tsLoading` の両方で使う。
+
+## 2026-06-20 サムネイル表示時フリーズ対策
+- サムネイル一覧を表示した時にフリーズするケースがあったため、履歴行の描画処理を見直した。
+- 原因候補:
+  - `DrawFolderHistoryTile` が描画中に過去履歴フォルダを `FirstMediaFileInFolder` / `BuildForFile` で同期走査していた。
+  - 履歴にネットワークフォルダや重いフォルダが混ざると、`Paint` 中に UI スレッドがフォルダ走査で止まる。
+- 対策:
+  - 履歴行の描画中は、現在表示中フォルダ以外を走査しない。
+  - 過去履歴フォルダの一覧読み込みは、履歴タイルを選択して `ShowFolderHistory` へ入った時だけ行う。
+- Debug 版をローカル動画で短時間起動し、`Tab` でサムネイル一覧を開いた後もプロセスが応答状態のままであることを確認した。
+- 追加調査で、バックグラウンドワーカー内から `TBitmap` / `Canvas.StretchDraw` / PNG キャッシュ処理を触っていた点も危険と判断した。
+  - VCL/GDI オブジェクトはスレッド安全ではないため、ワーカー側では FFmpeg のデコードと `TBytes` の BGRX32 生バッファ作成だけを行う。
+  - `TBitmap` 作成、縮小描画、PNG キャッシュ保存、画面反映は UI スレッド側の `ApplyThumbnailWorkerResult` で行う。
+  - 生バッファから `TBitmap` へ戻す処理は、連続メモリ前提の一括コピーではなく scanline ごとのコピーにした。
+- 引数なし起動で最後のフォルダを開き、その後 Tab でサムネイル表示する経路を再調査した。
+  - 起動時の非表示 `SetMediaList` では worker を開始しないように変更した。
+  - Tab / toggle 経路に `thumbnail tab_dialog_key` / `thumbnail toggle_begin` / `thumbnail toggle_end` ログを追加した。
+  - worker 側または UI 反映側で例外が起きても、エラーダイアログを連発せず対象サムネイルを `Failed` 扱いにして `worker_apply_exception` ログへ落とすようにした。
+- 追加対策:
+  - `QueueThumbnail` / `QueueAllThumbnails` から直接 worker を開始せず、タイマー経由で開始するようにした。
+    - `Open` / `Paint` / `MouseMove` の処理中に FFmpeg worker 起動まで進まないようにするため。
+  - worker から `TThread.Synchronize` で UI スレッドへ戻す処理を廃止した。
+    - 結果反映は `OnTerminate` 側で行い、worker が UI スレッド待ちで詰まる経路を避ける。
+  - hover 実動画プレビューを停止した。
+    - `MouseMove` から `Update` で即時再描画し、その後 UI スレッドで `GeneratePreviewFrame` が走る経路が残っていた。
+    - サムネイル表示直後にカーソル位置の hover が入ると、サムネイル生成とは別に同期 FFmpeg デコードで固まる可能性が高い。
+    - `HOVER_REAL_PREVIEW_DEFAULT = False` とし、`ResetPreview` の入口で停止する。
+
+## 2026-06-20 サムネイルバックグラウンド生成を撤回
+- サムネイル表示時のフリーズが解消しなかったため、バックグラウンド worker 方式を撤回した。
+- `TVideoMinerThumbnailBrowser` から以下を削除した。
+  - `TVideoMinerThumbnailWorker`
+  - `FThumbnailWorker`
+  - `QueueAllThumbnails`
+  - worker の `OnTerminate` 反映処理
+  - `WaitForSingleObject` / `CheckSynchronize` による worker 停止待ち
+  - `tsLoading`
+- サムネイル生成は元の方式へ戻し、表示されたタイルだけを `QueueThumbnail` で予約し、`ThumbnailTimer` から `GenerateThumbnail` を 1 枚ずつ同期生成する。
+- 履歴行の描画中に過去フォルダを同期走査しない対策と、hover 実動画プレビュー停止は残した。
+  - この 2 点はバックグラウンド worker とは別のフリーズ要因対策のため。
+
+## 2026-06-20 サムネイルキャッシュ再有効化と再表示時の生成停止修正
+- サムネイルキャッシュが効いていなかった直接原因:
+  - `VideoMinerThumbnailCache.pas` の `THUMBNAIL_DISK_CACHE_ENABLED` がコメントアウトされたままで、`LoadVideoMinerThumbnailCache` / `SaveVideoMinerThumbnailCache` が実質何もしない状態だった。
+- 対策:
+  - `{$DEFINE THUMBNAIL_DISK_CACHE_ENABLED}` を有効化した。
+  - キャッシュ形式は PNG のまま。
+  - 保存先は `マイドキュメント\VideoMiner\ThumbnailCache`。
+- Tab / Esc でサムネイル表示と再生を切り替えると生成が進まなくなる原因:
+  - `Close` で `FThumbnailTimer.Enabled := False` になる。
+  - その後 `Open` しても、既に `tsQueued` になっているタイルは `DrawThumbnail` で再度 `QueueThumbnail` されないため、タイマーが再起動しなかった。
+- 対策:
+  - `Open` 時に `NextQueuedThumbnailIndex >= 0` なら `FThumbnailTimer.Enabled := True` に戻す。
+- 確認:
+  - 2026-06-20 時点で `C:\Users\zan12\Documents\VideoMiner\ThumbnailCache` は存在するが PNG は 0 件。
+  - この修正後にサムネイル生成を行うと、同フォルダへ PNG キャッシュが作成される想定。
+
+## 2026-06-20 リリース前の保存先確認
+- リリース時のデータ/作業ファイル保存先を確認した。
+- 設定 INI:
+  - 実装: `Source\App\VideoMinerSettings.pas`
+  - `SettingsFileName` は `SHGetFolderPath(... CSIDL_PERSONAL ...)` を使い、通常は `マイドキュメント\VideoMiner\VideoMiner.ini` を返す。
+  - `CSIDL_PERSONAL` 取得に失敗した場合だけ exe 配下の `VideoMiner\VideoMiner.ini` へフォールバックする。
+- Debug 調査ログ:
+  - 実装: `Source\App\VideoMinerDebugLog.pas`
+  - Debug ビルド時のみ `マイドキュメント\VideoMiner\VideoMiner_playback_debug.log` を使う。
+  - Release ビルドでは `VideoMinerDebugLogEnabled` / `VideoMinerSlowLogEnabled` が False になり、ログファイルは作られない。
+- サムネイルキャッシュ:
+  - 実装: `Source\App\VideoMinerThumbnailCache.pas`
+  - `THUMBNAIL_DISK_CACHE_ENABLED` を有効化済み。
+  - `CacheRootDir` は `SHGetFolderPath(... CSIDL_PERSONAL ...)` を使い、通常は `マイドキュメント\VideoMiner\ThumbnailCache` を返す。
+  - キャッシュ形式は PNG。
+  - 2026-06-20 の確認時点で `C:\Users\zan12\Documents\VideoMiner\ThumbnailCache` に PNG 15 件が生成済み。
+- AppData/temp 参照確認:
+  - `CSIDL_APPDATA`
+  - `CSIDL_LOCAL_APPDATA`
+  - `GetTempPath`
+  - `GetTempFileName`
+  - `TPath.GetTemp`
+  - `%TEMP%` / `%TMP%`
+  - `APPDATA` / `LOCALAPPDATA` / `Roaming`
+  - 上記キーワードで `Source` と `VideoMiner.dpr` を検索し、保存先としての参照が残っていないことを確認した。
+- 現在の方針:
+  - サムネイルのバックグラウンド worker 方式は撤回済み。
+  - サムネイルは表示されたタイルだけを `QueueThumbnail` し、`ThumbnailTimer` から 1 枚ずつ生成する。
+  - Tab/Esc で閉じて再表示した場合、未処理キューがあれば `Open` で `FThumbnailTimer` を再開する。
+  - hover 実動画プレビューは停止したままにする。

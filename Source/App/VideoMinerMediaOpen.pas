@@ -7,8 +7,12 @@
 interface
 
 uses
-  System.SysUtils, FFmpegDecoder, FFmpegDecoderTypes, VideoMinerMediaList,
-  VideoMinerSettings;
+  System.Diagnostics, System.SysUtils, FFmpegDecoder, FFmpegDecoderTypes,
+  VideoMinerDebugLog, VideoMinerMediaList, VideoMinerSettings
+{$IFDEF DEBUG}
+  , Winapi.Windows
+{$ENDIF}
+  ;
 
 type
   TVideoMinerMediaOpenResult = record
@@ -35,6 +39,36 @@ function OpenVideoMinerMediaFile(const FileName: string; Decoder,
   out OpenResult: TVideoMinerMediaOpenResult): Boolean;
 
 implementation
+
+{$IFDEF DEBUG}
+function VideoMinerPathKindText(const FileName: string): string;
+var
+  DriveRoot: string;
+begin
+  if FileName = '' then
+    Exit('empty');
+
+  DriveRoot := IncludeTrailingPathDelimiter(ExtractFileDrive(FileName));
+  case GetDriveType(PChar(DriveRoot)) of
+    DRIVE_REMOTE:
+      Result := 'remote';
+    DRIVE_FIXED:
+      Result := 'fixed';
+    DRIVE_REMOVABLE:
+      Result := 'removable';
+    DRIVE_CDROM:
+      Result := 'cdrom';
+    DRIVE_RAMDISK:
+      Result := 'ramdisk';
+    DRIVE_NO_ROOT_DIR:
+      Result := 'no_root';
+    DRIVE_UNKNOWN:
+      Result := 'unknown';
+  else
+    Result := 'other';
+  end;
+end;
+{$ENDIF}
 
 function ValidateVideoMinerMediaFile(const FileName: string;
   out ErrorMessage: string): Boolean;
@@ -141,37 +175,109 @@ function OpenVideoMinerMediaFile(const FileName: string; Decoder,
   out OpenResult: TVideoMinerMediaOpenResult): Boolean;
 var
   PreviewInfo: TVideoInfo;
+{$IFDEF DEBUG}
+  MediaCount: Integer;
+  StepWatch: TStopwatch;
+  TotalWatch: TStopwatch;
+  ValidateMs: Double;
+  DecoderOpenMs: Double;
+  PreviewOpenMs: Double;
+  MediaListMs: Double;
+{$ENDIF}
 begin
   Result := False;
   OpenResult.ErrorMessage := '';
   OpenResult.FileName := '';
   FillChar(OpenResult.Info, SizeOf(OpenResult.Info), 0);
 
+{$IFDEF DEBUG}
+  TotalWatch := TStopwatch.StartNew;
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   if not ValidateVideoMinerMediaFile(FileName, OpenResult.ErrorMessage) then
+  begin
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format(
+      'media_open_failed step="validate" file="%s" drive="%s" path_kind=%s validate_ms=%.3f total_ms=%.3f err="%s"',
+      [ExtractFileName(FileName), ExtractFileDrive(FileName),
+       VideoMinerPathKindText(FileName), StepWatch.Elapsed.TotalMilliseconds,
+       TotalWatch.Elapsed.TotalMilliseconds, OpenResult.ErrorMessage]));
+{$ENDIF}
     Exit;
+  end;
+{$IFDEF DEBUG}
+  ValidateMs := StepWatch.Elapsed.TotalMilliseconds;
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
 
   if not Decoder.Open(FileName, OpenResult.Info, OpenResult.ErrorMessage) then
   begin
+{$IFDEF DEBUG}
+    DecoderOpenMs := StepWatch.Elapsed.TotalMilliseconds;
+{$ENDIF}
     OpenResult.ErrorMessage := 'Failed to open video: ' + OpenResult.ErrorMessage;
     if MediaList <> nil then
       MediaList.Clear;
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format(
+      'media_open_failed step="decoder_open" file="%s" drive="%s" path_kind=%s validate_ms=%.3f decoder_open_ms=%.3f total_ms=%.3f err="%s"',
+      [ExtractFileName(FileName), ExtractFileDrive(FileName),
+       VideoMinerPathKindText(FileName), ValidateMs, DecoderOpenMs,
+       TotalWatch.Elapsed.TotalMilliseconds,
+       OpenResult.ErrorMessage]));
+{$ENDIF}
     Exit;
   end;
+{$IFDEF DEBUG}
+  DecoderOpenMs := StepWatch.Elapsed.TotalMilliseconds;
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
 
   if not PreviewDecoder.Open(FileName, PreviewInfo, OpenResult.ErrorMessage) then
   begin
+{$IFDEF DEBUG}
+    PreviewOpenMs := StepWatch.Elapsed.TotalMilliseconds;
+{$ENDIF}
     Decoder.Close;
     OpenResult.ErrorMessage := 'Failed to open preview decoder: ' +
       OpenResult.ErrorMessage;
     if MediaList <> nil then
       MediaList.Clear;
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format(
+      'media_open_failed step="preview_open" file="%s" drive="%s" path_kind=%s validate_ms=%.3f decoder_open_ms=%.3f preview_open_ms=%.3f total_ms=%.3f err="%s"',
+      [ExtractFileName(FileName), ExtractFileDrive(FileName),
+       VideoMinerPathKindText(FileName), ValidateMs, DecoderOpenMs,
+       PreviewOpenMs, TotalWatch.Elapsed.TotalMilliseconds,
+       OpenResult.ErrorMessage]));
+{$ENDIF}
     Exit;
   end;
+{$IFDEF DEBUG}
+  PreviewOpenMs := StepWatch.Elapsed.TotalMilliseconds;
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
 
   if MediaList <> nil then
     MediaList.BuildForFile(FileName);
+{$IFDEF DEBUG}
+  MediaListMs := StepWatch.Elapsed.TotalMilliseconds;
+  if MediaList <> nil then
+    MediaCount := MediaList.Count
+  else
+    MediaCount := 0;
+{$ENDIF}
   OpenResult.FileName := FileName;
   Result := True;
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format(
+    'media_open_done file="%s" drive="%s" path_kind=%s validate_ms=%.3f decoder_open_ms=%.3f preview_open_ms=%.3f media_list_ms=%.3f total_ms=%.3f media_count=%d duration_ms=%d fps=%.3f',
+    [ExtractFileName(FileName), ExtractFileDrive(FileName),
+     VideoMinerPathKindText(FileName), ValidateMs, DecoderOpenMs, PreviewOpenMs, MediaListMs,
+     TotalWatch.Elapsed.TotalMilliseconds,
+     MediaCount,
+     Round(OpenResult.Info.DurationSec * 1000), OpenResult.Info.Fps]));
+{$ENDIF}
 end;
 
 end.

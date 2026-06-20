@@ -6,7 +6,7 @@
 interface
 
 uses
-  System.Classes, System.IOUtils, System.SysUtils;
+  System.Classes, System.Diagnostics, System.IOUtils, System.SysUtils;
 
 type
   TVideoMinerMediaList = class
@@ -36,6 +36,9 @@ type
   end;
 
 implementation
+
+uses
+  VideoMinerDebugLog;
 
 type
   TMediaFileSortInfo = class
@@ -158,13 +161,28 @@ var
   Folder: string;
   I: Integer;
   SortInfo: TMediaFileSortInfo;
+{$IFDEF DEBUG}
+  CollectMs: Double;
+  CopyMs: Double;
+  SortMs: Double;
+  StepWatch: TStopwatch;
+  TotalWatch: TStopwatch;
+{$ENDIF}
 begin
+{$IFDEF DEBUG}
+  TotalWatch := TStopwatch.StartNew;
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   Folder := IncludeTrailingPathDelimiter(ExtractFilePath(FileName));
   Files := TStringList.Create;
   try
     Files.CaseSensitive := False;
     Files.Duplicates := dupIgnore;
     CollectMediaFilesInFolder(Folder, Files);
+{$IFDEF DEBUG}
+    CollectMs := StepWatch.Elapsed.TotalMilliseconds;
+    StepWatch := TStopwatch.StartNew;
+{$ENDIF}
 
     if Files.IndexOf(FileName) < 0 then
     begin
@@ -174,12 +192,23 @@ begin
     end;
 
     Files.CustomSort(CompareMediaFilesByTime);
+{$IFDEF DEBUG}
+    SortMs := StepWatch.Elapsed.TotalMilliseconds;
+    StepWatch := TStopwatch.StartNew;
+{$ENDIF}
 
     SetLength(FFiles, Files.Count);
     for I := 0 to Files.Count - 1 do
       FFiles[I] := Files[I];
 
     FCurrentIndex := Files.IndexOf(FileName);
+{$IFDEF DEBUG}
+    CopyMs := StepWatch.Elapsed.TotalMilliseconds;
+    WriteVideoMinerSlowLog(Format(
+      'media_list_build folder_drive="%s" collect_ms=%.3f sort_ms=%.3f copy_ms=%.3f total_ms=%.3f count=%d current_index=%d',
+      [ExtractFileDrive(Folder), CollectMs, SortMs, CopyMs,
+       TotalWatch.Elapsed.TotalMilliseconds, Files.Count, FCurrentIndex]));
+{$ENDIF}
   finally
     for I := 0 to Files.Count - 1 do
       Files.Objects[I].Free;

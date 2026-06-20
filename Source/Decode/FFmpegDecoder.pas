@@ -104,11 +104,13 @@ type
 implementation
 
 uses
+  System.Diagnostics,
   FFmpegApi, FFmpegAudioOpen, FFmpegDecoderAudioPlayback, FFmpegDecoderAudioRead, FFmpegDecoderNextBgr24, FFmpegDecoderNextBgrx32,
   FFmpegDecoderNextI420, FFmpegDecoderNextYuy2, FFmpegDecoderNextYc48,
   FFmpegDecoderResources, FFmpegDecoderSeekBgr24, FFmpegDecoderSeekBgrx32,
   FFmpegDecoderSeekI420, FFmpegDecoderSeekYuy2, FFmpegDecoderSeekYc48,
-  FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo, VideoMinerSettings;
+  FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo, VideoMinerDebugLog,
+  VideoMinerSettings;
 
 // pixel format 名から alpha channel/plane を持つ形式か推定する
 function PixelFormatHasAlpha(const PixelFormatText: string): Boolean;
@@ -285,7 +287,21 @@ var
   DecoderMode       : TVideoDecoderMode;
   DecodeBackend     : string;
   GpuInferred       : string;
+{$IFDEF DEBUG}
+  ApiLoadMs         : Double;
+  AudioOpenMs       : Double;
+  CodecOpenMs       : Double;
+  FindStreamMs      : Double;
+  FormatOpenMs      : Double;
+  StreamInfoMs      : Double;
+  StepWatch         : TStopwatch;
+  TotalWatch        : TStopwatch;
+{$ENDIF}
 begin
+{$IFDEF DEBUG}
+  TotalWatch := TStopwatch.StartNew;
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   Close;
   FillChar(Info, SizeOf(Info), 0);
   ErrorMessage := '';
@@ -307,9 +323,17 @@ begin
 
   try
     TFFmpegApi.EnsureLoaded;
+{$IFDEF DEBUG}
+    ApiLoadMs := StepWatch.Elapsed.TotalMilliseconds;
+    StepWatch := TStopwatch.StartNew;
+{$ENDIF}
 
     Utf8FileName := UTF8String(FileName);
     Ret := TFFmpegApi.avformat_open_input(@FormatContext, PAnsiChar(Utf8FileName), nil, nil);
+{$IFDEF DEBUG}
+    FormatOpenMs := StepWatch.Elapsed.TotalMilliseconds;
+    StepWatch := TStopwatch.StartNew;
+{$ENDIF}
     if Ret < 0 then
     begin
       ErrorMessage := TFFmpegApi.ErrorText(Ret);
@@ -317,6 +341,10 @@ begin
     end;
 
     Ret := TFFmpegApi.avformat_find_stream_info(FormatContext, nil);
+{$IFDEF DEBUG}
+    StreamInfoMs := StepWatch.Elapsed.TotalMilliseconds;
+    StepWatch := TStopwatch.StartNew;
+{$ENDIF}
     if Ret < 0 then
     begin
       ErrorMessage := TFFmpegApi.ErrorText(Ret);
@@ -328,6 +356,10 @@ begin
     ReadAudioInfo(FormatContext, Info);
 
     StreamIndex := TFFmpegApi.av_find_best_stream(FormatContext, AVMEDIA_TYPE_VIDEO, -1, -1, nil, 0);
+{$IFDEF DEBUG}
+    FindStreamMs := StepWatch.Elapsed.TotalMilliseconds;
+    StepWatch := TStopwatch.StartNew;
+{$ENDIF}
     HasVideoStream := StreamIndex >= 0;
     Stream := nil;
     if HasVideoStream then
@@ -496,8 +528,16 @@ begin
       ErrorMessage := 'No supported video or audio stream was found.';
       Exit;
     end;
+{$IFDEF DEBUG}
+    CodecOpenMs := StepWatch.Elapsed.TotalMilliseconds;
+    StepWatch := TStopwatch.StartNew;
+{$ENDIF}
 
     OpenAudioDecoder(FormatContext, Info, AudioCodecContext, AudioStream, AudioStreamIndex, AudioFrame, SwrContext);
+{$IFDEF DEBUG}
+    AudioOpenMs := StepWatch.Elapsed.TotalMilliseconds;
+    StepWatch := TStopwatch.StartNew;
+{$ENDIF}
     if (not HasVideoStream) and ((not Info.Audio.Present) or (Info.Audio.OpenError <> '')) then
     begin
       ErrorMessage := 'Audio decoder is not open. ' + Info.Audio.OpenError;
@@ -539,6 +579,14 @@ begin
     AudioFrame := nil;
     SwrContext := nil;
     Result := True;
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format(
+      'decoder_open_detail file="%s" drive="%s" api_load_ms=%.3f format_open_ms=%.3f stream_info_ms=%.3f find_stream_ms=%.3f codec_open_ms=%.3f audio_open_ms=%.3f total_ms=%.3f decoder="%s" audio_present=%s audio_err="%s"',
+      [ExtractFileName(FileName), ExtractFileDrive(FileName), ApiLoadMs,
+       FormatOpenMs, StreamInfoMs, FindStreamMs, CodecOpenMs, AudioOpenMs,
+       TotalWatch.Elapsed.TotalMilliseconds, VideoDecoderName,
+       BoolToStr(Info.Audio.Present, True), Info.Audio.OpenError]));
+{$ENDIF}
   except
     on E: Exception do
       ErrorMessage := E.ClassName + ': ' + E.Message;

@@ -431,7 +431,7 @@ var
   ChromaHeight : Integer; // U/V plane の高さ
   YPlaneSize   : Integer; // 一時 Y plane のバイト数
   UPlaneSize   : Integer; // 一時 U plane のバイト数
-  Temp         : TBytes;  // I420 変換結果を受ける一時バッファ
+  I420Buffer   : TBytes;  // I420 変換結果を受けるバッファ
   YPlane       : PByte;   // 一時 Y plane
   UPlane       : PByte;   // 一時 U plane
   VPlane       : PByte;   // 一時 V plane
@@ -456,8 +456,8 @@ begin
   ChromaHeight := Chroma420Size(Frame.height);
   YPlaneSize := Frame.width * Frame.height;
   UPlaneSize := ChromaWidth * ChromaHeight;
-  SetLength(Temp, YPlaneSize + UPlaneSize * 2);
-  YPlane := @Temp[0];
+  SetLength(I420Buffer, YPlaneSize + UPlaneSize * 2);
+  YPlane := @I420Buffer[0];
   UPlane := PByte(NativeUInt(YPlane) + NativeUInt(YPlaneSize));
   VPlane := PByte(NativeUInt(UPlane) + NativeUInt(UPlaneSize));
 

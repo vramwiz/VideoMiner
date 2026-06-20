@@ -18,13 +18,13 @@ procedure SaveVideoMinerThumbnailCache(const FileName: string;
 
 implementation
 
-// Smart App Control 対策のため、通常リリースでは BMP キャッシュ保存を使わない。
-// 従来どおり使う場合は次の行を {$DEFINE THUMBNAIL_DISK_CACHE_ENABLED} に戻す。
-{.$DEFINE THUMBNAIL_DISK_CACHE_ENABLED}
+// PNG 形式のサムネイルディスクキャッシュを使う。
+{$DEFINE THUMBNAIL_DISK_CACHE_ENABLED}
 
 {$IFDEF THUMBNAIL_DISK_CACHE_ENABLED}
 uses
-  System.IOUtils, System.SysUtils, Winapi.ShlObj, Winapi.Windows;
+  System.IOUtils, System.SysUtils, Vcl.Imaging.pngimage, Winapi.ShlObj,
+  Winapi.Windows;
 {$ENDIF}
 
 {$IFDEF THUMBNAIL_DISK_CACHE_ENABLED}
@@ -33,13 +33,13 @@ const
 
 function CacheRootDir: string;
 var
-  AppDataPath: array[0..MAX_PATH - 1] of Char;
+  DataPath: array[0..MAX_PATH - 1] of Char;
 begin
-  if Succeeded(SHGetFolderPath(0, CSIDL_APPDATA or CSIDL_FLAG_CREATE, 0,
-    SHGFP_TYPE_CURRENT, AppDataPath)) then
-    Result := IncludeTrailingPathDelimiter(AppDataPath) + 'VideoMiner'
+  if Succeeded(SHGetFolderPath(0, CSIDL_PERSONAL or CSIDL_FLAG_CREATE, 0,
+    SHGFP_TYPE_CURRENT, DataPath)) then
+    Result := IncludeTrailingPathDelimiter(DataPath) + 'VideoMiner'
   else
-    Result := IncludeTrailingPathDelimiter(GetEnvironmentVariable('TEMP')) +
+    Result := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) +
       'VideoMiner';
 
   Result := IncludeTrailingPathDelimiter(Result) + THUMBNAIL_CACHE_DIR;
@@ -78,9 +78,38 @@ begin
     StampText := FormatDateTime('yyyymmddhhnnsszzz', LastWriteTime);
     Result := IncludeTrailingPathDelimiter(CacheRootDir) +
       HashText64(LowerCase(ExpandedFileName)) + '_' + StampText + '_' +
-      IntToStr(Size) + '.bmp';
+      IntToStr(Size) + '.png';
   except
     Result := '';
+  end;
+end;
+
+function LoadPngToBitmap(const CacheName: string;
+  Bitmap: Vcl.Graphics.TBitmap): Boolean;
+var
+  Png: TPngImage;
+begin
+  Png := TPngImage.Create;
+  try
+    Png.LoadFromFile(CacheName);
+    Bitmap.Assign(Png);
+    Result := (Bitmap.Width > 0) and (Bitmap.Height > 0);
+  finally
+    Png.Free;
+  end;
+end;
+
+procedure SaveBitmapToPng(const CacheName: string;
+  Bitmap: Vcl.Graphics.TBitmap);
+var
+  Png: TPngImage;
+begin
+  Png := TPngImage.Create;
+  try
+    Png.Assign(Bitmap);
+    Png.SaveToFile(CacheName);
+  finally
+    Png.Free;
   end;
 end;
 {$ENDIF}
@@ -102,8 +131,7 @@ begin
     Exit;
 
   try
-    Bitmap.LoadFromFile(CacheName);
-    Result := (Bitmap.Width > 0) and (Bitmap.Height > 0);
+    Result := LoadPngToBitmap(CacheName, Bitmap);
   except
     Result := False;
   end;
@@ -126,7 +154,7 @@ begin
     Exit;
 
   try
-    Bitmap.SaveToFile(CacheName);
+    SaveBitmapToPng(CacheName, Bitmap);
   except
     // キャッシュ保存失敗は一覧表示の本体機能を止めない。
   end;

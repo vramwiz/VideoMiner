@@ -1,7 +1,7 @@
 ﻿program VideoMiner;
 
 uses
-  Winapi.Windows, Winapi.Messages, System.SysUtils, Vcl.Forms,
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Diagnostics, Vcl.Forms,
   VideoMinerAudioPlayback in 'Source\App\VideoMinerAudioPlayback.pas',
   VideoMinerBossGesture in 'Source\App\VideoMinerBossGesture.pas',
   VideoMinerBossOverlay in 'Source\App\VideoMinerBossOverlay.pas',
@@ -95,8 +95,15 @@ end;
 var
   InstanceMutex: THandle;
   AlreadyRunning: Boolean;
+{$IFDEF DEBUG}
+  StartupWatch: TStopwatch;
+  StepWatch: TStopwatch;
+{$ENDIF}
 
 begin
+{$IFDEF DEBUG}
+  StartupWatch := TStopwatch.StartNew;
+{$ENDIF}
   InstanceMutex := CreateMutex(nil, True, PChar(SINGLE_INSTANCE_MUTEX));
   AlreadyRunning := (InstanceMutex <> 0) and (GetLastError = ERROR_ALREADY_EXISTS);
 
@@ -108,13 +115,33 @@ begin
     Halt(0);
   end;
 
+{$IFDEF DEBUG}
+  ClearVideoMinerDebugLog('app_start');
+  WriteVideoMinerSlowLog(Format('startup begin param_count=%d mutex_ms=%.3f',
+    [ParamCount, StartupWatch.Elapsed.TotalMilliseconds]));
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   Application.Initialize;
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format('startup application_initialize_ms=%.3f total_ms=%.3f',
+    [StepWatch.Elapsed.TotalMilliseconds, StartupWatch.Elapsed.TotalMilliseconds]));
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   Application.MainFormOnTaskbar := True;
   Application.CreateForm(TVideoMinerMainForm, VideoMinerForm);
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format('startup create_form_ms=%.3f total_ms=%.3f',
+    [StepWatch.Elapsed.TotalMilliseconds, StartupWatch.Elapsed.TotalMilliseconds]));
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   if ParamCount > 0 then
     VideoMinerForm.OpenAndPlayFile(ParamStr(1))
   else
     VideoMinerForm.OpenRememberedFile;
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format('startup initial_open_ms=%.3f total_ms=%.3f',
+    [StepWatch.Elapsed.TotalMilliseconds, StartupWatch.Elapsed.TotalMilliseconds]));
+{$ENDIF}
   try
     Application.Run;
   finally
