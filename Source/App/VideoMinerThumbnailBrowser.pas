@@ -210,9 +210,10 @@ const
   THUMBNAIL_MAX_HEIGHT           = 180;       // 生成サムネイルの最大高さ px
   THUMBNAIL_CACHE_BURST          = 24;        // 1 tick で読み込むキャッシュ済みサムネイル数
   PREVIEW_START_DELAY_MS         = 350;       // hover 後にプレビュー開始を待つ時間 ms
+  PREVIEW_THUMBNAIL_WAIT_MS      = 120;       // 通常サムネイル生成中に hover プレビュー開始を延期する時間 ms
   PREVIEW_FRAME_INTERVAL_MS      = 40;        // hover 本プレビューの更新間隔 ms
   PREVIEW_START_PERCENT          = 10;        // hover 本プレビューの開始位置 %
-  HOVER_REAL_PREVIEW_DEFAULT     = False;     // False にすると入口を塞いでホバープレビューを止める
+  HOVER_REAL_PREVIEW_DEFAULT     = True;      // hover 中のタイルで音なし実動画プレビューを行う
 
 var
   HoverRealPreviewEnabled: Boolean = HOVER_REAL_PREVIEW_DEFAULT;
@@ -667,6 +668,13 @@ begin
   end;
 
   Inc(FPreviewStep);
+  if ((FThumbnailTimer <> nil) and FThumbnailTimer.Enabled) or
+     (NextQueuedThumbnailIndex >= 0) then
+  begin
+    FPreviewTimer.Interval := PREVIEW_THUMBNAIL_WAIT_MS;
+    Exit;
+  end;
+
   FileName := FMediaList.FileAt(FPreviewIndex);
   if GeneratePreviewFrame(FPreviewIndex, FileName) then
   begin

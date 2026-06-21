@@ -150,10 +150,12 @@ VideoMiner は、動画ファイルをフォルダ単位で続けて確認する
 VideoMiner は、ユーザー設定を次の場所に保存します。
 
 ```text
-%APPDATA%\VideoMiner\VideoMiner.ini
+マイドキュメント\VideoMiner\VideoMiner.ini
 ```
 
-サムネイルサイズ、フォルダ閲覧履歴、前回開いたファイルなどは `%APPDATA%\VideoMiner\VideoMiner.ini` に保存され、次回起動時にも復元されます。
+サムネイルサイズ、フォルダ閲覧履歴、前回開いたファイルなどは `マイドキュメント\VideoMiner\VideoMiner.ini` に保存され、次回起動時にも復元されます。
+
+サムネイルのディスクキャッシュは `マイドキュメント\VideoMiner\ThumbnailCache` に PNG 形式で保存されます。
 
 アンインストールしても設定ファイルは残る場合があります。不要な場合は、このフォルダを手動で削除してください。
 
