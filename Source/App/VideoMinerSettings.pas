@@ -14,6 +14,9 @@ type
   TVideoDecoderMode = (vdmAuto, vdmQsv, vdmSoftware);
   // 動画終端へ到達したときの再生動作
   TVideoMinerEndAction = (eaStop, eaLoop, eaNext);
+  // 表示回転メタデータのテスト用上書き
+  TVideoRotationOverride = (vroAuto, vroIgnore, vroForce90, vroForce180,
+    vroForce270);
 
   TVideoMinerAudioSettings = record
     Muted         : Boolean; // ミュート状態
@@ -36,6 +39,10 @@ type
 
 // 現在の動画デコード方式を返す
 function GetVideoDecoderMode: TVideoDecoderMode;
+// 表示回転メタデータのテスト用上書きを返す
+function GetVideoRotationOverride: TVideoRotationOverride;
+// 入力動画の回転角度へテスト用上書きを反映した表示回転角度を返す
+function EffectiveVideoRotationDegrees(SourceDegrees: Integer): Integer;
 // 終端到達時の動作を読み込む
 function LoadEndAction: TVideoMinerEndAction;
 // 音量とミュート状態を読み込む
@@ -77,15 +84,19 @@ procedure SaveMainFormBounds(const Bounds: TVideoMinerWindowBounds);
 procedure SaveThumbnailTileWidth(Value, MinWidth, MaxWidth: Integer);
 // デコード方式を INI 保存用の文字列へ変換する
 function VideoDecoderModeToText(Mode: TVideoDecoderMode): string;
+// 表示回転上書きを INI 保存用の文字列へ変換する
+function VideoRotationOverrideToText(Value: TVideoRotationOverride): string;
 
 implementation
 
 uses
-  System.IniFiles, System.Math, System.SysUtils, Winapi.ShlObj, Winapi.Windows;
+  System.IniFiles, System.Math, System.SysUtils, Winapi.ShlObj, Winapi.Windows,
+  VideoMinerDebugLog;
 
 const
   SECTION_SETTINGS       = 'VideoMiner';         // アプリ全体設定の INI セクション
   KEY_DECODER_MODE       = 'VideoDecoderMode';   // デコード方式の INI キー
+  KEY_ROTATION_OVERRIDE  = 'VideoRotationOverride'; // 表示回転メタデータ上書きの INI キー
   SECTION_WINDOW         = 'MainForm';           // メインフォーム座標の INI セクション
   KEY_WINDOW_LEFT        = 'Left';               // ウィンドウ左位置の INI キー
   KEY_WINDOW_TOP         = 'Top';                // ウィンドウ上位置の INI キー
@@ -113,6 +124,7 @@ const
 
 var
   CurrentVideoDecoderMode : TVideoDecoderMode = vdmAuto; // 読み込み済みのデコード方式
+  CurrentRotationOverride : TVideoRotationOverride = vroAuto; // 読み込み済みの表示回転上書き
   SettingsLoaded          : Boolean = False;             // 初期設定を読み込み済みか
 
 // INI ファイルの保存先を返し、必要なら設定ディレクトリを作る
@@ -155,6 +167,52 @@ begin
   end;
 end;
 
+// INI 上の文字列を表示回転上書きへ変換する
+function TextToVideoRotationOverride(const Value: string): TVideoRotationOverride;
+begin
+  if SameText(Value, 'ignore') or SameText(Value, 'none') or
+    SameText(Value, '0') then
+    Result := vroIgnore
+  else if SameText(Value, 'force90') or SameText(Value, '90') then
+    Result := vroForce90
+  else if SameText(Value, 'force180') or SameText(Value, '180') then
+    Result := vroForce180
+  else if SameText(Value, 'force270') or SameText(Value, '270') then
+    Result := vroForce270
+  else
+    Result := vroAuto;
+end;
+
+function VideoRotationOverrideToText(Value: TVideoRotationOverride): string;
+begin
+  case Value of
+    vroIgnore:
+      Result := 'ignore';
+    vroForce90:
+      Result := 'force90';
+    vroForce180:
+      Result := 'force180';
+    vroForce270:
+      Result := 'force270';
+  else
+    Result := 'auto';
+  end;
+end;
+
+// 表示回転角度を 0 / 90 / 180 / 270 の範囲へ丸める
+function NormalizeRotationDegrees(Value: Integer): Integer;
+begin
+  Value := Value mod 360;
+  if Value < 0 then
+    Inc(Value, 360);
+  case Value of
+    90, 180, 270:
+      Result := Value;
+  else
+    Result := 0;
+  end;
+end;
+
 // INI 上の文字列を終端到達時の動作へ変換する
 function TextToEndAction(const Value: string): TVideoMinerEndAction;
 begin
@@ -188,16 +246,22 @@ end;
 // 初回参照時にアプリ全体設定だけをキャッシュする
 procedure LoadSettings;
 var
-  Ini: TIniFile;
+  Ini: TMemIniFile;
 begin
   if SettingsLoaded then
     Exit;
 
   SettingsLoaded := True;
-  Ini := TIniFile.Create(SettingsFileName);
+  Ini := TMemIniFile.Create(SettingsFileName, TEncoding.UTF8);
   try
     CurrentVideoDecoderMode := TextToVideoDecoderMode(
       Ini.ReadString(SECTION_SETTINGS, KEY_DECODER_MODE, 'auto'));
+    CurrentRotationOverride := TextToVideoRotationOverride(
+      Ini.ReadString(SECTION_SETTINGS, KEY_ROTATION_OVERRIDE, 'auto'));
+    WriteVideoMinerSlowLog(Format(
+      'settings_loaded decoder_mode=%s rotation_override=%s',
+      [VideoDecoderModeToText(CurrentVideoDecoderMode),
+       VideoRotationOverrideToText(CurrentRotationOverride)]));
   finally
     Ini.Free;
   end;
@@ -211,6 +275,28 @@ begin
   if Result = vdmAuto then
     Result := vdmSoftware;
 {$ENDIF}
+end;
+
+function GetVideoRotationOverride: TVideoRotationOverride;
+begin
+  LoadSettings;
+  Result := CurrentRotationOverride;
+end;
+
+function EffectiveVideoRotationDegrees(SourceDegrees: Integer): Integer;
+begin
+  case GetVideoRotationOverride of
+    vroIgnore:
+      Result := 0;
+    vroForce90:
+      Result := 90;
+    vroForce180:
+      Result := 180;
+    vroForce270:
+      Result := 270;
+  else
+    Result := NormalizeRotationDegrees(SourceDegrees);
+  end;
 end;
 
 function LoadEndAction: TVideoMinerEndAction;

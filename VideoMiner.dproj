@@ -125,6 +125,7 @@
         <DCCReference Include="Source\App\VideoMinerChapterManager.pas"/>
         <DCCReference Include="Source\App\VideoMinerCommandController.pas"/>
         <DCCReference Include="Source\App\VideoMinerDebugLog.pas"/>
+        <DCCReference Include="Source\App\VideoMinerBitmapRotation.pas"/>
         <DCCReference Include="Source\App\VideoMinerFrameCheck.pas"/>
         <DCCReference Include="Source\App\VideoMinerFrameClipboard.pas"/>
         <DCCReference Include="Source\App\VideoMinerMediaOpen.pas"/>

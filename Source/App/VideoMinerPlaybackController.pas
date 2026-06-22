@@ -103,8 +103,9 @@ type
       CanNavigateNext: Boolean): TVideoMinerPlaybackEndResult;
     // 終端到達時の停止、ループ再開、次ファイル移動を実行する
     procedure FinishAtEnd(EndAction: TVideoMinerEndAction;
-      CanNavigateNext: Boolean; LoopStartMs, SeekMaxMs: Integer;
-      var SeekPositionMs: Integer; var UpdatingSeek: Boolean;
+      CanNavigateNext: Boolean; LoopStartMs, SeekMaxMs,
+      LastFrameSeekPositionMs: Integer; var SeekPositionMs: Integer;
+      var UpdatingSeek: Boolean;
       ShowFrameAtMs: TVideoMinerPlaybackFrameFunc;
       StartPlaybackAtMs: TVideoMinerPlaybackStartProc;
       NavigateNext: TVideoMinerPlaybackNotifyProc;
@@ -451,13 +452,15 @@ end;
 
 procedure TVideoMinerPlaybackController.FinishAtEnd(
   EndAction: TVideoMinerEndAction; CanNavigateNext: Boolean; LoopStartMs,
-  SeekMaxMs: Integer; var SeekPositionMs: Integer; var UpdatingSeek: Boolean;
+  SeekMaxMs, LastFrameSeekPositionMs: Integer; var SeekPositionMs: Integer;
+  var UpdatingSeek: Boolean;
   ShowFrameAtMs: TVideoMinerPlaybackFrameFunc;
   StartPlaybackAtMs: TVideoMinerPlaybackStartProc;
   NavigateNext: TVideoMinerPlaybackNotifyProc;
   UpdateInfo: TVideoMinerPlaybackNotifyProc);
 var
   FrameShown: Boolean;
+  StopFrameMs: Integer;
 begin
   case FinishResult(EndAction, CanNavigateNext) of
     perLoop:
@@ -481,12 +484,27 @@ begin
       end;
   end;
 
+  StopFrameMs := LastFrameSeekPositionMs;
+  if StopFrameMs < 0 then
+    StopFrameMs := SeekMaxMs
+  else if StopFrameMs > SeekMaxMs then
+    StopFrameMs := SeekMaxMs;
+
   UpdatingSeek := True;
   try
-    SeekPositionMs := SeekMaxMs;
+    SeekPositionMs := StopFrameMs;
   finally
     UpdatingSeek := False;
   end;
+{$IFDEF DEBUG}
+  FrameShown := Assigned(ShowFrameAtMs) and ShowFrameAtMs(StopFrameMs);
+  WriteVideoMinerSlowLog(Format(
+    'finish_at_end_stop seek_max_ms=%d last_frame_ms=%d shown=%s',
+    [SeekMaxMs, StopFrameMs, BoolToStr(FrameShown, True)]));
+{$ELSE}
+  if Assigned(ShowFrameAtMs) then
+    ShowFrameAtMs(StopFrameMs);
+{$ENDIF}
   StopAtEnd;
   if Assigned(UpdateInfo) then
     UpdateInfo;
@@ -711,6 +729,11 @@ begin
     Exit;
   end;
 
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format('show_frame_near_begin target_ms=%d seek_max_ms=%d',
+    [PositionMs, SeekMaxMs]));
+{$ENDIF}
+
   for I := Low(FALLBACK_OFFSETS) to High(FALLBACK_OFFSETS) do
   begin
     AttemptMs := PositionMs + FALLBACK_OFFSETS[I];
@@ -734,6 +757,10 @@ begin
     TriedPositions[TriedCount] := AttemptMs;
     Inc(TriedCount);
 
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format('show_frame_near_attempt attempt_ms=%d',
+      [AttemptMs]));
+{$ENDIF}
     if FVideoView.ShowFrameAt(FPreviewDecoder, AttemptMs,
       LastErrorMessage) then
     begin
@@ -748,6 +775,10 @@ begin
 {$ENDIF}
       Exit;
     end;
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format('show_frame_near_attempt_failed attempt_ms=%d err="%s"',
+      [AttemptMs, LastErrorMessage]));
+{$ENDIF}
   end;
 
   ErrorMessage := LastErrorMessage;
@@ -1383,6 +1414,12 @@ end;
 
 procedure TVideoMinerPlaybackController.StopAtEnd;
 begin
+  if FPlaybackTimer <> nil then
+    FPlaybackTimer.Enabled := False;
+  FRateClockActive := False;
+  ClearRestart;
+  if FAudioPlayback <> nil then
+    FAudioPlayback.StopOutput;
   if FVideoView <> nil then
     FVideoView.PlaybackActive := False;
 end;

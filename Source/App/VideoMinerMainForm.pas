@@ -1682,9 +1682,9 @@ var
 begin
   CanNavigateNext := (FMediaList <> nil) and FMediaList.CanNavigate(1);
   FPlaybackController.FinishAtEnd(FEndAction, CanNavigateNext,
-    LoopStartPositionMs, FSeekMaxMs, FSeekPositionMs, FUpdatingSeek,
-    ShowFrameAtMs, StartPlaybackAtMs, NavigateNextPlaybackFile,
-    UpdateInfoLabel);
+    LoopStartPositionMs, FSeekMaxMs, LastFrameSeekPositionMs,
+    FSeekPositionMs, FUpdatingSeek, ShowFrameAtMs, StartPlaybackAtMs,
+    NavigateNextPlaybackFile, UpdateInfoLabel);
 end;
 
 procedure TVideoMinerMainForm.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);

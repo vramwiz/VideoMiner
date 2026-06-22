@@ -29,7 +29,8 @@ function DecodeFrameToBgrx32Fast(
 implementation
 
 uses
-  System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo;
+  System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegQsvDecode,
+  FFmpegStreamInfo, VideoMinerDebugLog;
 
 
 // 通常シークと高速シークに共通する BGRX32 取得処理を実行する。
@@ -125,6 +126,14 @@ begin
               ErrorMessage := 'Failed to transfer video frame: ' + TransferErrorMessage;
               Exit;
             end;
+{$IFDEF DEBUG}
+            WriteVideoMinerSlowLog(Format(
+              'seek_bgrx32_copy frame=%dx%d fmt=%d linesize0=%d data0=%p buffer=%p stride=%d transferred=%s',
+              [ConvertSourceFrame.width, ConvertSourceFrame.height,
+               ConvertSourceFrame.format, ConvertSourceFrame.linesize[0],
+               ConvertSourceFrame.data[0], Buffer, BufferStride,
+               BoolToStr(DidTransfer, True)]));
+{$ENDIF}
             CopyFrameToBgrx32Buffer(ConvertSourceFrame, Buffer, BufferStride,
               Context.DirectSwsContext, Context.DirectSwsSrcWidth, Context.DirectSwsSrcHeight,
               Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat);

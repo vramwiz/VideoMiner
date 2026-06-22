@@ -8,8 +8,8 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.Classes, System.Math, System.SysUtils, System.Types,
   Vcl.Controls, Vcl.ExtCtrls, Vcl.Graphics, FFmpegDecoder, FFmpegDecoderTypes,
-  VideoMinerDebugLog, VideoMinerMediaList, VideoMinerSettings,
-  VideoMinerThumbnailCache, VideoMinerWindowChrome;
+  VideoMinerBitmapRotation, VideoMinerDebugLog, VideoMinerMediaList,
+  VideoMinerSettings, VideoMinerThumbnailCache, VideoMinerWindowChrome;
 
 type
   TVideoMinerThumbnailSelectedEvent = procedure(Sender: TObject;
@@ -482,6 +482,8 @@ begin
         FThumbnailStates[Index] := tsFailed;
         Exit;
       end;
+      RotateBitmapByDegrees(Source,
+        EffectiveVideoRotationDegrees(Info.RotationDegrees));
 
       Scale := Min(THUMBNAIL_MAX_WIDTH / Source.Width,
         THUMBNAIL_MAX_HEIGHT / Source.Height);
@@ -555,7 +557,7 @@ begin
   try
     try
       Source.PixelFormat := pf32bit;
-    Source.SetSize(FPreviewInfo.Width, FPreviewInfo.Height);
+      Source.SetSize(FPreviewInfo.Width, FPreviewInfo.Height);
       if FPreviewInfo.Height > 1 then
         BufferStride := Abs(NativeInt(Source.ScanLine[1]) -
           NativeInt(Source.ScanLine[0]))
@@ -590,9 +592,11 @@ begin
 
       if not Decoded then
         Exit;
+      RotateBitmapByDegrees(Source,
+        EffectiveVideoRotationDegrees(FPreviewInfo.RotationDegrees));
 
       Scale := Min(THUMBNAIL_MAX_WIDTH / Source.Width,
-      THUMBNAIL_MAX_HEIGHT / Source.Height);
+        THUMBNAIL_MAX_HEIGHT / Source.Height);
       ThumbWidth := Max(1, Round(Source.Width * Scale));
       ThumbHeight := Max(1, Round(Source.Height * Scale));
       Dest := TBitmap.Create;

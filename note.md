@@ -112,8 +112,8 @@ VideoMiner は、素材確認・動画確認・編集チェックを軽く行え
   - 開いたファイルのフォルダを作業単位として扱うためのメディア一覧。
   - 対象拡張子の収集、現在位置、前後ファイルへの移動可否、ナビゲーション先ファイルを管理する。
 - `VideoMinerSettings.pas`
-  - `%APPDATA%\VideoMiner\VideoMiner.ini` への設定保存/読込。
-  - 通常ウィンドウ位置、最後に開いたフォルダ/ファイル、再生終了時動作を扱う。
+  - `マイドキュメント\VideoMiner\VideoMiner.ini` への設定保存/読込。
+  - 通常ウィンドウ位置、最後に開いたフォルダ/ファイル、再生終了時動作、手動チャプター、フォルダ履歴を扱う。
 - `VideoMinerWindowChrome.pas`
   - 枠なしフォームの Windows 連携。
   - `CreateParams`、`WM_NCCALCSIZE`、保存済みウィンドウ位置の復元と記憶を担当する。
@@ -288,6 +288,7 @@ function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
 
 ## 現在の状態
 
+- この章は最新状態の要約として扱う。以降の dated 履歴にある `%APPDATA%` 保存やサムネイルキャッシュ無効化などは、当時の作業記録として読む。
 - プロジェクト名は `VideoMiner`。
 - メインフォームは `VideoMinerMainForm`。
 - ルート直下に多数あった `.pas` は `Source` 配下へ移動済み。
@@ -295,6 +296,16 @@ function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
 - メインフォームはデバッグ用の操作ボタンや情報ラベルを外し、動画ビューだけを表示する構成へ移行中。
 - 出力系、AviUtl 連携、入力プラグイン由来の処理は削除済み。
 - デバッグ用・テスト場由来の処理は、アプリに不要なものから削除している。
+- 2026-06-22 時点では、設定 INI、Debug 調査ログ、サムネイルキャッシュは `マイドキュメント\VideoMiner` 配下へ保存する。
+  - `%APPDATA%` / 一時フォルダへの保存は使わない方針。
+  - `VideoMinerSettings.pas` は `CSIDL_PERSONAL` ベースの `マイドキュメント\VideoMiner\VideoMiner.ini` を使う。
+  - `VideoMinerDebugLog.pas` は Debug ビルド時のみ `マイドキュメント\VideoMiner\VideoMiner_playback_debug.log` を使う。
+  - `VideoMinerThumbnailCache.pas` は `THUMBNAIL_DISK_CACHE_ENABLED` を有効化し、PNG を `マイドキュメント\VideoMiner\ThumbnailCache` へ保存する。
+- 2026-06-22 時点では、サムネイル一覧はバックグラウンド worker 方式を使わない。
+  - 表示されたタイルだけを `QueueThumbnail` し、`ThumbnailTimer` から 1 枚ずつ同期生成する。
+  - Tab/Esc で閉じて再表示した場合、未処理キューがあれば `Open` で `FThumbnailTimer` を再開する。
+  - hover 実動画プレビューは `HOVER_REAL_PREVIEW_DEFAULT = True` で有効。
+  - 通常サムネイル生成キューが残っている間は、`PreviewTimer` 側で hover プレビュー開始を短時間延期する。
 - 2026-06-16 時点では、フォルダ内動画の並び順を作成日時の古い順に変更済み。
 - 2026-06-16 時点では、左右キー/PageUp/PageDown の前後動画移動で、キーリピートや残留キー入力が次々処理されにくいよう入力ガードを入れている。
 - 2026-06-16 時点では、下側シークバー上のホイール操作で一時停止してシークできる。
@@ -1855,7 +1866,7 @@ seek 自体は速くても、そこから目的フレームまで再デコード
 - 悪化した変更:
   - サムネイルの PNG ディスクキャッシュを再有効化し、`マイドキュメント\VideoMiner\ThumbnailCache` に保存する形。
   - この構成では Smart App Control の状況がさらに悪化したため、キャッシュは再び無効にした。
-- 現在の方針:
+- この時点の方針:
   - 設定ファイルだけ Documents 保存を維持する。
   - サムネイルディスクキャッシュは無効にする。
   - キャッシュ無効時は `System.IOUtils` / `Winapi.ShlObj` / `CSIDL_APPDATA` を含むキャッシュ実装をコンパイル対象から外す。
@@ -2043,7 +2054,7 @@ seek 自体は速くても、そこから目的フレームまで再デコード
   - `%TEMP%` / `%TMP%`
   - `APPDATA` / `LOCALAPPDATA` / `Roaming`
   - 上記キーワードで `Source` と `VideoMiner.dpr` を検索し、保存先としての参照が残っていないことを確認した。
-- 現在の方針:
+- この時点の方針:
   - サムネイルのバックグラウンド worker 方式は撤回済み。
   - サムネイルは表示されたタイルだけを `QueueThumbnail` し、`ThumbnailTimer` から 1 枚ずつ生成する。
   - Tab/Esc で閉じて再表示した場合、未処理キューがあれば `Open` で `FThumbnailTimer` を再開する。
@@ -2054,3 +2065,155 @@ seek 自体は速くても、そこから目的フレームまで再デコード
 - `HOVER_REAL_PREVIEW_DEFAULT = True` に戻し、機能を再有効化した。
 - ただし、サムネイル一覧表示直後に通常サムネイル生成と hover プレビュー用デコードが同時に UI スレッドで走ると固まりやすいため、`PreviewTimer` 側で通常サムネイル生成キューが残っている間は hover プレビュー開始を短時間延期する。
 - バックグラウンド worker 方式は再導入しない。通常サムネイルは従来どおり `ThumbnailTimer` で 1 枚ずつ生成し、hover プレビューは通常サムネイル生成が落ち着いてから開始する。
+
+## 2026-06-22 縦長ショート動画の回転メタデータ対応
+- ユーザー報告として、ショート動画のような縦長動画を再生すると表示がうまくいかないケースがあった。
+- 原因候補として、スマホ系動画によくある「実フレームは横長、display matrix / rotate metadata で縦表示する」形式を VideoMiner が読んでいなかった点を確認した。
+  - `TVideoMinerVideoSurface.FitRect` 自体は `FBitmap.Width` / `FBitmap.Height` から等倍 fit しており、本当に `1080x1920` の縦フレームなら大きく壊れにくい。
+  - 問題になりやすいのは `1920x1080` などの横長フレームに、90 度回転表示のメタデータが付く形式。
+- `FFmpegApi.pas` に `av_packet_side_data_get` と `av_display_rotation_get` を追加した。
+- `FFmpegStreamInfo.ReadVideoRotationDegrees` を追加し、`AV_PKT_DATA_DISPLAYMATRIX` から 90 / 180 / 270 度の表示回転を読むようにした。
+- `TVideoInfo` に `RotationDegrees` を追加した。
+  - `Width` / `Height` は FFmpeg のデコード先として使うため、元フレームサイズのまま扱う。
+  - 表示用の向き補正はデコード後の Bitmap に対して行う。
+- `VideoMinerBitmapRotation.pas` を追加し、デコード済み 32bit Bitmap を 90 / 180 / 270 度回転できるようにした。
+- `VideoMinerVideoView.pas` で通常再生、シーク表示、scratch frame 表示の各デコード成功後に `RotationDegrees` を反映するようにした。
+- `VideoMinerThumbnailBrowser.pas` で通常サムネイルと hover 実動画プレビューにも同じ回転を反映するようにした。
+- 既存の横向きサムネイルキャッシュが残ると修正後も古い向きの PNG を読んでしまうため、`VideoMinerThumbnailCache.pas` のキャッシュキーに `THUMBNAIL_CACHE_VERSION = 'r1'` を含めた。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+- 同梱 DLL に `av_display_rotation_get` / `av_packet_side_data_get` が含まれることを確認した。
+- 短い mp4 を指定して Debug exe を起動し、動画 open と追加 API ロードが正常に通ることを確認した。
+
+## 2026-06-22 表示回転の比較用上書き
+- VW_Media_Output の実フレーム90度回転出力では、Media Player と VideoMiner の表示が一致することをユーザー確認済み。
+- 次の切り分け用に、VideoMiner 側だけ表示回転を上書きする INI 設定を追加した。
+- 設定ファイル:
+  - `マイドキュメント\VideoMiner\VideoMiner.ini`
+- 設定キー:
+
+```ini
+[VideoMiner]
+VideoRotationOverride=auto
+```
+
+- 値:
+  - `auto`: 通常動作。動画の display matrix / rotate metadata を読む。
+  - `ignore` / `none` / `0`: 回転メタデータを無視して 0 度表示にする。
+  - `force90` / `90`: VideoMiner 側の表示だけ 90 度回転に固定する。
+  - `force180` / `180`: VideoMiner 側の表示だけ 180 度回転に固定する。
+  - `force270` / `270`: VideoMiner 側の表示だけ 270 度回転に固定する。
+- 実装:
+  - `VideoMinerSettings.pas` に `TVideoRotationOverride` と `EffectiveVideoRotationDegrees` を追加した。
+  - `VideoMinerVideoView.pas` の通常再生、シーク表示、scratch frame 表示で回転適用前に上書きを反映する。
+  - `VideoMinerThumbnailBrowser.pas` の通常サムネイルと hover 実フレームプレビューにも上書きを反映する。
+  - `VideoMinerThumbnailCache.pas` のキャッシュキーに `VideoRotationOverride` を含め、モード変更時に別キャッシュとして扱う。
+- 注意:
+  - 起動時に INI を読むため、値を変えたら VideoMiner を再起動して比較する。
+  - 通常検証後は `VideoRotationOverride=auto` に戻す。
+- ビルド確認:
+  - Win64 Debug: 成功、警告 0。
+  - Win64 Release: 成功、既存 H2077 hint 40 件のみ。
+
+## 2026-06-22 回転上書きテスト確認
+- 対象ファイル:
+  - `C:\Users\vramw\Videos\test_out_r.mp4`
+- ffprobe 確認:
+  - video stream は `1080x1920`。
+  - rotate tag / display matrix は無し。
+  - つまり VW_Media_Output の回転出力は、メタデータ回転ではなく実フレームが縦向きになっている。
+- このファイルでは `VideoRotationOverride=auto` と `VideoRotationOverride=ignore` は同じ表示になる。
+  - `rotation=0` のため、メタデータを読んでも無視しても追加回転が無い。
+  - VideoMiner 側だけ追加回転して比較する場合は `VideoRotationOverride=force90` を使う。
+- デバッグ起動確認:
+  - INI の `LastMedia` が `C:\Users\vramw\Videos\test_out_r.mp4` を指している状態で、引数なし起動から対象ファイルを開くことを確認した。
+  - ログで `decoder_open_detail ... video=1080x1920 rotation=0` を確認した。
+- 変わらなかった原因:
+  - PowerShell の `Set-Content -Encoding UTF8` で INI 先頭に BOM が入り、`TIniFile` が先頭セクション `[VideoMiner]` を認識できず、`VideoRotationOverride` が既定値 `auto` になっていた。
+  - `LastMedia` は2番目以降のセクションだったため読めており、ファイル復元だけは成功していた。
+- 修正:
+  - `VideoMinerSettings.LoadSettings` を `TMemIniFile.Create(SettingsFileName, TEncoding.UTF8)` に変更し、BOM 付き UTF-8 INI でも `[VideoMiner]` を読めるようにした。
+  - Debug 起動ログへ `startup rotation_override=...` を追加した。
+  - Debug の decoder open ログへ `video=<width>x<height> rotation=<degrees>` を追加した。
+  - 表示時確認用に `show_frame_rotation` ログを追加した。
+- 確認結果:
+  - `VideoRotationOverride=force90` の INI を読んだ状態で、Debug 引数なし起動ログに `startup rotation_override=force90` が出ることを確認した。
+  - Win64 Debug: 成功、警告 0。
+  - Win64 Release: 成功、既存 H2077 hint 40 件のみ。
+
+## 2026-06-22 回転上書きの実動作確認と stride 修正
+- `C:\Users\vramw\Videos\test_out_r.mp4` で `VideoRotationOverride` が本当に表示方向を変えるか確認した。
+- 追加で判明した問題:
+  - `VideoRotationOverride=force90` は INI から読めていたが、初回フレーム表示で `show_frame_rotation` に到達する前に `swscale-9.dll` の書き込み違反が出ていた。
+  - 原因は `TBitmap.ScanLine` の上下配置と `sws_scale` へ渡す出力 pointer / stride の契約が曖昧で、縦長 `1080x1920` のようなフレームで Bitmap 端へ直接 SIMD 書き込みが走ると範囲外に触れることがあったため。
+- 修正:
+  - `VideoMinerVideoSurface.PrepareBgrx32Frame` と `VideoMinerVideoView.PrepareBitmapFrameBuffer` は、`ScanLine[0]` と次行との差分を符号付き stride として返すようにした。
+  - `FFmpegFrameConvert.CopyFrameToBgrx32Buffer` / `CopyFrameToBgr24Buffer` は、`sws_scale` の出力を一度連続した一時バッファへ受け、呼び出し側 Bitmap へ行単位でコピーする方式に変更した。
+  - これにより VCL Bitmap が bottom-up / top-down のどちらでも、`sws_scale` が Bitmap 境界外へ直接書き込まない。
+  - Debug ログに `show_frame_rotation ... before=<w>x<h>` と `show_frame_rotation_done ... after=<w>x<h>` を追加した。
+- 実測結果:
+  - `VideoRotationOverride=force90`:
+    - `startup rotation_override=force90`
+    - `decoder_open_detail ... video=1080x1920 rotation=0`
+    - `show_frame_rotation ... source_rotation=0 effective_rotation=90 before=1080x1920`
+    - `show_frame_rotation_done ... effective_rotation=90 after=1920x1080`
+    - `paint width=1920 height=1080`
+  - `VideoRotationOverride=ignore`:
+    - `startup rotation_override=ignore`
+    - `show_frame_rotation ... source_rotation=0 effective_rotation=0 before=1080x1920`
+    - `show_frame_rotation_done ... effective_rotation=0 after=1080x1920`
+    - `paint width=1080 height=1920`
+  - 引数なし起動でも `LastMedia` から `test_out_r.mp4` を開き、`force90` で `1920x1080` 表示になることを確認した。
+- 結論:
+  - この INI 値で VideoMiner の再生方向は変わる。
+  - `test_out_r.mp4` 自体は `rotation=0` の実フレーム縦動画なので、`auto` と `ignore` は同じ表示になる。
+  - 比較用に向きを変える場合は `force90` / `force180` / `force270` を使う。
+- 現在の確認用 INI:
+  - `D:\Users\take6\VideoMiner\VideoMiner.ini`
+  - `VideoRotationOverride=force90`
+- ビルド確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、既存 H2077 hint 40 件のみ / エラー 0。
+
+## 2026-06-22 回転 metadata 動画の再生速度改善
+- 対象:
+  - `C:\Users\vramw\Videos\test_out_r2.mp4`
+  - `1920x1080` の実フレームに Display Matrix `rotation=90` が付いた metadata 回転動画。
+- 問題:
+  - 回転表示は正しいが、再生時にデコード済み `TBitmap` の90度回転が重すぎた。
+  - 旧 `VideoMinerBitmapRotation.RotateBitmapByDegrees` は、ピクセルごとに `Bitmap.ScanLine[...]` を呼んでおり、1920x1080 の90度回転で大きな負荷になっていた。
+- 修正:
+  - `VideoMinerBitmapRotation.pas`
+    - 回転前に source / destination の scanline pointer を配列化する `BuildScanLineTable` を追加。
+    - 回転ループ中は `ScanLine` 呼び出しを行わず、行ポインタ配列とピクセル index だけでコピーするよう変更。
+  - `VideoMinerVideoView.ShowFrameAt`
+    - `PresentFrame=False` の scratch デコードでは、表示に使わないため回転処理をスキップ。
+- 確認:
+  - `VideoRotationOverride=auto` で `test_out_r2.mp4` を Debug 起動。
+  - `decoder_open_detail ... video=1920x1080 rotation=90` を確認。
+  - 表示フレームは `show_frame_rotation ... before=1920x1080` から `after=1080x1920` へ回転することを確認。
+  - Debug ログ上、表示フレーム回転は同一ミリ秒内に完了する程度まで改善。
+  - scratch 側は `PresentFrame=False ... after=1920x1080` となり、不要回転が走らないことを確認。
+- ビルド確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、既存 H2077 hint 40 件のみ / エラー 0。
+
+## 2026-06-22 stop モード終端フレーム崩れ対策
+- 対象:
+  - `C:\Users\vramw\Videos\test_out_r2.mp4`
+  - `EndAction=stop`
+- 報告:
+  - 回転 metadata 動画の再生速度は改善したが、stop モードで終端に到達した時の最終フレームが崩れる。
+- 原因候補:
+  - 終端到達時の `FinishAtEnd` は seek bar を `SeekMaxMs` へ進めて `StopAtEnd` するだけで、表示可能な最後のフレームを明示的に表示し直していなかった。
+  - `StopAtEnd` も `FVideoView.PlaybackActive := False` のみで、再生 timer / audio / restart 予約 / rate clock の停止が通常停止より弱かった。
+  - EOF 近辺の scratch / decode 残り状態が最後の画面として残ると、回転後 bitmap の表示状態が崩れて見える可能性がある。
+- 修正:
+  - `VideoMinerPlaybackController.FinishAtEnd` に `LastFrameSeekPositionMs` を渡すよう変更。
+  - stop 終端では `SeekMaxMs` ではなく `LastFrameSeekPositionMs` を `ShowFrameAtMs` で表示し直してから停止する。
+  - `StopAtEnd` で `FPlaybackTimer.Enabled := False`、`FRateClockActive := False`、`ClearRestart`、`FAudioPlayback.StopOutput` も実行するよう変更。
+  - Debug slow log に `finish_at_end_stop seek_max_ms=... last_frame_ms=... shown=...` を追加。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、既存 H2077 hint 40 件のみ / エラー 0。
+  - Debug 引数あり起動で `test_out_r2.mp4` の自動再生開始、`rotation=90`、`audio_start` まではログ確認済み。
+  - この Codex 実行経路では GUI プロセスが終端ログ前に終了したため、実画面の最終フレーム崩れ再現確認は手元操作での確認待ち。

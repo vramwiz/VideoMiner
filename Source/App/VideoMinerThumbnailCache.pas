@@ -24,11 +24,12 @@ implementation
 {$IFDEF THUMBNAIL_DISK_CACHE_ENABLED}
 uses
   System.IOUtils, System.SysUtils, Vcl.Imaging.pngimage, Winapi.ShlObj,
-  Winapi.Windows;
+  Winapi.Windows, VideoMinerSettings;
 {$ENDIF}
 
 {$IFDEF THUMBNAIL_DISK_CACHE_ENABLED}
 const
+  THUMBNAIL_CACHE_VERSION = 'r1';
   THUMBNAIL_CACHE_DIR = 'ThumbnailCache';
 
 function CacheRootDir: string;
@@ -77,8 +78,10 @@ begin
     Size := TFile.GetSize(ExpandedFileName);
     StampText := FormatDateTime('yyyymmddhhnnsszzz', LastWriteTime);
     Result := IncludeTrailingPathDelimiter(CacheRootDir) +
-      HashText64(LowerCase(ExpandedFileName)) + '_' + StampText + '_' +
-      IntToStr(Size) + '.png';
+      HashText64(THUMBNAIL_CACHE_VERSION + '|' +
+        VideoRotationOverrideToText(GetVideoRotationOverride) + '|' +
+        LowerCase(ExpandedFileName)) +
+      '_' + StampText + '_' + IntToStr(Size) + '.png';
   except
     Result := '';
   end;

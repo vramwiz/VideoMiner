@@ -36,6 +36,7 @@ type
     PixelFormat     : Integer;    // 入力映像ストリームの FFmpeg pixel format
     PixelFormatName : string;     // 調査表示用の pixel format 名
     HasAlpha        : Boolean;    // 入力映像が alpha plane/channel を持つか
+    RotationDegrees : Integer;    // 表示時に反映する反時計回りの回転角度
     Audio           : TAudioInfo; // 同じ入力ファイルから読んだ音声情報
   end;
 implementation

@@ -7,7 +7,8 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Types, Vcl.Controls, Vcl.ExtCtrls,
-  Vcl.Graphics, FFmpegDecoder, VideoMinerFrameCheck, VideoMinerOverlay,
+  Vcl.Graphics, FFmpegDecoder, VideoMinerBitmapRotation, VideoMinerFrameCheck,
+  VideoMinerDebugLog, VideoMinerOverlay, VideoMinerSettings,
   VideoMinerVideoSurface;
 
 type
@@ -212,13 +213,13 @@ begin
   if (Bitmap.Width <> Width) or (Bitmap.Height <> Height) then
     Bitmap.SetSize(Width, Height);
 
+  Buffer := Bitmap.ScanLine[0];
   if Height > 1 then
-    BufferStride := Abs(NativeInt(Bitmap.ScanLine[1]) - NativeInt(Bitmap.ScanLine[0]))
+    BufferStride := NativeInt(Bitmap.ScanLine[1]) - NativeInt(Buffer)
   else
     BufferStride := Width * 4;
 
-  Buffer := Bitmap.ScanLine[Height - 1];
-  Result := (Buffer <> nil) and (BufferStride > 0);
+  Result := (Buffer <> nil) and (BufferStride <> 0);
 end;
 
 function TVideoMinerVideoView.PrepareFrameBuffer(Decoder: TFFmpegDecoder;
@@ -548,6 +549,11 @@ function TVideoMinerVideoView.ShowFrameAt(Decoder: TFFmpegDecoder;
 var
   Buffer: Pointer;
   BufferStride: Integer;
+  EffectiveRotation: Integer;
+  BeforeWidth: Integer;
+  BeforeHeight: Integer;
+  AfterWidth: Integer;
+  AfterHeight: Integer;
 begin
   ErrorMessage := '';
   Result := False;
@@ -574,17 +580,55 @@ begin
     end;
   end;
 
+  WriteVideoMinerSlowLog(Format(
+    'show_frame_decode_begin position_ms=%d present=%s fast=%s',
+    [PositionMs, BoolToStr(PresentFrame, True), BoolToStr(FastSeek, True)]));
   if FastSeek then
     Result := Decoder.DecodeFrameToBgrx32Fast(PositionMs, Buffer,
       BufferStride, ErrorMessage)
   else
     Result := Decoder.DecodeFrameToBgrx32(PositionMs, Buffer, BufferStride,
       ErrorMessage);
+  WriteVideoMinerSlowLog(Format(
+    'show_frame_decode_end position_ms=%d result=%s err="%s"',
+    [PositionMs, BoolToStr(Result, True), ErrorMessage]));
   if not Result then
   begin
     Result := False;
     Exit;
   end;
+
+  EffectiveRotation := EffectiveVideoRotationDegrees(Decoder.Info.RotationDegrees);
+  if PresentFrame then
+  begin
+    BeforeWidth := FSurface.Bitmap.Width;
+    BeforeHeight := FSurface.Bitmap.Height;
+  end
+  else
+  begin
+    BeforeWidth := FDecodeScratch.Width;
+    BeforeHeight := FDecodeScratch.Height;
+  end;
+  WriteVideoMinerSlowLog(Format(
+    'show_frame_rotation position_ms=%d present=%s source_rotation=%d effective_rotation=%d before=%dx%d',
+    [PositionMs, BoolToStr(PresentFrame, True), Decoder.Info.RotationDegrees,
+     EffectiveRotation, BeforeWidth, BeforeHeight]));
+  if PresentFrame then
+    RotateBitmapByDegrees(FSurface.Bitmap, EffectiveRotation);
+  if PresentFrame then
+  begin
+    AfterWidth := FSurface.Bitmap.Width;
+    AfterHeight := FSurface.Bitmap.Height;
+  end
+  else
+  begin
+    AfterWidth := FDecodeScratch.Width;
+    AfterHeight := FDecodeScratch.Height;
+  end;
+  WriteVideoMinerSlowLog(Format(
+    'show_frame_rotation_done position_ms=%d present=%s effective_rotation=%d after=%dx%d',
+    [PositionMs, BoolToStr(PresentFrame, True), EffectiveRotation,
+     AfterWidth, AfterHeight]));
 
   if PresentFrame then
   begin
@@ -600,6 +644,7 @@ function TVideoMinerVideoView.DecodeNextFrame(Decoder: TFFmpegDecoder;
 var
   Buffer: Pointer;
   BufferStride: Integer;
+  EffectiveRotation: Integer;
 begin
   ErrorMessage := '';
   PositionMs := -1;
@@ -620,6 +665,19 @@ begin
   if not Decoder.DecodeNextFrameToBgrx32Optional(Buffer, BufferStride,
     ConvertFrame, PositionMs, ErrorMessage) then
     Exit;
+
+  if ConvertFrame then
+  begin
+    EffectiveRotation := EffectiveVideoRotationDegrees(Decoder.Info.RotationDegrees);
+    WriteVideoMinerSlowLog(Format(
+      'decode_next_rotation position_ms=%d source_rotation=%d effective_rotation=%d before=%dx%d',
+      [PositionMs, Decoder.Info.RotationDegrees, EffectiveRotation,
+       FSurface.Bitmap.Width, FSurface.Bitmap.Height]));
+    RotateBitmapByDegrees(FSurface.Bitmap, EffectiveRotation);
+    WriteVideoMinerSlowLog(Format(
+      'decode_next_rotation_done position_ms=%d after=%dx%d',
+      [PositionMs, FSurface.Bitmap.Width, FSurface.Bitmap.Height]));
+  end;
 
   if ConvertFrame then
     Present(FSurface.Bitmap);
@@ -652,6 +710,9 @@ begin
 
   Result := Decoder.DecodeNextFrameToBgrx32Optional(Buffer, BufferStride,
     True, PositionMs, ErrorMessage);
+  if Result then
+    RotateBitmapByDegrees(FDecodeScratch,
+      EffectiveVideoRotationDegrees(Decoder.Info.RotationDegrees));
 end;
 
 function TVideoMinerVideoView.HandleMouseWheel(Shift: TShiftState;

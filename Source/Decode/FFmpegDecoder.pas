@@ -516,6 +516,7 @@ begin
       Info.PixelFormat := CodecPar.format;
       Info.PixelFormatName := PixelFormatName(CodecPar.format);
       Info.HasAlpha := PixelFormatHasAlpha(Info.PixelFormatName);
+      Info.RotationDegrees := ReadVideoRotationDegrees(Stream);
 
       if (Info.Width <= 0) or (Info.Height <= 0) then
       begin
@@ -581,10 +582,11 @@ begin
     Result := True;
 {$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
-      'decoder_open_detail file="%s" drive="%s" api_load_ms=%.3f format_open_ms=%.3f stream_info_ms=%.3f find_stream_ms=%.3f codec_open_ms=%.3f audio_open_ms=%.3f total_ms=%.3f decoder="%s" audio_present=%s audio_err="%s"',
+      'decoder_open_detail file="%s" drive="%s" api_load_ms=%.3f format_open_ms=%.3f stream_info_ms=%.3f find_stream_ms=%.3f codec_open_ms=%.3f audio_open_ms=%.3f total_ms=%.3f decoder="%s" video=%dx%d rotation=%d audio_present=%s audio_err="%s"',
       [ExtractFileName(FileName), ExtractFileDrive(FileName), ApiLoadMs,
        FormatOpenMs, StreamInfoMs, FindStreamMs, CodecOpenMs, AudioOpenMs,
        TotalWatch.Elapsed.TotalMilliseconds, VideoDecoderName,
+       Info.Width, Info.Height, Info.RotationDegrees,
        BoolToStr(Info.Audio.Present, True), Info.Audio.OpenError]));
 {$ENDIF}
   except

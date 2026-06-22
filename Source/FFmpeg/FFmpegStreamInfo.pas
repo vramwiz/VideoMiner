@@ -10,8 +10,13 @@ uses
 
 // 入力ファイル内の音声ストリーム情報を TVideoInfo へ読み込む。
 procedure ReadAudioInfo(FormatContext: PAVFormatContext; var Info: TVideoInfo);
+// 入力ファイル内の動画ストリームから表示回転角度を読み込む。
+function ReadVideoRotationDegrees(Stream: PAVStream): Integer;
 
 implementation
+
+uses
+  System.Math;
 
 // 入力ファイル内の音声ストリーム情報を TVideoInfo へ読み込む。
 procedure ReadAudioInfo(FormatContext: PAVFormatContext; var Info: TVideoInfo);
@@ -40,6 +45,39 @@ begin
     Info.Audio.DurationSec := Stream.duration * Stream.time_base.num / Stream.time_base.den
   else
     Info.Audio.DurationSec := Info.DurationSec;
+end;
+
+// 入力ファイル内の動画ストリームから表示回転角度を読み込む。
+function ReadVideoRotationDegrees(Stream: PAVStream): Integer;
+var
+  Angle    : Integer;           // display matrix から得た回転角度
+  CodecPar : PAVCodecParameters; // 対象ストリームの codec parameters
+  Rotation : Double;            // FFmpeg が返す反時計回り回転角度
+  SideData : PAVPacketSideData; // display matrix side data
+begin
+  Result := 0;
+  if (Stream = nil) or (Stream.codecpar = nil) or
+     (not Assigned(TFFmpegApi.av_packet_side_data_get)) or
+     (not Assigned(TFFmpegApi.av_display_rotation_get)) then
+    Exit;
+
+  CodecPar := Stream.codecpar;
+  SideData := TFFmpegApi.av_packet_side_data_get(
+    PAVPacketSideData(CodecPar.coded_side_data), CodecPar.nb_coded_side_data,
+    AV_PKT_DATA_DISPLAYMATRIX);
+  if (SideData = nil) or (SideData.data = nil) or (SideData.size < 9 * SizeOf(Integer)) then
+    Exit;
+
+  Rotation := TFFmpegApi.av_display_rotation_get(PInteger(SideData.data));
+  if IsNan(Rotation) then
+    Exit;
+
+  Angle := Round(Rotation) mod 360;
+  if Angle < 0 then
+    Inc(Angle, 360);
+
+  if (Angle = 90) or (Angle = 180) or (Angle = 270) then
+    Result := Angle;
 end;
 
 end.

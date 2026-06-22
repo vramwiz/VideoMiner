@@ -8,6 +8,7 @@ uses
   VideoMinerChapterManager in 'Source\App\VideoMinerChapterManager.pas',
   VideoMinerCommandController in 'Source\App\VideoMinerCommandController.pas',
   VideoMinerDebugLog in 'Source\App\VideoMinerDebugLog.pas',
+  VideoMinerBitmapRotation in 'Source\App\VideoMinerBitmapRotation.pas',
   VideoMinerFrameCheck in 'Source\App\VideoMinerFrameCheck.pas',
   VideoMinerFrameClipboard in 'Source\App\VideoMinerFrameClipboard.pas',
   VideoMinerMediaOpen in 'Source\App\VideoMinerMediaOpen.pas',
@@ -119,6 +120,8 @@ begin
   ClearVideoMinerDebugLog('app_start');
   WriteVideoMinerSlowLog(Format('startup begin param_count=%d mutex_ms=%.3f',
     [ParamCount, StartupWatch.Elapsed.TotalMilliseconds]));
+  WriteVideoMinerSlowLog('startup rotation_override=' +
+    VideoRotationOverrideToText(GetVideoRotationOverride));
   StepWatch := TStopwatch.StartNew;
 {$ENDIF}
   Application.Initialize;

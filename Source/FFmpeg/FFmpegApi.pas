@@ -18,7 +18,15 @@ type
   end;
 
   PAVCodecParameters = ^TAVCodecParameters;
+  PAVPacketSideData = ^TAVPacketSideData;
   PAVChannelLayout = ^TAVChannelLayout;
+  // FFmpeg のパケット/ストリーム side data。
+  TAVPacketSideData = record
+    data : PByte;      // side data 本体
+    size : NativeUInt; // side data のバイト数
+    kind : Integer;    // AVPacketSideDataType
+  end;
+
   // FFmpegのチャンネルレイアウト情報。
   TAVChannelLayout = record
     order       : Integer; // レイアウト表現方式
@@ -232,6 +240,8 @@ type
   Tav_packet_free = procedure(packet: PPAVPacket); cdecl;
   Tav_packet_unref = procedure(packet: PAVPacket); cdecl;
   Tav_packet_rescale_ts = procedure(packet: PAVPacket; tb_src, tb_dst: TAVRational); cdecl;
+  Tav_packet_side_data_get = function(sd: PAVPacketSideData; nb_sd: Integer;
+    kind: Integer): PAVPacketSideData; cdecl;
 
   Tav_frame_alloc = function: PAVFrame; cdecl;
   Tav_frame_free = procedure(frame: PPAVFrame); cdecl;
@@ -251,6 +261,7 @@ type
   Tav_hwframe_transfer_data = function(dst: PAVFrame; const src: PAVFrame;
     flags: Integer): Integer; cdecl;
   Tav_buffer_unref = procedure(buf: PPAVBufferRef); cdecl;
+  Tav_display_rotation_get = function(matrix: PInteger): Double; cdecl;
 
   Tsws_getContext = function(srcW, srcH, srcFormat, dstW, dstH, dstFormat,
     flags: Integer; srcFilter, dstFilter, param: Pointer): PSwsContext; cdecl;
@@ -301,6 +312,7 @@ const
   AV_PIX_FMT_NV12             = 23;                   // QSV で使われることがある NV12 形式
   AV_PIX_FMT_QSV              = 114;                  // QSV hardware frame 形式
   AV_PIX_FMT_BGR0             = 121;                  // alpha なし 32bit BGR 形式
+  AV_PKT_DATA_DISPLAYMATRIX   = 5;                    // 回転/反転などの表示行列 side data
   AV_HWDEVICE_TYPE_QSV        = 5;                    // QSV device context の種類
   SWS_BILINEAR                = 2;                    // sws_scale の bilinear 変換指定
   AVIO_FLAG_WRITE             = 2;                    // FFmpeg I/O の書き込み指定
@@ -322,6 +334,7 @@ type
     class var av_hwdevice_ctx_create: Tav_hwdevice_ctx_create;
     class var av_hwframe_transfer_data: Tav_hwframe_transfer_data;
     class var av_buffer_unref: Tav_buffer_unref;
+    class var av_display_rotation_get: Tav_display_rotation_get;
     class var FLoaded                       : Boolean;                        // FFmpeg DLLロード済みフラグ
     class var FAvUtil                       : HMODULE;                        // avutil DLLハンドル
     class var FAvCodec                      : HMODULE;                        // avcodec DLLハンドル
@@ -348,6 +361,7 @@ type
     class var av_packet_alloc               : Tav_packet_alloc;               // AVPacketを確保する関数
     class var av_packet_free                : Tav_packet_free;                // AVPacketを解放する関数
     class var av_packet_unref               : Tav_packet_unref;               // AVPacketの参照を解放する関数
+    class var av_packet_side_data_get       : Tav_packet_side_data_get;       // side data 配列から指定種別を探す関数
     class var av_frame_alloc                : Tav_frame_alloc;                // AVFrameを確保する関数
     class var av_frame_free                 : Tav_frame_free;                 // AVFrameを解放する関数
     class var av_frame_get_buffer           : Tav_frame_get_buffer;           // AVFrame用バッファを確保する関数
@@ -475,6 +489,8 @@ begin
   av_hwframe_transfer_data := Tav_hwframe_transfer_data(LoadProc(FAvUtil,
     'av_hwframe_transfer_data'));
   av_buffer_unref := Tav_buffer_unref(LoadProc(FAvUtil, 'av_buffer_unref'));
+  av_display_rotation_get := Tav_display_rotation_get(LoadProc(FAvUtil,
+    'av_display_rotation_get'));
   av_channel_layout_default := Tav_channel_layout_default(LoadProc(FAvUtil, 'av_channel_layout_default'));
   av_channel_layout_copy := Tav_channel_layout_copy(LoadProc(FAvUtil, 'av_channel_layout_copy'));
   av_channel_layout_uninit := Tav_channel_layout_uninit(LoadProc(FAvUtil, 'av_channel_layout_uninit'));
@@ -502,6 +518,8 @@ begin
   av_packet_alloc := Tav_packet_alloc(LoadProc(FAvCodec, 'av_packet_alloc'));
   av_packet_free := Tav_packet_free(LoadProc(FAvCodec, 'av_packet_free'));
   av_packet_unref := Tav_packet_unref(LoadProc(FAvCodec, 'av_packet_unref'));
+  av_packet_side_data_get := Tav_packet_side_data_get(LoadProc(FAvCodec,
+    'av_packet_side_data_get'));
 
   sws_getContext := Tsws_getContext(LoadProc(FSwScale, 'sws_getContext'));
   sws_scale := Tsws_scale(LoadProc(FSwScale, 'sws_scale'));

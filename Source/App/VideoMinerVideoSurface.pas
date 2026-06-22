@@ -414,14 +414,14 @@ begin
   if (FBitmap.Width <> Width) or (FBitmap.Height <> Height) then
     FBitmap.SetSize(Width, Height);
 
+  Buffer := FBitmap.ScanLine[0];
   if Height > 1 then
-    BufferStride := Abs(NativeInt(FBitmap.ScanLine[1]) - NativeInt(FBitmap.ScanLine[0]))
+    BufferStride := NativeInt(FBitmap.ScanLine[1]) - NativeInt(Buffer)
   else
     BufferStride := Width * 4;
 
-  Buffer := FBitmap.ScanLine[Height - 1];
   FAlphaCompositeDirty := True;
-  Result := (Buffer <> nil) and (BufferStride > 0);
+  Result := (Buffer <> nil) and (BufferStride <> 0);
 end;
 
 function TVideoMinerVideoSurface.CurrentFrameCornersMostlyDark: Boolean;
