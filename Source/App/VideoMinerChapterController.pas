@@ -42,6 +42,7 @@ type
     procedure SaveLoopPlaybackPosition;
     procedure SaveManualChapterState;
     procedure ToggleCheckClick(Sender: TObject);
+    procedure ToggleManualChapterAt(PositionMs: Integer);
     property Manager: TVideoMinerChapterManager read FManager;
     property OnConfigureLoop: TVideoMinerChapterPositionProc
       read FOnConfigureLoop write FOnConfigureLoop;
@@ -233,6 +234,16 @@ begin
 
   FManager.ToggleCheckEnabled;
   RefreshOverlay;
+end;
+
+procedure TVideoMinerChapterController.ToggleManualChapterAt(PositionMs: Integer);
+begin
+  if (FManager = nil) or (FMediaSession.SeekMaxMs <= 0) then
+    Exit;
+
+  if not FManager.DeleteManualChapterAt(PositionMs, FMediaSession.SeekMaxMs) then
+    FManager.AddManualChapter(PositionMs, FMediaSession.SeekMaxMs);
+  ChapterStateChanged(True);
 end;
 
 end.

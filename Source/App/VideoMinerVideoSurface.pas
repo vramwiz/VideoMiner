@@ -35,6 +35,7 @@ type
     FPendingSurfaceClick    : Boolean;                           // ダブルクリック判定待ちの単クリックがあるか
     FSurfaceClickArmed      : Boolean;                           // 現在の押下が単クリック候補か
     FSurfaceClickTimer      : TTimer;                            // ダブルクリック猶予後に再生切替を発火するタイマー
+    FSuppressSurfaceClickUp : Boolean;                           // ダブルクリック成立後の MouseUp で単クリック扱いしないか
     FOnBossExitClick        : TNotifyEvent;                      // 偽装画面の解除ボタンが押された通知先
     FOnBossGesture          : TNotifyEvent;                      // ボスが来たジェスチャー成立の通知先
     FOnAddChapterClick      : TNotifyEvent;                      // チャプター追加ボタンの通知先
@@ -49,7 +50,7 @@ type
     FOnNavigatePreviousClick: TNotifyEvent;                      // 前動画ボタンの通知先
     FOnPlaybackRateClick    : TNotifyEvent;                      // 再生速度ボタンの通知先
     FOnPlayPauseClick       : TNotifyEvent;                      // 再生/一時停止ボタンまたは単クリックの通知先
-    FOnThumbnailBrowserClick: TNotifyEvent;                      // サムネイル一覧表示を求める右クリック通知先
+    FOnToggleChapterClick   : TVideoMinerOverlaySeekEvent;       // 動画面右クリックのチャプタートグル通知先
     FOnSeek                 : TVideoMinerOverlaySeekEvent;       // シークバー操作の通知先
     FOnSeekByWheel          : TVideoMinerOverlaySeekEvent;       // シークバー上ホイール操作の通知先
     FOnSeekHoverPreview     : TVideoMinerOverlaySeekHoverEvent;  // シークバー hover プレビュー要求先
@@ -258,7 +259,7 @@ type
       write SetOnNavigatePreviousClick;
     property OnPlaybackRateClick: TNotifyEvent read FOnPlaybackRateClick write SetOnPlaybackRateClick;
     property OnPlayPauseClick: TNotifyEvent read FOnPlayPauseClick write SetOnPlayPauseClick;
-    property OnThumbnailBrowserClick: TNotifyEvent read FOnThumbnailBrowserClick write FOnThumbnailBrowserClick;
+    property OnToggleChapterClick: TVideoMinerOverlaySeekEvent read FOnToggleChapterClick write FOnToggleChapterClick;
     property OnSeek: TVideoMinerOverlaySeekEvent read FOnSeek write SetOnSeek;
     property OnSeekByWheel: TVideoMinerOverlaySeekEvent read FOnSeekByWheel write SetOnSeekByWheel;
     property OnSeekHoverPreview: TVideoMinerOverlaySeekHoverEvent read FOnSeekHoverPreview
@@ -364,6 +365,7 @@ begin
     Exit;
 
   CancelPendingSurfaceClick;
+  FSuppressSurfaceClickUp := True;
   if Assigned(FOnFullScreenClick) then
     FOnFullScreenClick(Self);
 end;
@@ -372,6 +374,7 @@ procedure TVideoMinerVideoSurface.CancelPendingSurfaceClick;
 begin
   FPendingSurfaceClick := False;
   FSurfaceClickArmed := False;
+  FSuppressSurfaceClickUp := False;
   if FSurfaceClickTimer <> nil then
     FSurfaceClickTimer.Enabled := False;
 end;
@@ -991,6 +994,8 @@ end;
 
 procedure TVideoMinerVideoSurface.MouseDown(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
+var
+  TogglePositionMs: Integer;
 begin
   inherited MouseDown(Button, Shift, X, Y);
   if FBossMode then
@@ -1002,14 +1007,24 @@ begin
   if Button = mbRight then
   begin
     CancelPendingSurfaceClick;
-    if Assigned(FOnThumbnailBrowserClick) then
-      FOnThumbnailBrowserClick(Self);
+    if FSeekBar <> nil then
+    begin
+      FSeekBar.UpdateLayout(SeekBarLayoutRect);
+      if FSeekBar.HoverPositionFromPoint(Point(X, Y), TogglePositionMs) and
+         Assigned(FOnToggleChapterClick) then
+        FOnToggleChapterClick(Self, TogglePositionMs);
+    end;
     Exit;
   end;
 
   if Button = mbLeft then
   begin
     CancelPendingSurfaceClick;
+    if ssDouble in Shift then
+    begin
+      FSuppressSurfaceClickUp := True;
+      Exit;
+    end;
     FSurfaceClickArmed := CanStartSurfaceClick(Point(X, Y));
   end;
 
@@ -1162,6 +1177,15 @@ begin
     if (Button = mbLeft) and PtInRect(FBossExitButtonRect, Point(X, Y)) and
        Assigned(FOnBossExitClick) then
       FOnBossExitClick(Self);
+    Exit;
+  end;
+
+  if (Button = mbLeft) and FSuppressSurfaceClickUp then
+  begin
+    FSuppressSurfaceClickUp := False;
+    FSurfaceClickArmed := False;
+    FPanning := False;
+    MouseCapture := False;
     Exit;
   end;
 

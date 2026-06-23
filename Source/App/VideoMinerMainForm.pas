@@ -271,7 +271,6 @@ begin
   FThumbnailBrowserController := TVideoMinerThumbnailBrowserController.Create(Self,
     FVideoView.SurfaceControl, FMediaList, FMediaSession);
   FThumbnailBrowserController.OnOpenFile := LoadVideoFile;
-  FVideoView.OnThumbnailBrowserClick := FThumbnailBrowserController.OpenFromSurfaceClick;
   FSeekHoverPreviewController := TVideoMinerSeekHoverPreviewController.Create(Self,
     FVideoView, FSeekHoverPreviewDecoder);
   FVideoView.OnSeekHoverPreview := FSeekHoverPreviewController.SeekHoverPreview;
@@ -299,6 +298,7 @@ begin
   FCommandController.OnCopyCurrentFrame := CopyCurrentFrameToClipboard;
   FCommandController.OnDeleteChapter := FChapterController.DeleteChapterClick;
   FCommandController.OnEndActionCycle := EndActionOverlayClick;
+  FCommandController.OnToggleChapter := FChapterController.ToggleManualChapterAt;
   FCommandController.OnNavigate := FNavigationController.NavigateBy;
   FCommandController.OnOpenDialog := OpenFromDialog;
   FCommandController.OnPlaybackActiveOrPending := PlaybackActiveOrPending;

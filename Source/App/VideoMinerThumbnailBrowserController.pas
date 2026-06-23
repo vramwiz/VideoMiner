@@ -33,8 +33,6 @@ type
     procedure AdjustResizeEdges;
     // 現在の media list を一覧へ反映する
     procedure RefreshMediaList;
-    // 右クリック等で、閉じている場合だけ一覧を開く
-    procedure OpenFromSurfaceClick(Sender: TObject);
     // 一覧モードの表示/非表示を切り替える
     procedure Toggle;
     // 一覧モードを閉じる
@@ -97,12 +95,6 @@ procedure TVideoMinerThumbnailBrowserController.RefreshMediaList;
 begin
   if FBrowser <> nil then
     FBrowser.SetMediaList(FMediaList);
-end;
-
-procedure TVideoMinerThumbnailBrowserController.OpenFromSurfaceClick(Sender: TObject);
-begin
-  if (FBrowser <> nil) and (not FBrowser.Visible) then
-    Toggle;
 end;
 
 procedure TVideoMinerThumbnailBrowserController.Toggle;

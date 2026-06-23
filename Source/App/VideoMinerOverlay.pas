@@ -1664,13 +1664,21 @@ procedure TVideoMinerOverlaySeekBar.DrawChapterMarkers(Canvas: TCanvas;
   const Track: TRect);
 var
   Chapter: TVideoMinerOverlayChapter;
+  LineBottom: Integer;
+  LineTop: Integer;
   MarkerColor: TColor;
   MarkerX: Integer;
   Ratio: Double;
+  TipY: Integer;
+  TriangleBaseY: Integer;
 begin
   if (FMaxMs <= 0) or Track.IsEmpty then
     Exit;
 
+  LineTop := Track.Top - 2;
+  LineBottom := Track.Bottom + 6;
+  TriangleBaseY := Track.Bottom + 15;
+  TipY := Track.Bottom + 5;
   for Chapter in FChapters do
   begin
     Ratio := Chapter.PositionMs / FMaxMs;
@@ -1679,11 +1687,11 @@ begin
     MarkerColor := ChapterColor(Chapter.Severity);
     Canvas.Brush.Color := MarkerColor;
     Canvas.Pen.Color := MarkerColor;
-    Canvas.Polygon([Point(Bounds.Left + MarkerX, Bounds.Top + Track.Top - 9),
-      Point(Bounds.Left + MarkerX - 5, Bounds.Top + Track.Top - 1),
-      Point(Bounds.Left + MarkerX + 5, Bounds.Top + Track.Top - 1)]);
-    Canvas.Rectangle(Bounds.Left + MarkerX - 2, Bounds.Top + Track.Top - 1,
-      Bounds.Left + MarkerX + 3, Bounds.Top + Track.Bottom + 10);
+    Canvas.Rectangle(Bounds.Left + MarkerX - 1, Bounds.Top + LineTop,
+      Bounds.Left + MarkerX + 2, Bounds.Top + LineBottom);
+    Canvas.Polygon([Point(Bounds.Left + MarkerX, Bounds.Top + TipY),
+      Point(Bounds.Left + MarkerX - 5, Bounds.Top + TriangleBaseY),
+      Point(Bounds.Left + MarkerX + 5, Bounds.Top + TriangleBaseY)]);
   end;
 end;
 

@@ -17,6 +17,8 @@ type
   TVideoMinerCommandBoolFunc = function: Boolean of object;
   // 前後移動や相対シークの差分値を渡すコマンド
   TVideoMinerCommandDeltaProc = procedure(Delta: Integer) of object;
+  // 指定位置 ms を渡すコマンド
+  TVideoMinerCommandPositionProc = procedure(PositionMs: Integer) of object;
   // 指定位置へシークし、必要なら再生状態の復元可否も渡すコマンド
   TVideoMinerCommandSeekProc = procedure(PositionMs: Integer;
     ResumeIfPlaying: Boolean) of object;
@@ -31,6 +33,7 @@ type
     FOnCopyCurrentFrame        : TVideoMinerCommandProc;        // 現在フレームコピーの委譲先
     FOnDeleteChapter           : TNotifyEvent;                  // 現在位置付近のチャプター削除の委譲先
     FOnEndActionCycle          : TNotifyEvent;                  // 終端動作切り替えの委譲先
+    FOnToggleChapter           : TVideoMinerCommandPositionProc; // 指定位置の手動チャプタートグルの委譲先
     FOnNavigate                : TVideoMinerCommandDeltaProc;   // 前後ファイル移動の委譲先
     FOnOpenDialog              : TVideoMinerCommandProc;        // ファイル選択ダイアログ表示の委譲先
     FOnPlaybackActiveOrPending : TVideoMinerCommandBoolFunc;    // 再生中または再開待ちかを問い合わせる委譲先
@@ -114,6 +117,8 @@ type
     procedure SkipForwardClick(Sender: TObject);
     // 全画面切り替えをアプリ側へ委譲する
     procedure ToggleFullScreen;
+    // 動画面右クリックから現在位置の手動チャプターをトグルする
+    procedure ToggleChapterClick(Sender: TObject; PositionMs: Integer);
     // 90% セーフエリア確認枠切り替えをアプリ側へ委譲する
     procedure ToggleSafeArea;
     // ミュート状態を切り替え、表示と設定保存へ反映する
@@ -132,6 +137,7 @@ type
     property OnCopyCurrentFrame: TVideoMinerCommandProc read FOnCopyCurrentFrame write FOnCopyCurrentFrame;
     property OnDeleteChapter: TNotifyEvent read FOnDeleteChapter write FOnDeleteChapter;
     property OnEndActionCycle: TNotifyEvent read FOnEndActionCycle write FOnEndActionCycle;
+    property OnToggleChapter: TVideoMinerCommandPositionProc read FOnToggleChapter write FOnToggleChapter;
     property OnNavigate: TVideoMinerCommandDeltaProc read FOnNavigate write FOnNavigate;
     property OnOpenDialog: TVideoMinerCommandProc read FOnOpenDialog write FOnOpenDialog;
     property OnPlaybackActiveOrPending: TVideoMinerCommandBoolFunc
@@ -182,6 +188,7 @@ begin
   FVideoView.OnNavigatePreviousClick := NavigatePreviousClick;
   FVideoView.OnPlaybackRateClick := PlaybackRateClick;
   FVideoView.OnPlayPauseClick := PlayPauseClick;
+  FVideoView.OnToggleChapterClick := ToggleChapterClick;
   FVideoView.OnSeek := Seek;
   FVideoView.OnSeekByWheel := SeekByWheel;
   FVideoView.OnSkipBackwardClick := SkipBackwardClick;
@@ -405,6 +412,13 @@ procedure TVideoMinerCommandController.ToggleFullScreen;
 begin
   if Assigned(FOnToggleFullScreen) then
     FOnToggleFullScreen;
+end;
+
+procedure TVideoMinerCommandController.ToggleChapterClick(Sender: TObject;
+  PositionMs: Integer);
+begin
+  if Assigned(FOnToggleChapter) then
+    FOnToggleChapter(PositionMs);
 end;
 
 procedure TVideoMinerCommandController.ToggleSafeArea;

@@ -42,6 +42,8 @@ type
       Source: TVideoMinerOverlayChapterSource): Integer;
     // 現在の Check 状態で対象チャプターを表示するか判定する
     function ChapterVisible(const Chapter: TVideoMinerOverlayChapter): Boolean;
+    // 指定位置に近い手動チャプターを許容距離内で削除する
+    function DeleteNearestManualChapterWithin(PositionMs, MaxMs, NearMs: Integer): Boolean;
     // ループ区間の開始境界を、現在位置より前の表示チャプターから求める
     function LoopSegmentStartPositionMs(PositionMs, LastPositionMs: Integer): Integer;
     // ループ区間の終了境界を、現在位置より後の表示チャプターから求める
@@ -59,6 +61,8 @@ type
     procedure AddManualChapter(PositionMs, MaxMs: Integer);
     // 指定位置に最も近い手動チャプターを削除する
     function DeleteNearestManualChapter(PositionMs, MaxMs: Integer): Boolean;
+    // 指定位置に重なっている手動チャプターを削除する
+    function DeleteManualChapterAt(PositionMs, MaxMs: Integer): Boolean;
     // Check ON/OFF を切り替え、OFF では自動チェック継続状態を初期化する
     function ToggleCheckEnabled: Boolean;
     // 黒フレーム継続を自動チェックし、必要なら候補チャプターを追加する
@@ -118,6 +122,7 @@ const
   FRAME_DIFF_MAX_GAP_MS      = 250;   // フレーム差分比較を継続する最大間隔 ms
   NAVIGATION_IGNORE_NEAR_MS  = 300;   // 現在位置近くのチャプターを移動先から外す範囲 ms
   MANUAL_DELETE_NEAR_MS      = 3000;  // 手動チャプター削除対象として許容する距離 ms
+  MANUAL_TOGGLE_NEAR_MS      = 300;   // 右クリックトグルで同じ位置とみなす距離 ms
 
 constructor TVideoMinerChapterManager.Create;
 begin
@@ -177,6 +182,20 @@ end;
 
 function TVideoMinerChapterManager.DeleteNearestManualChapter(
   PositionMs, MaxMs: Integer): Boolean;
+begin
+  Result := DeleteNearestManualChapterWithin(PositionMs, MaxMs,
+    MANUAL_DELETE_NEAR_MS);
+end;
+
+function TVideoMinerChapterManager.DeleteManualChapterAt(
+  PositionMs, MaxMs: Integer): Boolean;
+begin
+  Result := DeleteNearestManualChapterWithin(PositionMs, MaxMs,
+    MANUAL_TOGGLE_NEAR_MS);
+end;
+
+function TVideoMinerChapterManager.DeleteNearestManualChapterWithin(
+  PositionMs, MaxMs, NearMs: Integer): Boolean;
 var
   BestDelta: Integer;
   BestIndex: Integer;
@@ -203,7 +222,7 @@ begin
     end;
   end;
 
-  if (BestIndex < 0) or (BestDelta > MANUAL_DELETE_NEAR_MS) then
+  if (BestIndex < 0) or (BestDelta > NearMs) then
     Exit;
 
   for I := BestIndex to High(FChapters) - 1 do
