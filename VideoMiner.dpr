@@ -149,11 +149,11 @@ begin
   StepWatch := TStopwatch.StartNew;
 {$ENDIF}
   if ParamCount > 0 then
-    VideoMinerForm.OpenAndPlayFile(ParamStr(1))
+    VideoMinerForm.QueueStartupOpenFile(ParamStr(1), True)
   else
-    VideoMinerForm.OpenRememberedFile;
+    VideoMinerForm.QueueStartupOpenRemembered;
 {$IFDEF DEBUG}
-  WriteVideoMinerSlowLog(Format('startup initial_open_ms=%.3f total_ms=%.3f',
+  WriteVideoMinerSlowLog(Format('startup initial_open_queue_ms=%.3f total_ms=%.3f',
     [StepWatch.Elapsed.TotalMilliseconds, StartupWatch.Elapsed.TotalMilliseconds]));
 {$ENDIF}
   try

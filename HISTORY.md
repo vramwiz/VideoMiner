@@ -1342,3 +1342,17 @@ VideoRotationOverride=auto
   - Win64 Debug: 成功、警告 0 / エラー 0。
   - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
 
+## 2026-06-23 起動時ファイル読み込みの2段階化
+- 目的:
+  - 起動直後に前回ファイルや引数ファイルの読み込みまで同期実行すると、フォーム表示まで待たされて見える。
+  - 実際の読み込み時間を完全に消すのではなく、まず基本フォームを表示してからファイル読み込みへ進め、体感速度を上げる。
+- 実装:
+  - `VideoMiner.dpr` で `Application.Run` 前に `OpenAndPlayFile` / `OpenRememberedFile` を直接呼ぶ処理をやめた。
+  - `TVideoMinerMainForm.QueueStartupOpenFile` / `QueueStartupOpenRemembered` を追加し、起動後 open を予約する形にした。
+  - `WM_VM_STARTUP_OPEN` を追加し、メッセージループ開始後に前回ファイルまたは引数ファイルを読み込むようにした。
+  - 起動後の読み込み中は `Loading last video...` / `Loading video...` を表示する。
+- 確認:
+  - Win64 Release: 成功、エラー 0。
+  - 起動後、先に `VideoMiner - No video loaded` が表示され、その後 `Loading last video...`、動画タイトル、動画情報へ段階的に切り替わることを確認した。
+  - 実測例では約 426ms で基本フォーム表示、約 543ms で loading 表示、約 1016ms で動画タイトル表示へ進んだ。
+

@@ -23,6 +23,7 @@ uses
 
 const
   WM_VM_OPEN_PENDING = WM_APP + 1; // 他プロセスから受けたファイルを安全なタイミングで開く独自メッセージ
+  WM_VM_STARTUP_OPEN = WM_APP + 2; // フォーム表示後に起動時ファイルを開く独自メッセージ
 
 type
   TVideoMinerMainForm = class(TForm)
@@ -89,6 +90,10 @@ type
     FThumbnailBrowserController      : TVideoMinerThumbnailBrowserController; // 同一フォルダ内動画の一覧表示制御
     FSafeAreaVisible                 : Boolean;                         // 90% セーフエリア確認枠を表示中か
     FShortcuts                       : TShortcutAction;                 // キーボードショートカット登録先
+    FStartupOpenAutoPlay             : Boolean;                         // 起動後に開くファイルを自動再生するか
+    FStartupOpenFile                 : string;                          // 起動後に開く指定ファイル
+    FStartupOpenRemembered           : Boolean;                         // 起動後に前回ファイルを復元するか
+    FStartupOpenTimer                : TTimer;                          // 初回描画後に起動時 open を遅延実行するタイマー
     FTitleIcon                       : TImage;                          // 独自タイトルバー左端のアイコン
     FFrameGuideController            : TVideoMinerFrameGuideController; // hover 用フォーム枠制御
     // 独自タイトルバー左端のアプリアイコンを作る
@@ -158,6 +163,8 @@ type
     function LoopStartPositionMs: Integer;
     // 指定位置から再生を開始する
     procedure StartPlaybackAtMs(PositionMs: Integer; FrameAlreadyShown: Boolean = False);
+    // 起動時 open を初回描画後に実行する
+    procedure StartupOpenTimer(Sender: TObject);
     // シーク後の遅延再生再開を処理する
     procedure RestartPlaybackTimer(Sender: TObject);
     // 終端到達時の停止/ループ/次動画動作を処理する
@@ -172,6 +179,8 @@ type
     procedure WMNCCalcSize(var Message: TMessage); message WM_NCCALCSIZE;
     // 保留中の open キュー処理を実行する
     procedure WMOpenPending(var Message: TMessage); message WM_VM_OPEN_PENDING;
+    // 起動時のファイル読み込みをフォーム表示後に実行する
+    procedure WMStartupOpen(var Message: TMessage); message WM_VM_STARTUP_OPEN;
     // 通常表示時のサイズ変更を window controller へ通知する
     procedure WMSize(var Message: TWMSize); message WM_SIZE;
     // VCL のフォーカス移動処理より先に Tab を一覧切り替えとして拾う
@@ -188,6 +197,10 @@ type
     function OpenAndPlayFile(const FileName: string): Boolean;
     // 設定に残っている前回ファイルを開く
     function OpenRememberedFile: Boolean;
+    // 起動後に指定ファイルを開くよう予約する
+    procedure QueueStartupOpenFile(const FileName: string; AutoPlay: Boolean);
+    // 起動後に前回ファイルを開くよう予約する
+    procedure QueueStartupOpenRemembered;
   end;
 
 var
@@ -328,6 +341,10 @@ begin
   FRestartPlaybackTimer.Enabled := False;
   FRestartPlaybackTimer.Interval := SEEK_RESTART_DELAY_MS;
   FRestartPlaybackTimer.OnTimer := RestartPlaybackTimer;
+  FStartupOpenTimer := TTimer.Create(Self);
+  FStartupOpenTimer.Enabled := False;
+  FStartupOpenTimer.Interval := 120;
+  FStartupOpenTimer.OnTimer := StartupOpenTimer;
   FCurrentFileReloadController :=
     TVideoMinerCurrentFileReloadController.Create(FMediaSession);
   FCurrentFileReloadController.OnReload := LoadVideoFile;
@@ -390,6 +407,8 @@ begin
     FVideoView.PlaybackActive := False;
   if FRestartPlaybackTimer <> nil then
     FRestartPlaybackTimer.Enabled := False;
+  if FStartupOpenTimer <> nil then
+    FStartupOpenTimer.Enabled := False;
   if FCurrentFileReloadController <> nil then
     FCurrentFileReloadController.Stop;
   if FAudioPlayback <> nil then
@@ -919,6 +938,23 @@ begin
   Result := LoadVideoFile(FileName, False);
 end;
 
+procedure TVideoMinerMainForm.QueueStartupOpenFile(const FileName: string;
+  AutoPlay: Boolean);
+begin
+  FStartupOpenFile := FileName;
+  FStartupOpenAutoPlay := AutoPlay;
+  FStartupOpenRemembered := False;
+  PostMessage(Handle, WM_VM_STARTUP_OPEN, 0, 0);
+end;
+
+procedure TVideoMinerMainForm.QueueStartupOpenRemembered;
+begin
+  FStartupOpenFile := '';
+  FStartupOpenAutoPlay := False;
+  FStartupOpenRemembered := True;
+  PostMessage(Handle, WM_VM_STARTUP_OPEN, 0, 0);
+end;
+
 procedure TVideoMinerMainForm.PlayFromCurrentPosition;
 var
   FrameShown: Boolean;
@@ -1234,6 +1270,44 @@ begin
   if FExternalOpenController <> nil then
     FExternalOpenController.ProcessOpenQueue;
   Message.Result := 1;
+end;
+
+procedure TVideoMinerMainForm.WMStartupOpen(var Message: TMessage);
+begin
+  if FStartupOpenTimer <> nil then
+  begin
+    FStartupOpenTimer.Enabled := False;
+    FStartupOpenTimer.Enabled := True;
+  end;
+  Message.Result := 1;
+end;
+
+procedure TVideoMinerMainForm.StartupOpenTimer(Sender: TObject);
+var
+  AutoPlay: Boolean;
+  FileName: string;
+  OpenRemembered: Boolean;
+begin
+  if FStartupOpenTimer <> nil then
+    FStartupOpenTimer.Enabled := False;
+
+  FileName := FStartupOpenFile;
+  AutoPlay := FStartupOpenAutoPlay;
+  OpenRemembered := FStartupOpenRemembered;
+  FStartupOpenFile := '';
+  FStartupOpenAutoPlay := False;
+  FStartupOpenRemembered := False;
+
+  if OpenRemembered then
+  begin
+    FInfoController.SetStatusCaption('Loading last video...');
+    OpenRememberedFile;
+  end
+  else if FileName <> '' then
+  begin
+    FInfoController.SetStatusCaption('Loading video...');
+    LoadVideoFile(FileName, AutoPlay);
+  end;
 end;
 
 procedure TVideoMinerMainForm.RestartPlaybackTimer(Sender: TObject);
