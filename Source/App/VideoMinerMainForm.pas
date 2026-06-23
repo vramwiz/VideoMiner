@@ -66,6 +66,7 @@ type
   private
     FDecoder                         : TFFmpegDecoder;                  // 現在再生に使う動画デコーダ
     FPreviewDecoder                  : TFFmpegDecoder;                  // シークや先読み表示に使う補助デコーダ
+    FSeekHoverPreviewDecoder         : TFFmpegDecoder;                  // シークバー hover プレビュー専用デコーダ
     FAudioPlayback                   : TVideoMinerAudioPlayback;        // 音声出力と音量状態の管理
     FMediaList                       : TVideoMinerMediaList;            // 同じフォルダ内の動画一覧
     FMediaLoadController             : TVideoMinerMediaLoadController;  // 動画読み込み前後の状態反映
@@ -177,8 +178,6 @@ type
     procedure CMDialogKey(var Message: TCMDialogKey); message CM_DIALOGKEY;
     // 指定ミリ秒位置のフレームを表示する
     function ShowFrameAtMs(const PositionMs: Integer): Boolean;
-    // 入力を先頭から読み直し、最初にデコードできる映像フレームを表示する
-    function ShowFirstFrameFromStart: Boolean;
   protected
     // 枠なしフォーム用の作成パラメータを設定する
     procedure CreateParams(var Params: TCreateParams); override;
@@ -241,6 +240,7 @@ begin
   FExternalOpenController.OnOpenAndPlay := OpenAndPlayFile;
   FDecoder := TFFmpegDecoder.Create;
   FPreviewDecoder := TFFmpegDecoder.Create;
+  FSeekHoverPreviewDecoder := TFFmpegDecoder.Create;
   FAudioPlayback := TVideoMinerAudioPlayback.Create;
   FMediaList := TVideoMinerMediaList.Create;
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
@@ -260,7 +260,7 @@ begin
   FThumbnailBrowserController.OnOpenFile := LoadVideoFile;
   FVideoView.OnThumbnailBrowserClick := FThumbnailBrowserController.OpenFromSurfaceClick;
   FSeekHoverPreviewController := TVideoMinerSeekHoverPreviewController.Create(Self,
-    FVideoView, FPreviewDecoder);
+    FVideoView, FSeekHoverPreviewDecoder);
   FVideoView.OnSeekHoverPreview := FSeekHoverPreviewController.SeekHoverPreview;
   FVideoView.OnSeekHoverPreviewEnd := FSeekHoverPreviewController.SeekHoverPreviewEnd;
 {$IFDEF DEBUG}
@@ -414,6 +414,7 @@ begin
   FMediaList.Free;
   FMediaSession.Free;
   FAudioPlayback.Free;
+  FSeekHoverPreviewDecoder.Free;
   FPreviewDecoder.Free;
   FDecoder.Free;
   FTitleIcon.Free;
@@ -482,55 +483,42 @@ var
   ShownPositionMs: Integer;
 begin
   Result := False;
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format(
+    'main_show_frame_at_begin requested_ms=%d current_ms=%d seek_ms=%d',
+    [PositionMs, FMediaSession.CurrentVideoPositionMs,
+     FMediaSession.SeekPositionMs]));
+{$ENDIF}
   if (FMediaSession.VideoFile = '') or (FDecoder = nil) then
+  begin
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format(
+      'main_show_frame_at_skip requested_ms=%d video_empty=%s decoder_nil=%s',
+      [PositionMs, BoolToStr(FMediaSession.VideoFile = '', True),
+       BoolToStr(FDecoder = nil, True)]));
+{$ENDIF}
     Exit;
+  end;
 
   if not FPlaybackController.ShowFrameNearMs(PositionMs, FMediaSession.SeekMaxMs,
     ShownPositionMs, ErrorMessage) then
   begin
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format(
+      'main_show_frame_at_failed requested_ms=%d err="%s"',
+      [PositionMs, ErrorMessage]));
+{$ENDIF}
     FInfoController.SetStatusCaption('Failed to decode frame: ' + ErrorMessage);
     Exit;
   end;
 
   FMediaSession.CurrentVideoPositionMs := ShownPositionMs;
   FInfoController.UpdateInfo;
-  Result := True;
-end;
-
-function TVideoMinerMainForm.ShowFirstFrameFromStart: Boolean;
-var
-  DecodedPositionMs: Integer;
-  ErrorMessage: string;
-  OpenInfo: TVideoInfo;
-begin
-  Result := False;
-  if (FMediaSession.VideoFile = '') or (FPreviewDecoder = nil) or (FVideoView = nil) then
-    Exit;
-
-  FPreviewDecoder.Close;
-  if not FPreviewDecoder.Open(FMediaSession.VideoFile, OpenInfo, ErrorMessage) then
-  begin
-    FInfoController.SetStatusCaption('Failed to reopen preview decoder: ' + ErrorMessage);
-    Exit;
-  end;
-
-  if not FVideoView.ShowNextFrame(FPreviewDecoder, DecodedPositionMs,
-    ErrorMessage) then
-  begin
-    FInfoController.SetStatusCaption('Failed to decode first frame: ' + ErrorMessage);
-    Exit;
-  end;
-
-  FMediaSession.CurrentVideoPositionMs := Max(0, DecodedPositionMs);
-  FUpdatingSeek := True;
-  try
-    FMediaSession.SeekPositionMs := 0;
-  finally
-    FUpdatingSeek := False;
-  end;
-  FInfoController.UpdatePlaybackProgress(0);
-  WriteVideoMinerSlowLog(Format('show_first_frame_from_start decoded_ms=%d',
-    [DecodedPositionMs]));
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format(
+    'main_show_frame_at_done requested_ms=%d shown_ms=%d seek_ms=%d',
+    [PositionMs, ShownPositionMs, FMediaSession.SeekPositionMs]));
+{$ENDIF}
   Result := True;
 end;
 
@@ -1001,11 +989,54 @@ begin
 end;
 
 procedure TVideoMinerMainForm.SeekToMs(PositionMs: Integer; ResumeIfPlaying: Boolean);
+var
+  PreviewInfo: TVideoInfo;
+  ErrorMessage: string;
 begin
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format(
+    'main_seek_to_ms_call requested_ms=%d resume_if_playing=%s current_ms=%d seek_ms=%d max_ms=%d',
+    [PositionMs, BoolToStr(ResumeIfPlaying, True),
+     FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs,
+     FMediaSession.SeekMaxMs]));
+{$ENDIF}
+  if FVideoView <> nil then
+  begin
+    FVideoView.ClearSeekHoverPreview;
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog('main_seek_to_ms clear_seek_hover_preview');
+{$ENDIF}
+  end;
+  if (FPreviewDecoder <> nil) and (FMediaSession.VideoFile <> '') then
+  begin
+    if FPreviewDecoder.Open(FMediaSession.VideoFile, PreviewInfo, ErrorMessage) then
+    begin
+{$IFDEF DEBUG}
+      WriteVideoMinerSlowLog(Format(
+        'main_seek_to_ms reopen_preview ok file="%s" width=%d height=%d',
+        [ExtractFileName(FMediaSession.VideoFile), PreviewInfo.Width, PreviewInfo.Height]));
+{$ENDIF}
+    end
+    else
+    begin
+{$IFDEF DEBUG}
+      WriteVideoMinerSlowLog(Format(
+        'main_seek_to_ms reopen_preview failed file="%s" err="%s"',
+        [ExtractFileName(FMediaSession.VideoFile), ErrorMessage]));
+{$ENDIF}
+    end;
+  end;
   FPlaybackController.SeekToMs(FMediaSession.VideoFile, PositionMs, ResumeIfPlaying,
     FMediaSession.SeekMaxMs, FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs, FSeekGuardTargetMs,
     FSeekGuardRemaining, FUpdatingSeek, FSeeking, FInfoController.SetStatusCaption,
     FInfoController.UpdateInfo);
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format(
+    'main_seek_to_ms_return requested_ms=%d current_ms=%d seek_ms=%d guard_target_ms=%d guard_remaining=%d',
+    [PositionMs, FMediaSession.CurrentVideoPositionMs,
+     FMediaSession.SeekPositionMs, FSeekGuardTargetMs,
+     FSeekGuardRemaining]));
+{$ENDIF}
 end;
 
 procedure TVideoMinerMainForm.SeekByMs(DeltaMs: Integer);
@@ -1036,9 +1067,12 @@ begin
 {$IFDEF DEBUG}
   TotalWatch := TStopwatch.StartNew;
 {$ENDIF}
+  if FPlaybackController <> nil then
+    FPlaybackController.StopForSeek;
   FUpdatingSeek := True;
   try
     FMediaSession.SeekPositionMs := PositionMs;
+    FMediaSession.CurrentVideoPositionMs := PositionMs;
   finally
     FUpdatingSeek := False;
   end;
@@ -1066,10 +1100,28 @@ end;
 
 procedure TVideoMinerMainForm.SeekToFirstFrame;
 begin
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format(
+    'main_seek_first current_ms=%d seek_ms=%d max_ms=%d',
+    [FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs,
+     FMediaSession.SeekMaxMs]));
+{$ENDIF}
+  if FVideoView <> nil then
+  begin
+    FVideoView.ClearFrameCache;
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog('main_seek_first clear_frame_cache');
+{$ENDIF}
+  end;
   if FPlaybackController <> nil then
     FPlaybackController.StopForSeek;
-  if ShowFirstFrameFromStart then
-    Exit;
+  if FVideoView <> nil then
+  begin
+    FVideoView.ClearSeekHoverPreview;
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog('main_seek_first clear_seek_hover_preview');
+{$ENDIF}
+  end;
   SeekToMs(0, False);
 end;
 

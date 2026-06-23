@@ -122,19 +122,28 @@
         <DCCReference Include="Source\App\VideoMinerAudioPlayback.pas"/>
         <DCCReference Include="Source\App\VideoMinerBossGesture.pas"/>
         <DCCReference Include="Source\App\VideoMinerBossOverlay.pas"/>
+        <DCCReference Include="Source\App\VideoMinerChapterController.pas"/>
         <DCCReference Include="Source\App\VideoMinerChapterManager.pas"/>
         <DCCReference Include="Source\App\VideoMinerCommandController.pas"/>
+        <DCCReference Include="Source\App\VideoMinerCurrentFileReloadController.pas"/>
         <DCCReference Include="Source\App\VideoMinerDebugLog.pas"/>
+        <DCCReference Include="Source\App\VideoMinerExternalOpenController.pas"/>
         <DCCReference Include="Source\App\VideoMinerBitmapRotation.pas"/>
         <DCCReference Include="Source\App\VideoMinerFrameCheck.pas"/>
         <DCCReference Include="Source\App\VideoMinerFrameClipboard.pas"/>
+        <DCCReference Include="Source\App\VideoMinerFrameGuideController.pas"/>
+        <DCCReference Include="Source\App\VideoMinerInfoController.pas"/>
+        <DCCReference Include="Source\App\VideoMinerMediaLoadController.pas"/>
         <DCCReference Include="Source\App\VideoMinerMediaOpen.pas"/>
         <DCCReference Include="Source\App\VideoMinerPlaybackController.pas"/>
         <DCCReference Include="Source\App\VideoMinerPlaybackTiming.pas"/>
         <DCCReference Include="Source\App\VideoMinerMediaList.pas"/>
+        <DCCReference Include="Source\App\VideoMinerMediaSession.pas"/>
+        <DCCReference Include="Source\App\VideoMinerNavigationController.pas"/>
         <DCCReference Include="Source\App\VideoMinerOverlay.pas"/>
         <DCCReference Include="Source\App\VideoMinerShortcutBindings.pas"/>
         <DCCReference Include="Source\App\VideoMinerThumbnailBrowser.pas"/>
+        <DCCReference Include="Source\App\VideoMinerThumbnailBrowserController.pas"/>
         <DCCReference Include="Source\App\VideoMinerThumbnailCache.pas"/>
         <DCCReference Include="Source\App\VideoMinerVideoSurface.pas"/>
         <DCCReference Include="Source\App\VideoMinerVideoView.pas"/>
@@ -145,6 +154,7 @@
             <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="Source\App\VideoMinerSettings.pas"/>
+        <DCCReference Include="Source\App\VideoMinerSeekHoverPreviewController.pas"/>
         <DCCReference Include="Source\Lib\DropAgent\DropAgent.pas"/>
         <DCCReference Include="Source\Lib\FolderWatch\FolderWatch.pas"/>
         <DCCReference Include="Source\Lib\ResizeEdges\ResizeEdges.pas"/>

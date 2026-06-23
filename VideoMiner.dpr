@@ -128,8 +128,9 @@ begin
 
 {$IFDEF DEBUG}
   ClearVideoMinerDebugLog('app_start');
-  WriteVideoMinerSlowLog(Format('startup begin param_count=%d mutex_ms=%.3f',
-    [ParamCount, StartupWatch.Elapsed.TotalMilliseconds]));
+  WriteVideoMinerSlowLog(Format(
+    'startup begin exe="%s" param_count=%d mutex_ms=%.3f',
+    [ParamStr(0), ParamCount, StartupWatch.Elapsed.TotalMilliseconds]));
   WriteVideoMinerSlowLog('startup rotation_override=' +
     VideoRotationOverrideToText(GetVideoRotationOverride));
   StepWatch := TStopwatch.StartNew;

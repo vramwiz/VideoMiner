@@ -430,6 +430,8 @@ end;
 
 function TVideoMinerVideoSurface.PrepareBgrx32Frame(Width, Height: Integer;
   out Buffer: Pointer; out BufferStride: Integer): Boolean;
+var
+  Y: Integer;
 begin
   Buffer := nil;
   BufferStride := 0;
@@ -448,6 +450,9 @@ begin
     BufferStride := NativeInt(FBitmap.ScanLine[1]) - NativeInt(Buffer)
   else
     BufferStride := Width * 4;
+
+  for Y := 0 to Height - 1 do
+    FillChar(FBitmap.ScanLine[Y]^, Width * 4, 0);
 
   FAlphaCompositeDirty := True;
   Result := (Buffer <> nil) and (BufferStride <> 0);
@@ -1325,20 +1330,16 @@ begin
 end;
 
 procedure TVideoMinerVideoSurface.Paint;
+var
 {$IFDEF DEBUG}
-var
   PaintWatch: TStopwatch;
-  DebugLogEnabled: Boolean;
 {$ENDIF}
-var
   DrawCanvas: TCanvas;
   DestRect: TRect;
   UsePaintBuffer: Boolean;
 begin
 {$IFDEF DEBUG}
-  DebugLogEnabled := VideoMinerDebugLogEnabled;
-  if DebugLogEnabled then
-    PaintWatch := TStopwatch.StartNew;
+  PaintWatch := TStopwatch.StartNew;
 {$ENDIF}
   if (ClientWidth <= 0) or (ClientHeight <= 0) then
     Exit;
@@ -1434,10 +1435,11 @@ begin
   if UsePaintBuffer then
     Canvas.Draw(0, 0, FPaintBuffer);
 {$IFDEF DEBUG}
-  if DebugLogEnabled then
-    WriteVideoMinerDebugLog(Format('paint width=%d height=%d client_w=%d client_h=%d paint_ms=%.3f',
-      [FBitmap.Width, FBitmap.Height, ClientWidth, ClientHeight,
-       PaintWatch.Elapsed.TotalMilliseconds]));
+  WriteVideoMinerSlowLog(Format(
+    'paint width=%d height=%d client_w=%d client_h=%d dest=%d,%d,%d,%d buffered=%s paint_ms=%.3f',
+    [FBitmap.Width, FBitmap.Height, ClientWidth, ClientHeight,
+     DestRect.Left, DestRect.Top, DestRect.Right, DestRect.Bottom,
+     BoolToStr(UsePaintBuffer, True), PaintWatch.Elapsed.TotalMilliseconds]));
 {$ENDIF}
 end;
 
@@ -1450,8 +1452,13 @@ end;
 procedure TVideoMinerVideoSurface.PresentImmediate;
 begin
   FAlphaCompositeDirty := True;
-  Invalidate;
-  Update;
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format(
+    'surface_present_immediate bitmap=%dx%d client=%dx%d visible=%s handle=%d',
+    [FBitmap.Width, FBitmap.Height, ClientWidth, ClientHeight,
+     BoolToStr(Visible, True), Handle]));
+{$ENDIF}
+  Repaint;
 end;
 
 procedure TVideoMinerVideoSurface.SetSourceHasAlpha(Value: Boolean);

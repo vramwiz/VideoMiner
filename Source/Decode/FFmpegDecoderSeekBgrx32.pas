@@ -32,6 +32,45 @@ uses
   System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegQsvDecode,
   FFmpegStreamInfo, VideoMinerDebugLog;
 
+const
+  FIRST_FRAME_EXACT_TOLERANCE_MS = 5; // 0ms シークで先頭フレームとして許容する誤差
+
+// フレームの表示時刻を、取得できる範囲で最も信頼できる値として返す。
+function DisplayFrameTimestamp(Frame: PAVFrame): Int64;
+begin
+  Result := AV_NOPTS_VALUE;
+  if Frame = nil then
+    Exit;
+
+  if Frame.best_effort_timestamp <> AV_NOPTS_VALUE then
+    Result := Frame.best_effort_timestamp
+  else if Frame.pts <> AV_NOPTS_VALUE then
+    Result := Frame.pts
+  else
+    Result := Frame.pkt_dts;
+end;
+
+// 0ms シーク時に、前回位置から残った遅延フレームを採用しないようにする。
+function AcceptSeekFrame(Stream: PAVStream; PositionMs: Integer;
+  TargetTs, FrameTs: Int64): Boolean;
+var
+  FrameMs: Integer; // フレーム timestamp を ms へ直した値
+begin
+  if PositionMs <= 0 then
+  begin
+    if FrameTs = AV_NOPTS_VALUE then
+    begin
+      Result := True;
+      Exit;
+    end;
+
+    FrameMs := StreamTimestampToMs(Stream, FrameTs);
+    Result := FrameMs <= FIRST_FRAME_EXACT_TOLERANCE_MS;
+    Exit;
+  end;
+
+  Result := (FrameTs <> AV_NOPTS_VALUE) and (FrameTs >= TargetTs);
+end;
 
 // 通常シークと高速シークに共通する BGRX32 取得処理を実行する。
 function DecodeFrameToBgrx32Internal(
@@ -53,7 +92,6 @@ var
   FrameTs: Int64;
   TargetTs: Int64;
   SeekFlags: Integer;
-  AcceptFirstDecodedFrame: Boolean;
   DidTransfer: Boolean;
   TransferErrorMessage: string;
 begin
@@ -79,8 +117,11 @@ begin
   end;
 
   try
-    AcceptFirstDecodedFrame := PositionMs <= 0;
     TargetTs := StreamTimestampFromMs(Stream, PositionMs);
+    TFFmpegApi.av_packet_unref(Packet);
+    TFFmpegApi.av_frame_unref(Frame);
+    if Context.TransferFrame <> nil then
+      TFFmpegApi.av_frame_unref(PAVFrame(Context.TransferFrame));
     SeekFlags := AVSEEK_FLAG_BACKWARD;
     if FastSeek then
       SeekFlags := SeekFlags or AVSEEK_FLAG_ANY;
@@ -102,10 +143,6 @@ begin
     while TFFmpegApi.av_read_frame(FormatContext, Packet) >= 0 do
     begin
       try
-        if Packet.stream_index = Context.StreamIndex then
-        begin
-        end;
-
         if Packet.stream_index <> Context.StreamIndex then
           Continue;
 
@@ -117,9 +154,8 @@ begin
 
         while TFFmpegApi.avcodec_receive_frame(CodecContext, Frame) = 0 do
         begin
-          FrameTs := Frame.pts;
-          if FastSeek or AcceptFirstDecodedFrame or
-             ((FrameTs <> AV_NOPTS_VALUE) and (FrameTs >= TargetTs)) then
+          FrameTs := DisplayFrameTimestamp(Frame);
+          if FastSeek or AcceptSeekFrame(Stream, PositionMs, TargetTs, FrameTs) then
           begin
             ConvertSourceFrame := Frame;
             DidTransfer := False;
@@ -127,12 +163,17 @@ begin
               ConvertSourceFrame, DidTransfer, TransferErrorMessage) then
             begin
               ErrorMessage := 'Failed to transfer video frame: ' + TransferErrorMessage;
+              if DidTransfer and (Context.TransferFrame <> nil) then
+                TFFmpegApi.av_frame_unref(PAVFrame(Context.TransferFrame));
+              TFFmpegApi.av_frame_unref(Frame);
               Exit;
             end;
 {$IFDEF DEBUG}
             WriteVideoMinerSlowLog(Format(
-              'seek_bgrx32_copy frame=%dx%d fmt=%d linesize0=%d data0=%p buffer=%p stride=%d transferred=%s',
-              [ConvertSourceFrame.width, ConvertSourceFrame.height,
+              'seek_bgrx32_copy requested_ms=%d target_ts=%d frame_ts=%d frame_ms=%d fast=%s frame=%dx%d fmt=%d linesize0=%d data0=%p buffer=%p stride=%d transferred=%s',
+              [PositionMs, TargetTs, FrameTs, StreamTimestampToMs(Stream,
+               FrameTs), BoolToStr(FastSeek, True),
+               ConvertSourceFrame.width, ConvertSourceFrame.height,
                ConvertSourceFrame.format, ConvertSourceFrame.linesize[0],
                ConvertSourceFrame.data[0], Buffer, BufferStride,
                BoolToStr(DidTransfer, True)]));
@@ -140,9 +181,19 @@ begin
             CopyFrameToBgrx32Buffer(ConvertSourceFrame, Buffer, BufferStride,
               Context.DirectSwsContext, Context.DirectSwsSrcWidth, Context.DirectSwsSrcHeight,
               Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat);
+            if DidTransfer and (Context.TransferFrame <> nil) then
+              TFFmpegApi.av_frame_unref(PAVFrame(Context.TransferFrame));
+            TFFmpegApi.av_frame_unref(Frame);
             Result := True;
             Exit;
           end;
+{$IFDEF DEBUG}
+          if PositionMs <= 0 then
+            WriteVideoMinerSlowLog(Format(
+              'seek_bgrx32_skip_stale_first frame_ts=%d frame_ms=%d target_ts=%d',
+              [FrameTs, StreamTimestampToMs(Stream, FrameTs), TargetTs]));
+{$ENDIF}
+          TFFmpegApi.av_frame_unref(Frame);
         end;
       finally
         TFFmpegApi.av_packet_unref(Packet);

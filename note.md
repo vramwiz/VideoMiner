@@ -2438,3 +2438,4 @@ VideoRotationOverride=auto
 - 確認:
   - Win64 Debug: 成功、警告 0 / エラー 0。
   - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+

@@ -116,6 +116,8 @@ type
     destructor Destroy; override;
     // 表示フレームと scratch frame を空にする
     procedure Clear;
+    // 次の明示デコード前に表示フレームキャッシュだけを空にする
+    procedure ClearFrameCache;
     // 表示だけを90度ずつ回転し、以降の再生フレームにも反映する
     procedure RotateDisplay90;
     // ボスが来たモード中のヘルプページを前後へ切り替える
@@ -309,6 +311,10 @@ begin
 
   FShownFrameCache.Assign(FSurface.Bitmap);
   FShownFrameCachePosition := PositionMs;
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format('shown_frame_cache_store position_ms=%d size=%dx%d',
+    [PositionMs, FShownFrameCache.Width, FShownFrameCache.Height]));
+{$ENDIF}
 end;
 
 procedure TVideoMinerVideoView.ClearShownFrameCache;
@@ -345,6 +351,11 @@ begin
   end;
 end;
 
+procedure TVideoMinerVideoView.ClearFrameCache;
+begin
+  ClearShownFrameCache;
+end;
+
 procedure TVideoMinerVideoView.RotateDisplay90;
 begin
   FDisplayRotationOffset := (FDisplayRotationOffset + 90) mod 360;
@@ -359,6 +370,10 @@ begin
   if not Result then
     Exit;
 
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format('shown_frame_cache_hit position_ms=%d size=%dx%d',
+    [PositionMs, FShownFrameCache.Width, FShownFrameCache.Height]));
+{$ENDIF}
   FSurface.Bitmap.Assign(FShownFrameCache);
   FSurface.PresentImmediate;
 end;
@@ -373,6 +388,21 @@ procedure TVideoMinerVideoView.PresentImmediate(Bitmap: TBitmap);
 begin
   if FSurface <> nil then
     FSurface.PresentImmediate;
+end;
+
+function FrameSignatureLogText(const Signature: TVideoMinerFrameSignature): string;
+var
+  I: Integer;
+  Sum: Integer;
+begin
+  Sum := 0;
+  for I := Low(Signature.Values) to High(Signature.Values) do
+    Inc(Sum, Signature.Values[I]);
+
+  Result := Format('sum=%d head=%d,%d,%d,%d,%d,%d,%d,%d',
+    [Sum, Signature.Values[0], Signature.Values[1], Signature.Values[2],
+     Signature.Values[3], Signature.Values[4], Signature.Values[5],
+     Signature.Values[6], Signature.Values[7]]);
 end;
 
 procedure TVideoMinerVideoView.SetOnPlayPauseClick(Value: TNotifyEvent);
@@ -658,10 +688,13 @@ var
   Buffer: Pointer;
   BufferStride: Integer;
   EffectiveRotation: Integer;
+{$IFDEF DEBUG}
+  Signature: TVideoMinerFrameSignature;
   BeforeWidth: Integer;
   BeforeHeight: Integer;
   AfterWidth: Integer;
   AfterHeight: Integer;
+{$ENDIF}
 begin
   ErrorMessage := '';
   Result := False;
@@ -688,18 +721,22 @@ begin
     end;
   end;
 
+{$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format(
     'show_frame_decode_begin position_ms=%d present=%s fast=%s',
     [PositionMs, BoolToStr(PresentFrame, True), BoolToStr(FastSeek, True)]));
+{$ENDIF}
   if FastSeek then
     Result := Decoder.DecodeFrameToBgrx32Fast(PositionMs, Buffer,
       BufferStride, ErrorMessage)
   else
     Result := Decoder.DecodeFrameToBgrx32(PositionMs, Buffer, BufferStride,
       ErrorMessage);
+{$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format(
     'show_frame_decode_end position_ms=%d result=%s err="%s"',
     [PositionMs, BoolToStr(Result, True), ErrorMessage]));
+{$ENDIF}
   if not Result then
   begin
     Result := False;
@@ -707,6 +744,7 @@ begin
   end;
 
   EffectiveRotation := DisplayRotationDegrees(Decoder.Info.RotationDegrees);
+{$IFDEF DEBUG}
   if PresentFrame then
   begin
     BeforeWidth := FSurface.Bitmap.Width;
@@ -721,8 +759,10 @@ begin
     'show_frame_rotation position_ms=%d present=%s source_rotation=%d effective_rotation=%d before=%dx%d',
     [PositionMs, BoolToStr(PresentFrame, True), Decoder.Info.RotationDegrees,
      EffectiveRotation, BeforeWidth, BeforeHeight]));
+{$ENDIF}
   if PresentFrame then
     RotateBitmapByDegrees(FSurface.Bitmap, EffectiveRotation);
+{$IFDEF DEBUG}
   if PresentFrame then
   begin
     AfterWidth := FSurface.Bitmap.Width;
@@ -737,10 +777,20 @@ begin
     'show_frame_rotation_done position_ms=%d present=%s effective_rotation=%d after=%dx%d',
     [PositionMs, BoolToStr(PresentFrame, True), EffectiveRotation,
      AfterWidth, AfterHeight]));
+{$ENDIF}
 
   if PresentFrame then
   begin
     PresentImmediate(FSurface.Bitmap);
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format(
+      'show_frame_present_immediate position_ms=%d bitmap=%dx%d',
+      [PositionMs, FSurface.Bitmap.Width, FSurface.Bitmap.Height]));
+    if CurrentFrameSignature(Signature) then
+      WriteVideoMinerSlowLog(Format(
+        'show_frame_signature position_ms=%d %s',
+        [PositionMs, FrameSignatureLogText(Signature)]));
+{$ENDIF}
     CacheShownFrame(PositionMs);
   end;
   Result := True;

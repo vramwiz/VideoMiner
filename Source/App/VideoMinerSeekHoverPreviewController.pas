@@ -7,7 +7,7 @@ interface
 
 uses
   System.Classes, System.Math, System.SysUtils, System.Types, Vcl.ExtCtrls,
-  Vcl.Graphics, FFmpegDecoder, VideoMinerVideoView;
+  Vcl.Graphics, FFmpegDecoder, FFmpegDecoderTypes, VideoMinerVideoView;
 
 type
   TVideoMinerSeekHoverPreviewController = class
@@ -35,6 +35,8 @@ type
     procedure ConfigureMedia(const FileName: string; MaxMs: Integer);
     // hover プレビュー状態を消す
     procedure Clear;
+    // 現在メディアとの対応を切り、hover 用デコーダを閉じる
+    procedure ResetMedia;
     // シークバー hover 位置のプレビュー要求を受ける
     procedure SeekHoverPreview(Sender: TObject; PositionMs: Integer; const Point: TPoint);
     // シークバー hover プレビューを閉じる
@@ -77,11 +79,28 @@ end;
 
 procedure TVideoMinerSeekHoverPreviewController.ConfigureMedia(
   const FileName: string; MaxMs: Integer);
+var
+  ErrorMessage: string;
+  Info: TVideoInfo;
 begin
   Clear;
-  FCurrentFile := FileName;
-  FMaxMs := Max(0, MaxMs);
+  FCurrentFile := '';
+  FMaxMs := 0;
   FLastPositionMs := -1;
+  if FPreviewDecoder <> nil then
+    FPreviewDecoder.Close;
+  if (FileName = '') or (MaxMs <= 0) or (FPreviewDecoder = nil) then
+    Exit;
+
+  if FPreviewDecoder.Open(FileName, Info, ErrorMessage) then
+  begin
+    FCurrentFile := FileName;
+    FMaxMs := Max(0, MaxMs);
+  end
+  else if VideoMinerDebugLogEnabled then
+    WriteVideoMinerDebugLog(Format(
+      'seek_hover_preview_open_failed file="%s" err="%s"',
+      [ExtractFileName(FileName), ErrorMessage]));
 end;
 
 procedure TVideoMinerSeekHoverPreviewController.Clear;
@@ -92,6 +111,16 @@ begin
     FTimer.Enabled := False;
   if FVideoView <> nil then
     FVideoView.ClearSeekHoverPreview;
+end;
+
+procedure TVideoMinerSeekHoverPreviewController.ResetMedia;
+begin
+  Clear;
+  FCurrentFile := '';
+  FMaxMs := 0;
+  FLastPositionMs := -1;
+  if FPreviewDecoder <> nil then
+    FPreviewDecoder.Close;
 end;
 
 procedure TVideoMinerSeekHoverPreviewController.SeekHoverPreview(

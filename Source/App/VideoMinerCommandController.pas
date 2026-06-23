@@ -277,7 +277,9 @@ end;
 
 procedure TVideoMinerCommandController.FirstFrameClick(Sender: TObject);
 begin
+{$IFDEF DEBUG}
   WriteVideoMinerSlowLog('command first_frame source=overlay');
+{$ENDIF}
   SeekToFirstFrame;
 end;
 
@@ -344,7 +346,9 @@ end;
 
 procedure TVideoMinerCommandController.SeekToFirstFrame;
 begin
+{$IFDEF DEBUG}
   WriteVideoMinerSlowLog('command first_frame source=shortcut_or_delegate');
+{$ENDIF}
   if Assigned(FOnSeekToFirstFrame) then
     FOnSeekToFirstFrame;
 end;

@@ -180,7 +180,7 @@ begin
   if FChapterController <> nil then
     FChapterController.Clear;
   if FSeekHoverPreviewController <> nil then
-    FSeekHoverPreviewController.Clear;
+    FSeekHoverPreviewController.ResetMedia;
   if FVideoView <> nil then
     FVideoView.Clear;
 
