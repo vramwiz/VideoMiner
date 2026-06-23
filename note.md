@@ -862,6 +862,9 @@ powershell -ExecutionPolicy Bypass -File tools\InstallGitHooks.ps1
 
 優先して進めること:
 
+- 倍速再生時の音声同期を改善する。
+  - `1.5x` / `2.0x` で音声処理が間に合わず、映像と音声がずれることがある。
+  - まず `VideoMiner_playback_debug.log` の `audio_pump` / `audio_tempo_fallback` / `playback_tick` を確認し、音声変換・キュー補充・映像同期のどこで遅れているか切り分ける。
 - 動画編集者用チェック機能を育てる。
   - シークバー上のチャプタークリック移動を追加する。
   - チャプターへマウスを近づけた時の hover 強調や、`-` ボタンで削除される対象の可視化を検討する。
