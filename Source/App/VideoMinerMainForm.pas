@@ -277,6 +277,8 @@ type
     procedure CMDialogKey(var Message: TCMDialogKey); message CM_DIALOGKEY;
     // 指定ミリ秒位置のフレームを表示する
     function ShowFrameAtMs(const PositionMs: Integer): Boolean;
+    // 入力を先頭から読み直し、最初にデコードできる映像フレームを表示する
+    function ShowFirstFrameFromStart: Boolean;
     // 動画情報ラベルを更新する
     procedure UpdateInfoLabel;
   protected
@@ -310,6 +312,8 @@ const
   FRAME_GUIDE_EDGE_SIZE         = 12;         // hover 枠を出すフォーム端の幅 px
   FRAME_GUIDE_LINE_SIZE         = 1;          // hover 枠 1 本ぶんの太さ px
   FRAME_GUIDE_TIMER_INTERVAL_MS = 80;         // hover 枠表示状態を確認する間隔 ms
+  MIN_FORM_WIDTH                = 520;        // 下部操作バーが破綻しない最小フォーム幅
+  MIN_FORM_HEIGHT               = 360;        // 動画表示と下部操作バーを残せる最小フォーム高さ
 
 {$R *.dfm}
 
@@ -332,6 +336,8 @@ begin
   PanelCloseButton.Color := TITLE_BAR_COLOR;
   PanelMaximizeButton.Color := TITLE_BAR_COLOR;
   PanelMinimizeButton.Color := TITLE_BAR_COLOR;
+  Constraints.MinWidth := MIN_FORM_WIDTH;
+  Constraints.MinHeight := MIN_FORM_HEIGHT;
   InitializeTitleIcon;
   InitializeFrameGuide;
   FEndAction := LoadEndAction;
@@ -782,6 +788,43 @@ begin
 
   FCurrentVideoPositionMs := ShownPositionMs;
   UpdateInfoLabel;
+  Result := True;
+end;
+
+function TVideoMinerMainForm.ShowFirstFrameFromStart: Boolean;
+var
+  DecodedPositionMs: Integer;
+  ErrorMessage: string;
+  OpenInfo: TVideoInfo;
+begin
+  Result := False;
+  if (FVideoFile = '') or (FPreviewDecoder = nil) or (FVideoView = nil) then
+    Exit;
+
+  FPreviewDecoder.Close;
+  if not FPreviewDecoder.Open(FVideoFile, OpenInfo, ErrorMessage) then
+  begin
+    SetStatusCaption('Failed to reopen preview decoder: ' + ErrorMessage);
+    Exit;
+  end;
+
+  if not FVideoView.ShowNextFrame(FPreviewDecoder, DecodedPositionMs,
+    ErrorMessage) then
+  begin
+    SetStatusCaption('Failed to decode first frame: ' + ErrorMessage);
+    Exit;
+  end;
+
+  FCurrentVideoPositionMs := Max(0, DecodedPositionMs);
+  FUpdatingSeek := True;
+  try
+    FSeekPositionMs := 0;
+  finally
+    FUpdatingSeek := False;
+  end;
+  UpdatePlaybackProgress(0);
+  WriteVideoMinerSlowLog(Format('show_first_frame_from_start decoded_ms=%d',
+    [DecodedPositionMs]));
   Result := True;
 end;
 
@@ -1638,7 +1681,11 @@ end;
 
 procedure TVideoMinerMainForm.SeekToFirstFrame;
 begin
-  SeekToMs(0);
+  if FPlaybackController <> nil then
+    FPlaybackController.StopForSeek;
+  if ShowFirstFrameFromStart then
+    Exit;
+  SeekToMs(0, False);
 end;
 
 procedure TVideoMinerMainForm.SeekToLastFrame;

@@ -97,6 +97,8 @@ type
     function HitAnyOverlayButton(const Point: TPoint): Boolean;
     // 下側シークバーに当たっているか返す
     function HitSeekBar(const Point: TPoint): Boolean;
+    // 下側シークバーを配置するフォーム側の基準領域を返す
+    function SeekBarLayoutRect: TRect;
     // クライアント座標を現在のズーム状態の画像座標へ変換する
     function ImagePointFromClient(const Point: TPoint; out ImageX, ImageY: Double): Boolean;
     // overlay 部品をまとめて再描画対象にする
@@ -817,7 +819,14 @@ end;
 
 function TVideoMinerVideoSurface.HitSeekBar(const Point: TPoint): Boolean;
 begin
+  if FSeekBar <> nil then
+    FSeekBar.UpdateLayout(SeekBarLayoutRect);
   Result := (FSeekBar <> nil) and FSeekBar.BoundsHitTest(Point);
+end;
+
+function TVideoMinerVideoSurface.SeekBarLayoutRect: TRect;
+begin
+  Result := ClientRect;
 end;
 
 function TVideoMinerVideoSurface.CanStartPan(const Point: TPoint): Boolean;
@@ -833,7 +842,7 @@ function TVideoMinerVideoSurface.CanStartSurfaceClick(
 begin
   Result := not ((FSeekBarVisible or ((FSeekBar <> nil) and FSeekBar.Dragging)) and
     HitSeekBar(Point)) and
-    not (FOverlayVisible and HitAnyOverlayButton(Point)) and
+    not HitAnyOverlayButton(Point) and
     not ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible and
       HitPreviousFileButton(Point)) and
     not ((FNextFileButton <> nil) and FNextFileButton.Visible and
@@ -1043,6 +1052,8 @@ end;
 
 procedure TVideoMinerVideoSurface.MouseUp(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
+var
+  OverlayHandled: Boolean;
 begin
   inherited MouseUp(Button, Shift, X, Y);
   if FBossMode then
@@ -1079,16 +1090,37 @@ begin
 
   if (Button = mbLeft) and FOverlayVisible then
   begin
+    OverlayHandled := False;
     if (FFirstFrameButton <> nil) and FFirstFrameButton.MouseUp(Point(X, Y)) then
+    begin
       InvalidateOverlayControl(FFirstFrameButton);
+      OverlayHandled := True;
+    end;
     if (FSkipBackwardButton <> nil) and FSkipBackwardButton.MouseUp(Point(X, Y)) then
+    begin
       InvalidateOverlayControl(FSkipBackwardButton);
+      OverlayHandled := True;
+    end;
     if (FPlayPauseButton <> nil) and FPlayPauseButton.MouseUp(Point(X, Y)) then
+    begin
       InvalidateOverlayControl(FPlayPauseButton);
+      OverlayHandled := True;
+    end;
     if (FSkipForwardButton <> nil) and FSkipForwardButton.MouseUp(Point(X, Y)) then
+    begin
       InvalidateOverlayControl(FSkipForwardButton);
+      OverlayHandled := True;
+    end;
     if (FLastFrameButton <> nil) and FLastFrameButton.MouseUp(Point(X, Y)) then
+    begin
       InvalidateOverlayControl(FLastFrameButton);
+      OverlayHandled := True;
+    end;
+    if OverlayHandled then
+    begin
+      FSurfaceClickArmed := False;
+      Exit;
+    end;
   end;
 
   if Button = mbLeft then
@@ -1147,7 +1179,7 @@ begin
 
   if FSeekBar <> nil then
   begin
-    FSeekBar.UpdateLayout(DestRect);
+    FSeekBar.UpdateLayout(SeekBarLayoutRect);
     if FSeekBar.BoundsHitTest(LocalPoint) then
     begin
       SetSeekBarVisible(True);
@@ -1275,7 +1307,7 @@ begin
   if FNextFileButton <> nil then
     FNextFileButton.UpdateLayout(ClientRect);
   if FSeekBar <> nil then
-    FSeekBar.UpdateLayout(FPreviewRect);
+    FSeekBar.UpdateLayout(SeekBarLayoutRect);
 
   if (FPreviousFileButton <> nil) and FPreviousFileButton.Visible then
     FPreviousFileButton.Paint(DrawCanvas);

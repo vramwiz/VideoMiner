@@ -8,7 +8,7 @@ interface
 
 uses
   Vcl.ExtCtrls, VideoMinerAudioPlayback, VideoMinerShortcutBindings,
-  VideoMinerVideoView, ShortcutAction;
+  VideoMinerDebugLog, VideoMinerVideoView, ShortcutAction;
 
 type
   // 引数なしで実行するアプリ側コマンド
@@ -228,6 +228,7 @@ end;
 
 procedure TVideoMinerCommandController.FirstFrameClick(Sender: TObject);
 begin
+  WriteVideoMinerSlowLog('command first_frame source=overlay');
   SeekToFirstFrame;
 end;
 
@@ -288,6 +289,7 @@ end;
 
 procedure TVideoMinerCommandController.SeekToFirstFrame;
 begin
+  WriteVideoMinerSlowLog('command first_frame source=shortcut_or_delegate');
   if Assigned(FOnSeekToFirstFrame) then
     FOnSeekToFirstFrame;
 end;

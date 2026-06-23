@@ -6,8 +6,8 @@
 interface
 
 uses
-  Winapi.Messages, Winapi.Windows, System.Types, Vcl.Controls, Vcl.Forms,
-  VideoMinerSettings;
+  Winapi.Messages, Winapi.Windows, System.Math, System.Types, Vcl.Controls,
+  Vcl.Forms, VideoMinerSettings;
 
 const
   VIDEO_MINER_RESIZE_BORDER = 12; // 枠なしフォーム端でリサイズ判定する幅 px
@@ -82,6 +82,8 @@ procedure ApplySavedWindowBounds(Form: TCustomForm;
   var NormalWindowBounds: TVideoMinerWindowBounds);
 var
   Bounds: TVideoMinerWindowBounds;
+  MinHeight: Integer;
+  MinWidth: Integer;
   Monitor: TMonitor;
   NewBounds: TRect;
   WorkArea: TRect;
@@ -109,6 +111,12 @@ begin
     NewBounds.Right := NewBounds.Left + WorkArea.Width;
   if NewBounds.Height > WorkArea.Height then
     NewBounds.Bottom := NewBounds.Top + WorkArea.Height;
+  MinWidth := Min(Max(0, Form.Constraints.MinWidth), WorkArea.Width);
+  MinHeight := Min(Max(0, Form.Constraints.MinHeight), WorkArea.Height);
+  if NewBounds.Width < MinWidth then
+    NewBounds.Right := NewBounds.Left + MinWidth;
+  if NewBounds.Height < MinHeight then
+    NewBounds.Bottom := NewBounds.Top + MinHeight;
 
   if NewBounds.Left < WorkArea.Left then
     OffsetRect(NewBounds, WorkArea.Left - NewBounds.Left, 0);

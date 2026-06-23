@@ -193,14 +193,16 @@ type
     FVolumeHovered              : Boolean;                     // 音量バー上にマウスがあるか
     FVolumePercent              : Integer;                     // 音量パーセント
     // 半透明の円を描く
-    procedure DrawAlphaEllipse(Canvas: TCanvas; const DrawRect: TRect; Alpha: Byte);
+    procedure DrawAlphaEllipse(Canvas: TCanvas; const DrawRect: TRect; Alpha: Byte;
+      Color: TColor = clWhite);
     // 下側パネルの半透明背景を描く
     procedure DrawAlphaPanel(Canvas: TCanvas; const DrawRect: TRect; Radius: Integer; Alpha: Byte);
     // 半透明の線アイコンを描く
     procedure DrawAlphaPolyline(Canvas: TCanvas; const Points: array of TPoint;
       PenWidth: Integer; Alpha: Byte);
     // 半透明の角丸矩形を描く
-    procedure DrawAlphaRoundRect(Canvas: TCanvas; const DrawRect: TRect; Radius: Integer; Alpha: Byte);
+    procedure DrawAlphaRoundRect(Canvas: TCanvas; const DrawRect: TRect; Radius: Integer;
+      Alpha: Byte; Color: TColor = clWhite);
     // 全画面/解除アイコンを描く
     procedure DrawFullScreenIcon(Canvas: TCanvas; const DrawRect: TRect; Alpha: Byte);
     // ミュート/音量アイコンを描く
@@ -225,6 +227,7 @@ type
     function PlaybackRateButtonHitTest(const Point: TPoint): Boolean;
     function PlaybackRateButtonRect: TRect;
     function PositionFromPoint(const Point: TPoint): Integer;
+    function SecondaryToolButtonsVisible: Boolean;
     procedure DrawChapterMarkers(Canvas: TCanvas; const Track: TRect);
     procedure DrawTextButton(Canvas: TCanvas; const ButtonRect: TRect;
       const Text: string; Active, Hovered, Pressed: Boolean; ActiveColor: TColor);
@@ -270,6 +273,10 @@ type
     property VolumePercent: Integer read FVolumePercent write SetVolumePercent;
   end;
 implementation
+
+const
+  SECONDARY_TOOL_BUTTONS_MIN_WIDTH = 520; // 補助ツールボタンを下部バーへ表示する最小幅
+  SEEK_ACCENT_COLOR = $00F0A040;          // シーク済み範囲とノブに使う VideoMiner の青系アクセント色
 
 type
   TRgbTripleArray = array[0..MaxInt div SizeOf(TRGBTriple) - 1] of TRGBTriple;
@@ -345,13 +352,17 @@ begin
 end;
 
 procedure AlphaBlendMask(Canvas: TCanvas; const DestBounds: TRect;
-  MaskBitmap: TBitmap; Alpha: Byte);
+  MaskBitmap: TBitmap; Alpha: Byte; Color: TColor = clWhite);
 var
   Blend: TBlendFunction;
+  DrawColor: TColor;
   DrawBitmap: TBitmap;
   DrawLine: PBgraQuadArray;
   Height: Integer;
   MaskLine: PRgbTripleArray;
+  Blue: Byte;
+  Green: Byte;
+  Red: Byte;
   Width: Integer;
   X: Integer;
   Y: Integer;
@@ -363,6 +374,10 @@ begin
 
   DrawBitmap := TBitmap.Create;
   try
+    DrawColor := ColorToRGB(Color);
+    Red := GetRValue(DrawColor);
+    Green := GetGValue(DrawColor);
+    Blue := GetBValue(DrawColor);
     DrawBitmap.PixelFormat := pf32bit;
     DrawBitmap.SetSize(Width, Height);
     DrawBitmap.AlphaFormat := afPremultiplied;
@@ -374,9 +389,9 @@ begin
       begin
         if MaskLine[X].rgbtRed > 0 then
         begin
-          DrawLine[X].B := Alpha;
-          DrawLine[X].G := Alpha;
-          DrawLine[X].R := Alpha;
+          DrawLine[X].B := MulDiv(Blue, Alpha, 255);
+          DrawLine[X].G := MulDiv(Green, Alpha, 255);
+          DrawLine[X].R := MulDiv(Red, Alpha, 255);
           DrawLine[X].A := Alpha
         end
         else
@@ -1158,14 +1173,11 @@ begin
   Minutes := (TotalSeconds div 60) mod 60;
   Seconds := TotalSeconds mod 60;
 
-  if Hours > 0 then
-    Result := Format('%d:%.2d:%.2d', [Hours, Minutes, Seconds])
-  else
-    Result := Format('%d:%.2d', [Minutes, Seconds]);
+  Result := Format('%d:%.2d:%.2d', [Hours, Minutes, Seconds]);
 end;
 
 procedure TVideoMinerOverlaySeekBar.DrawAlphaEllipse(Canvas: TCanvas;
-  const DrawRect: TRect; Alpha: Byte);
+  const DrawRect: TRect; Alpha: Byte; Color: TColor);
 var
   MaskBitmap: TBitmap;
 begin
@@ -1181,7 +1193,7 @@ begin
     MaskBitmap.Canvas.Pen.Style := psClear;
     MaskBitmap.Canvas.Brush.Color := clWhite;
     MaskBitmap.Canvas.Ellipse(DrawRect);
-    AlphaBlendMask(Canvas, Bounds, MaskBitmap, Alpha);
+    AlphaBlendMask(Canvas, Bounds, MaskBitmap, Alpha, Color);
   finally
     MaskBitmap.Free;
   end;
@@ -1277,7 +1289,7 @@ begin
 end;
 
 procedure TVideoMinerOverlaySeekBar.DrawAlphaRoundRect(Canvas: TCanvas;
-  const DrawRect: TRect; Radius: Integer; Alpha: Byte);
+  const DrawRect: TRect; Radius: Integer; Alpha: Byte; Color: TColor);
 var
   MaskBitmap: TBitmap;
 begin
@@ -1294,7 +1306,7 @@ begin
     MaskBitmap.Canvas.Brush.Color := clWhite;
     MaskBitmap.Canvas.RoundRect(DrawRect.Left, DrawRect.Top, DrawRect.Right,
       DrawRect.Bottom, Radius, Radius);
-    AlphaBlendMask(Canvas, Bounds, MaskBitmap, Alpha);
+    AlphaBlendMask(Canvas, Bounds, MaskBitmap, Alpha, Color);
   finally
     MaskBitmap.Free;
   end;
@@ -1465,6 +1477,10 @@ function TVideoMinerOverlaySeekBar.AddChapterButtonRect: TRect;
 var
   DeleteRect: TRect;
 begin
+  Result := TRect.Empty;
+  if not SecondaryToolButtonsVisible then
+    Exit;
+
   DeleteRect := DeleteChapterButtonRect;
   Result := Rect(DeleteRect.Left - 38, DeleteRect.Top, DeleteRect.Left - 6,
     DeleteRect.Bottom);
@@ -1510,6 +1526,10 @@ function TVideoMinerOverlaySeekBar.DeleteChapterButtonRect: TRect;
 var
   CheckRect: TRect;
 begin
+  Result := TRect.Empty;
+  if not SecondaryToolButtonsVisible then
+    Exit;
+
   CheckRect := CheckButtonRect;
   Result := Rect(CheckRect.Left - 38, CheckRect.Top, CheckRect.Left - 6,
     CheckRect.Bottom);
@@ -1578,9 +1598,18 @@ function TVideoMinerOverlaySeekBar.PlaybackRateButtonRect: TRect;
 var
   MuteRect: TRect;
 begin
+  Result := TRect.Empty;
+  if not SecondaryToolButtonsVisible then
+    Exit;
+
   MuteRect := MuteButtonRect;
   Result := Rect(MuteRect.Right + 12, MuteRect.Top, MuteRect.Right + 66,
     MuteRect.Bottom);
+end;
+
+function TVideoMinerOverlaySeekBar.SecondaryToolButtonsVisible: Boolean;
+begin
+  Result := Bounds.Width >= SECONDARY_TOOL_BUTTONS_MIN_WIDTH;
 end;
 
 function TVideoMinerOverlaySeekBar.VolumeLabelRect: TRect;
@@ -1661,6 +1690,9 @@ procedure TVideoMinerOverlaySeekBar.DrawTextButton(Canvas: TCanvas;
 var
   TextSize: TSize;
 begin
+  if ButtonRect.IsEmpty then
+    Exit;
+
   if Hovered or Pressed or Active then
     DrawAlphaRoundRect(Canvas, ButtonRect, 8, 38);
 
@@ -2023,20 +2055,20 @@ begin
 
   FilledRect := Track;
   FilledRect.Right := Max(FilledRect.Left + Track.Height, KnobCenterX);
-  DrawAlphaRoundRect(Canvas, FilledRect, Track.Height, 230);
+  DrawAlphaRoundRect(Canvas, FilledRect, Track.Height, 230, SEEK_ACCENT_COLOR);
   DrawChapterMarkers(Canvas, Track);
 
   ShadowRadius := 22;
   DrawAlphaEllipse(Canvas, Rect(KnobCenterX - ShadowRadius,
     TrackCenterY - ShadowRadius, KnobCenterX + ShadowRadius,
-    TrackCenterY + ShadowRadius), 70);
+    TrackCenterY + ShadowRadius), 70, SEEK_ACCENT_COLOR);
 
   KnobRadius := 11;
   if FHovered or FDragging then
     KnobRadius := 12;
   DrawAlphaEllipse(Canvas, Rect(KnobCenterX - KnobRadius,
     TrackCenterY - KnobRadius, KnobCenterX + KnobRadius,
-    TrackCenterY + KnobRadius), 245);
+    TrackCenterY + KnobRadius), 245, SEEK_ACCENT_COLOR);
 
   if FCheckEnabled then
     Text := Format('Frame %d / %d',

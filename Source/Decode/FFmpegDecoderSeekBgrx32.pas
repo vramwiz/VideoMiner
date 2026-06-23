@@ -53,6 +53,7 @@ var
   FrameTs: Int64;
   TargetTs: Int64;
   SeekFlags: Integer;
+  AcceptFirstDecodedFrame: Boolean;
   DidTransfer: Boolean;
   TransferErrorMessage: string;
 begin
@@ -78,6 +79,7 @@ begin
   end;
 
   try
+    AcceptFirstDecodedFrame := PositionMs <= 0;
     TargetTs := StreamTimestampFromMs(Stream, PositionMs);
     SeekFlags := AVSEEK_FLAG_BACKWARD;
     if FastSeek then
@@ -116,7 +118,8 @@ begin
         while TFFmpegApi.avcodec_receive_frame(CodecContext, Frame) = 0 do
         begin
           FrameTs := Frame.pts;
-          if FastSeek or ((FrameTs <> AV_NOPTS_VALUE) and (FrameTs >= TargetTs)) then
+          if FastSeek or AcceptFirstDecodedFrame or
+             ((FrameTs <> AV_NOPTS_VALUE) and (FrameTs >= TargetTs)) then
           begin
             ConvertSourceFrame := Frame;
             DidTransfer := False;
