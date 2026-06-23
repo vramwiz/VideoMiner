@@ -100,6 +100,8 @@ type
     procedure CopyCurrentFrameToClipboard;
     // 再生速度を順に切り替える
     procedure CyclePlaybackRate;
+    // 表示だけを90度ずつ回転する
+    procedure RotateDisplay90;
     // overlay の終端動作ボタンから切り替えを実行する
     procedure EndActionOverlayClick(Sender: TObject);
     // 全画面表示を切り替える
@@ -289,6 +291,7 @@ begin
   FCommandController.OnPlaybackActiveOrPending := PlaybackActiveOrPending;
   FCommandController.OnPlaybackRateCycle := CyclePlaybackRate;
   FCommandController.OnPlayFromCurrentPosition := PlayFromCurrentPosition;
+  FCommandController.OnRotateDisplay := RotateDisplay90;
   FCommandController.OnSaveAudioSettings := SaveAudioPlaybackSettings;
   FCommandController.OnSeekByMs := SeekByMs;
   FCommandController.OnSeekToFirstFrame := SeekToFirstFrame;
@@ -657,6 +660,38 @@ begin
   end
   else
     FInfoController.UpdateInfo;
+end;
+
+procedure TVideoMinerMainForm.RotateDisplay90;
+var
+  FrameShown: Boolean;
+  PositionMs: Integer;
+  WasPlaying: Boolean;
+begin
+  if FVideoView = nil then
+    Exit;
+
+  WasPlaying := PlaybackActiveOrPending;
+  PositionMs := CurrentPlaybackPositionMs;
+  if FPlaybackController <> nil then
+    FPlaybackController.StopForSeek;
+  FVideoView.RotateDisplay90;
+  if FSeekHoverPreviewController <> nil then
+    FSeekHoverPreviewController.Clear;
+
+  if FMediaSession.VideoFile <> '' then
+  begin
+    PositionMs := Max(0, Min(FMediaSession.SeekMaxMs, PositionMs));
+    FrameShown := ShowFrameAtMs(PositionMs);
+    if WasPlaying then
+      StartPlaybackAtMs(PositionMs, FrameShown)
+    else if FInfoController <> nil then
+      FInfoController.UpdateInfo;
+  end;
+
+  if FInfoController <> nil then
+    FInfoController.SetStatusCaption(Format('Display rotation: +%d degrees.',
+      [FVideoView.DisplayRotationOffset]));
 end;
 
 procedure TVideoMinerMainForm.EndActionOverlayClick(Sender: TObject);

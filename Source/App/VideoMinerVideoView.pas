@@ -15,11 +15,16 @@ type
   TVideoMinerVideoView = class
   private
     FDecodeScratch           : TBitmap;                 // 表示せずに次フレームを確認するための作業用 Bitmap
+    FDisplayRotationOffset   : Integer;                 // ユーザー操作で追加する表示回転角度
     FShownFrameCache         : TBitmap;                 // 直近の明示表示フレームを即時再表示するためのキャッシュ
     FShownFrameCachePosition : Integer;                 // キャッシュしている明示表示フレームの位置 ms
     FSurface                 : TVideoMinerVideoSurface; // 実際の動画表示と overlay 描画を持つサーフェス
     // 現在の表示フレームを指定位置の即時再表示用に保存する
     procedure CacheShownFrame(PositionMs: Integer);
+    // 現在の表示フレームキャッシュを破棄する
+    procedure ClearShownFrameCache;
+    // metadata 回転とユーザー操作の追加回転を合成した角度を返す
+    function DisplayRotationDegrees(SourceDegrees: Integer): Integer;
     // フォーム側で親子関係やフォーカス対象として扱うサーフェスを返す
     function GetSurfaceControl: TWinControl;
     // 現在表示中の動画フレーム Bitmap を返す
@@ -111,6 +116,8 @@ type
     destructor Destroy; override;
     // 表示フレームと scratch frame を空にする
     procedure Clear;
+    // 表示だけを90度ずつ回転し、以降の再生フレームにも反映する
+    procedure RotateDisplay90;
     // ボスが来たモード中のヘルプページを前後へ切り替える
     procedure ChangeBossHelpPage(Delta: Integer);
     // 指定位置のフレームをデコードし、必要なら表示へ反映する
@@ -181,6 +188,7 @@ type
     property SourceHasAlpha: Boolean write SetSourceHasAlpha;
     property SeekWheelFrameStepMs: Integer write SetSeekWheelFrameStepMs;
     property CurrentFrameBitmap: TBitmap read GetCurrentFrameBitmap;
+    property DisplayRotationOffset: Integer read FDisplayRotationOffset;
     property SurfaceControl: TWinControl read GetSurfaceControl;
     property Muted: Boolean write SetMuted;
     property VolumePercent: Integer write SetVolumePercent;
@@ -266,6 +274,7 @@ begin
   inherited Create;
 
   FDecodeScratch := TBitmap.Create;
+  FDisplayRotationOffset := 0;
   FShownFrameCache := TBitmap.Create;
   FShownFrameCachePosition := -1;
   FSurface := TVideoMinerVideoSurface.Create(Image.Owner);
@@ -302,23 +311,44 @@ begin
   FShownFrameCachePosition := PositionMs;
 end;
 
+procedure TVideoMinerVideoView.ClearShownFrameCache;
+begin
+  if FShownFrameCache <> nil then
+    FShownFrameCache.SetSize(0, 0);
+  FShownFrameCachePosition := -1;
+end;
+
+function TVideoMinerVideoView.DisplayRotationDegrees(
+  SourceDegrees: Integer): Integer;
+begin
+  Result := (EffectiveVideoRotationDegrees(SourceDegrees) +
+    FDisplayRotationOffset) mod 360;
+  if Result < 0 then
+    Inc(Result, 360);
+end;
+
 procedure TVideoMinerVideoView.ChangeBossHelpPage(Delta: Integer);
 begin
   if FSurface <> nil then
     FSurface.ChangeBossHelpPage(Delta);
 end;
+
 procedure TVideoMinerVideoView.Clear;
 begin
   if FDecodeScratch <> nil then
     FDecodeScratch.SetSize(0, 0);
-  if FShownFrameCache <> nil then
-    FShownFrameCache.SetSize(0, 0);
-  FShownFrameCachePosition := -1;
+  ClearShownFrameCache;
   if FSurface <> nil then
   begin
     FSurface.SourceHasAlpha := False;
     FSurface.Clear;
   end;
+end;
+
+procedure TVideoMinerVideoView.RotateDisplay90;
+begin
+  FDisplayRotationOffset := (FDisplayRotationOffset + 90) mod 360;
+  ClearShownFrameCache;
 end;
 
 function TVideoMinerVideoView.TryPresentCachedFrame(PositionMs: Integer): Boolean;
@@ -618,8 +648,7 @@ begin
   if not Result then
     Exit;
 
-  RotateBitmapByDegrees(Bitmap,
-    EffectiveVideoRotationDegrees(Decoder.Info.RotationDegrees));
+  RotateBitmapByDegrees(Bitmap, DisplayRotationDegrees(Decoder.Info.RotationDegrees));
 end;
 
 function TVideoMinerVideoView.ShowFrameAt(Decoder: TFFmpegDecoder;
@@ -677,7 +706,7 @@ begin
     Exit;
   end;
 
-  EffectiveRotation := EffectiveVideoRotationDegrees(Decoder.Info.RotationDegrees);
+  EffectiveRotation := DisplayRotationDegrees(Decoder.Info.RotationDegrees);
   if PresentFrame then
   begin
     BeforeWidth := FSurface.Bitmap.Width;
@@ -747,7 +776,7 @@ begin
 
   if ConvertFrame then
   begin
-    EffectiveRotation := EffectiveVideoRotationDegrees(Decoder.Info.RotationDegrees);
+    EffectiveRotation := DisplayRotationDegrees(Decoder.Info.RotationDegrees);
     WriteVideoMinerSlowLog(Format(
       'decode_next_rotation position_ms=%d source_rotation=%d effective_rotation=%d before=%dx%d',
       [PositionMs, Decoder.Info.RotationDegrees, EffectiveRotation,
@@ -791,7 +820,7 @@ begin
     True, PositionMs, ErrorMessage);
   if Result then
     RotateBitmapByDegrees(FDecodeScratch,
-      EffectiveVideoRotationDegrees(Decoder.Info.RotationDegrees));
+      DisplayRotationDegrees(Decoder.Info.RotationDegrees));
 end;
 
 function TVideoMinerVideoView.HandleMouseWheel(Shift: TShiftState;

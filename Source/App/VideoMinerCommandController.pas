@@ -36,6 +36,7 @@ type
     FOnPlaybackActiveOrPending : TVideoMinerCommandBoolFunc;    // 再生中または再開待ちかを問い合わせる委譲先
     FOnPlaybackRateCycle       : TVideoMinerCommandProc;        // 再生速度切り替えの委譲先
     FOnPlayFromCurrentPosition : TVideoMinerCommandProc;        // 現在位置から再生開始する委譲先
+    FOnRotateDisplay           : TVideoMinerCommandProc;        // 表示だけを90度回転する委譲先
     FOnSaveAudioSettings       : TVideoMinerCommandProc;        // 音量/ミュート変更後の設定保存先
     FOnSeekByMs                : TVideoMinerCommandDeltaProc;   // 相対時間シークの委譲先
     FOnSeekToFirstFrame        : TVideoMinerCommandProc;        // 先頭フレーム移動の委譲先
@@ -87,6 +88,8 @@ type
     procedure PlaybackRateClick(Sender: TObject);
     // overlay の再生/一時停止ボタンから再生状態を切り替える
     procedure PlayPauseClick(Sender: TObject);
+    // 表示だけを90度回転する
+    procedure RotateDisplay;
     // シークバー操作で指定位置へ移動し、再生中なら再開を許可する
     procedure Seek(Sender: TObject; PositionMs: Integer);
     // ホイールシークで指定位置へ移動し、再生再開は行わない
@@ -137,6 +140,7 @@ type
       read FOnPlaybackRateCycle write FOnPlaybackRateCycle;
     property OnPlayFromCurrentPosition: TVideoMinerCommandProc
       read FOnPlayFromCurrentPosition write FOnPlayFromCurrentPosition;
+    property OnRotateDisplay: TVideoMinerCommandProc read FOnRotateDisplay write FOnRotateDisplay;
     property OnSaveAudioSettings: TVideoMinerCommandProc read FOnSaveAudioSettings write FOnSaveAudioSettings;
     property OnSeekByMs: TVideoMinerCommandDeltaProc read FOnSeekByMs write FOnSeekByMs;
     property OnSeekToFirstFrame: TVideoMinerCommandProc read FOnSeekToFirstFrame write FOnSeekToFirstFrame;
@@ -199,6 +203,7 @@ begin
   Handlers.SeekToFirstFrame := SeekToFirstFrame;
   Handlers.SeekToLastFrame := SeekToLastFrame;
   Handlers.ShowHelp := ShowHelp;
+  Handlers.RotateDisplay := RotateDisplay;
   Handlers.ToggleFullScreen := ToggleFullScreen;
   Handlers.ToggleSafeArea := ToggleSafeArea;
   Handlers.ToggleMute := ToggleMute;
@@ -315,6 +320,12 @@ end;
 procedure TVideoMinerCommandController.PlayPauseClick(Sender: TObject);
 begin
   TogglePlayPause;
+end;
+
+procedure TVideoMinerCommandController.RotateDisplay;
+begin
+  if Assigned(FOnRotateDisplay) then
+    FOnRotateDisplay;
 end;
 
 procedure TVideoMinerCommandController.Seek(Sender: TObject;

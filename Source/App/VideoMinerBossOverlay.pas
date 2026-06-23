@@ -56,16 +56,16 @@ const
         '| PageUp / PageDown | Previous / next video |',
         '| Ctrl+Left / Ctrl+Right | Previous / next chapter |',
         '| Home / End | First / last frame area |',
+        '| R | Rotate display 90 degrees |',
+        '| S | Playback speed 1.0x / 1.5x / 2.0x |',
         '| Up / Down | Volume |',
         '| M | Mute |',
         '| F1 / F11 | Help screen / full screen |',
         '| Esc | Exit full screen or boss mode |',
         '',
         'Mouse:',
-        '- Click video: play / stop',
-        '- Double click: full screen',
-        '- Wheel: zoom',
-        '- Drag while zoomed: pan');
+        '- Click: play / stop, double click: full screen',
+        '- Wheel: zoom, drag while zoomed: pan');
       StatusText: 'help/basic  Ln 1, Col 1  Markdown  UTF-8'
     ),
     (
