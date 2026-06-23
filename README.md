@@ -178,4 +178,5 @@ VideoMiner は [GNU General Public License version 3](LICENSE) に従って配�
 
 ## 開発メモ
 
-詳細な作業メモや設計方針は [note.md](note.md) に記載しています。
+- 現在の設計方針や作業再開時の要点は [note.md](note.md) に記載しています。
+- 日付ごとの実装履歴と調査記録は [HISTORY.md](HISTORY.md) に記載しています。
