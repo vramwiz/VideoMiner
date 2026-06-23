@@ -10,6 +10,8 @@ interface
 function VideoMinerFrameDurationMs(Fps: Double): Integer;
 // 再生 timer に設定する基本 interval ms を求める
 function VideoMinerTimerIntervalMs(Fps: Double): Integer;
+// 再生速度を反映した timer interval ms を求める
+function VideoMinerPlaybackTimerIntervalMs(Fps, PlaybackRate: Double): Integer;
 // 最終フレーム表示用に、終端より少し手前の seek 位置を求める
 function VideoMinerLastFrameSeekPositionMs(MaxMs: Integer; Fps: Double): Integer;
 // 音声へ追いつくために、現在の動画フレームを表示せず破棄できるか判定する
@@ -61,6 +63,14 @@ begin
     Result := VIDEO_DEFAULT_FRAME_DURATION_MS;
   if Result < 1 then
     Result := 1;
+end;
+
+function VideoMinerPlaybackTimerIntervalMs(Fps, PlaybackRate: Double): Integer;
+begin
+  if PlaybackRate <= 0 then
+    PlaybackRate := 1.0;
+
+  Result := Max(1, Round(VideoMinerTimerIntervalMs(Fps) / PlaybackRate));
 end;
 
 function VideoMinerLastFrameSeekPositionMs(MaxMs: Integer; Fps: Double): Integer;

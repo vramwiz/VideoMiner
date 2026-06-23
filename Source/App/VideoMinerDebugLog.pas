@@ -1,7 +1,7 @@
 ﻿unit VideoMinerDebugLog;
 
-// Debug ビルド専用の調査ログ出力を担当する。
-// 通常ログと slow log を同じファイルへ出し、Release ビルドでは何もしない。
+// 調査ログ出力を担当する。
+// 詳細ログと slow log は Debug 専用、倍速再生ログは Release でも使えるようにする。
 
 interface
 
@@ -11,10 +11,14 @@ procedure ClearVideoMinerDebugLog(const Reason: string);
 procedure WriteVideoMinerDebugLog(const Msg: string);
 // 遅い処理の調査ログが有効な場合だけ 1 行出力する
 procedure WriteVideoMinerSlowLog(const Msg: string);
+// 倍速再生の調査ログが有効な場合だけ 1 行出力する
+procedure WriteVideoMinerRateLog(const Msg: string);
 // 詳細調査用ログが有効か返す
 function VideoMinerDebugLogEnabled: Boolean;
 // slow log が有効か返す
 function VideoMinerSlowLogEnabled: Boolean;
+// 倍速再生ログが有効か返す
+function VideoMinerRateLogEnabled: Boolean;
 // VideoMiner の調査ログファイル名を返す
 function VideoMinerDebugLogFileName: string;
 
@@ -25,7 +29,8 @@ uses
 
 const
   DEBUG_LOG_ENABLED = False; // 毎 tick 系の詳細ログを出すか
-  SLOW_LOG_ENABLED  = True;  // 遅い処理だけを slow log として出すか
+  SLOW_LOG_ENABLED  = False; // 遅い処理だけを slow log として出すか
+  RATE_LOG_ENABLED  = True;  // 倍速再生の切り分けログを出すか
 
 function VideoMinerDebugLogEnabled: Boolean;
 begin
@@ -47,9 +52,14 @@ begin
 {$ENDIF}
 end;
 
+function VideoMinerRateLogEnabled: Boolean;
+begin
+  Result := RATE_LOG_ENABLED or SameText(GetEnvironmentVariable(
+    'VIDEOMINER_RATE_LOG'), '1') or VideoMinerDebugLogEnabled;
+end;
+
 // マイドキュメント配下の VideoMiner フォルダへ再生調査ログを集約する
 function VideoMinerDebugLogFileName: string;
-{$IFDEF DEBUG}
 var
   DataPath: array[0..MAX_PATH - 1] of Char;
   LogDir: string;
@@ -65,15 +75,9 @@ begin
   Result := IncludeTrailingPathDelimiter(LogDir) +
     'VideoMiner_playback_debug.log';
 end;
-{$ELSE}
-begin
-  Result := '';
-end;
-{$ENDIF}
 
-// Debug ビルドで OutputDebugString とログファイルの両方へ 1 行出力する
+// OutputDebugString とログファイルの両方へ 1 行出力する
 procedure WriteVideoMinerLogLine(const Msg: string);
-{$IFDEF DEBUG}
 var
   F: TextFile;
   LogFileName: string;
@@ -95,17 +99,13 @@ begin
     CloseFile(F);
   end;
 end;
-{$ELSE}
-begin
-end;
-{$ENDIF}
 
 procedure ClearVideoMinerDebugLog(const Reason: string);
-{$IFDEF DEBUG}
 var
   LogFileName: string;
 begin
-  if not (VideoMinerDebugLogEnabled or VideoMinerSlowLogEnabled) then
+  if not (VideoMinerDebugLogEnabled or VideoMinerSlowLogEnabled or
+     VideoMinerRateLogEnabled) then
     Exit;
 
   LogFileName := VideoMinerDebugLogFileName;
@@ -113,10 +113,6 @@ begin
     DeleteFile(LogFileName);
   WriteVideoMinerLogLine('log_clear ' + Reason);
 end;
-{$ELSE}
-begin
-end;
-{$ENDIF}
 
 procedure WriteVideoMinerDebugLog(const Msg: string);
 begin
@@ -127,6 +123,12 @@ end;
 procedure WriteVideoMinerSlowLog(const Msg: string);
 begin
   if VideoMinerSlowLogEnabled then
+    WriteVideoMinerLogLine(Msg);
+end;
+
+procedure WriteVideoMinerRateLog(const Msg: string);
+begin
+  if VideoMinerRateLogEnabled then
     WriteVideoMinerLogLine(Msg);
 end;
 

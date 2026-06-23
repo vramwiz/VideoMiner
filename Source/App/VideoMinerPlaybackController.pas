@@ -46,6 +46,8 @@ type
     FRateClock                : TStopwatch;               // 倍速再生時の映像位置を進める単調時計
     FRateClockActive          : Boolean;                  // 倍速用単調時計が有効か
     FRateClockBaseMs          : Integer;                  // 倍速用単調時計の開始位置 ms
+    FRateTickLogClock         : TStopwatch;               // 倍速 tick ログの間引きに使う単調時計
+    FLastRateTickLogMs        : Int64;                    // 最後に倍速 tick ログを出した経過 ms
     FVideoView                : TVideoMinerVideoView;     // 表示更新と scratch frame 表示を行う動画ビュー
     FPlaybackTimer            : TTimer;                   // 再生 tick を発火する timer
     FPreviewDecoder           : TFFmpegDecoder;           // seek preview 用に使うデコーダ
@@ -190,6 +192,9 @@ const
   SLOW_PREVIEW_LOG_MS = 120; // preview frame 表示を slow log に出す閾値 ms
   SLOW_START_LOG_MS   = 150; // 再生開始処理を slow log に出す閾値 ms
   SLOW_TICK_LOG_MS    = 80;  // 再生 tick を slow log に出す閾値 ms
+  RATE_TICK_LOG_MS    = 1000; // 倍速 tick ログを通常サンプル出力する間隔 ms
+  RATE_LAG_LOG_MS     = 120;  // 倍速 tick ログを即時出力する同期ズレ幅 ms
+  RATE_SLOW_LOG_MS    = 50;   // 倍速 tick ログを即時出力する処理時間 ms
 
 constructor TVideoMinerPlaybackController.Create(PlaybackTimer,
   RestartTimer: TTimer; AudioPlayback: TVideoMinerAudioPlayback;
@@ -204,6 +209,8 @@ begin
   FPlaybackRate := 1.0;
   FRateClockActive := False;
   FRateClockBaseMs := 0;
+  FRateTickLogClock := TStopwatch.StartNew;
+  FLastRateTickLogMs := -1;
   FRestartFastSeek := False;
   FRestartFrameAlreadyShown := True;
   FRestartPending := False;
@@ -678,13 +685,20 @@ begin
 end;
 
 procedure TVideoMinerPlaybackController.SetPlaybackRate(Value: Double);
+var
+  OldRate: Double;
 begin
   if Value <= 0 then
     Value := 1.0;
   if SameValue(FPlaybackRate, Value) then
     Exit;
 
+  OldRate := FPlaybackRate;
   FPlaybackRate := Value;
+  FRateTickLogClock := TStopwatch.StartNew;
+  FLastRateTickLogMs := -1;
+  WriteVideoMinerRateLog(Format('rate_change old_rate=%.3f new_rate=%.3f',
+    [OldRate, FPlaybackRate]));
 end;
 
 function TVideoMinerPlaybackController.SeekPositionForTick(PositionMs,
@@ -1092,6 +1106,8 @@ begin
     FRateClockActive := True;
   end;
 
+  FPlaybackTimer.Interval := VideoMinerPlaybackTimerIntervalMs(
+    VideoInfo.Fps, FPlaybackRate);
   FPlaybackTimer.Enabled := True;
   FVideoView.PlaybackActive := True;
 {$IFDEF DEBUG}
@@ -1102,6 +1118,13 @@ begin
        BoolToStr(VideoReopened, True), VideoPrepareMs, VideoSeekMs,
        AudioStartMs, TotalWatch.Elapsed.TotalMilliseconds]));
 {$ENDIF}
+  if not SameValue(FPlaybackRate, 1.0) then
+    WriteVideoMinerRateLog(Format(
+      'start_playback_rate file="%s" rate=%.3f target_ms=%d frame_already_shown=%s rate_clock_active=%s video_reopen=%s video_prepare_ms=%.3f video_seek_ms=%.3f audio_start_ms=%.3f total_ms=%.3f',
+      [ExtractFileName(VideoFile), FPlaybackRate, TargetMs,
+       BoolToStr(FrameAlreadyShown, True), BoolToStr(FRateClockActive, True),
+       BoolToStr(VideoReopened, True), VideoPrepareMs, VideoSeekMs,
+       AudioStartMs, TotalWatch.Elapsed.TotalMilliseconds]));
 {$IFDEF DEBUG}
   if (TotalWatch.Elapsed.TotalMilliseconds >= SLOW_START_LOG_MS) or
      (VideoSeekMs >= SLOW_PREVIEW_LOG_MS) or
@@ -1236,18 +1259,22 @@ var
   SeekGuardResult: TVideoMinerSeekGuardResult;
   UseScratchFrame: Boolean;
   SlowLogEnabled: Boolean;
+  RateLogEnabled: Boolean;
+  RateElapsedMs: Int64;
+  ShouldLogRateTick: Boolean;
   TotalMs: Double;
   NextSeekPositionMs: Integer;
 begin
   DebugLogEnabled := VideoMinerDebugLogEnabled;
   SlowLogEnabled := VideoMinerSlowLogEnabled;
-  if DebugLogEnabled or SlowLogEnabled then
+  RateLogEnabled := VideoMinerRateLogEnabled;
+  if DebugLogEnabled or SlowLogEnabled or RateLogEnabled then
     TotalWatch := TStopwatch.StartNew;
   PumpMs := 0;
   DecodeMs := 0;
   SyncMs := 0;
 
-  if DebugLogEnabled or SlowLogEnabled then
+  if DebugLogEnabled or SlowLogEnabled or RateLogEnabled then
     StepWatch := TStopwatch.StartNew;
   if not PrepareTick(IsSeeking, (VideoFile <> '') and (Decoder <> nil),
     SeekMaxMs, AudioPositionMs, ErrorMessage) then
@@ -1256,7 +1283,7 @@ begin
       SetStatus(ErrorMessage);
     Exit;
   end;
-  if DebugLogEnabled or SlowLogEnabled then
+  if DebugLogEnabled or SlowLogEnabled or RateLogEnabled then
     PumpMs := StepWatch.Elapsed.TotalMilliseconds;
 
   PositionMs := -1;
@@ -1291,7 +1318,7 @@ begin
 
     UseScratchFrame := ConvertFrame and (AudioPositionMs < 0);
 
-    if DebugLogEnabled or SlowLogEnabled then
+    if DebugLogEnabled or SlowLogEnabled or RateLogEnabled then
       StepWatch := TStopwatch.StartNew;
     DecodeResult := DecodeNextFrame(Decoder, UseScratchFrame, ConvertFrame,
       PositionMs, ErrorMessage);
@@ -1306,7 +1333,7 @@ begin
         SetStatus('Failed to decode next frame: ' + ErrorMessage);
       Exit;
     end;
-    if DebugLogEnabled or SlowLogEnabled then
+    if DebugLogEnabled or SlowLogEnabled or RateLogEnabled then
       DecodeMs := DecodeMs + StepWatch.Elapsed.TotalMilliseconds;
 
     if UseScratchFrame and ShouldDropBackwardScratchFrame(VideoFile,
@@ -1355,7 +1382,7 @@ begin
       CurrentVideoPositionMs := PositionMs;
   until ConvertFrame;
 
-  if DebugLogEnabled or SlowLogEnabled then
+  if DebugLogEnabled or SlowLogEnabled or RateLogEnabled then
     StepWatch := TStopwatch.StartNew;
   if (not DidSeekToAudio) and
      (not SyncVideoToAudio(Decoder, SeekMaxMs, PositionMs, ErrorMessage)) then
@@ -1366,7 +1393,7 @@ begin
   end;
   if PositionMs >= 0 then
     CurrentVideoPositionMs := PositionMs;
-  if DebugLogEnabled or SlowLogEnabled then
+  if DebugLogEnabled or SlowLogEnabled or RateLogEnabled then
     SyncMs := StepWatch.Elapsed.TotalMilliseconds;
 
   if PositionMs >= 0 then
@@ -1428,6 +1455,35 @@ begin
       LogPlaybackTick(VideoFile, AudioPositionMs, PositionMs, LagMs, DropCount,
         DidSeekToAudio, PumpMs, DecodeMs, SyncMs,
         TotalWatch.Elapsed.TotalMilliseconds, 0);
+  end;
+  if RateLogEnabled and (not SameValue(FPlaybackRate, 1.0)) then
+  begin
+    RateElapsedMs := FRateTickLogClock.ElapsedMilliseconds;
+    TotalMs := TotalWatch.Elapsed.TotalMilliseconds;
+    ShouldLogRateTick := (FLastRateTickLogMs < 0) or
+      (RateElapsedMs - FLastRateTickLogMs >= RATE_TICK_LOG_MS) or
+      (Abs(LagMs) >= RATE_LAG_LOG_MS) or (DropCount > 0) or
+      DidSeekToAudio or (PumpMs >= RATE_SLOW_LOG_MS) or
+      (DecodeMs >= RATE_SLOW_LOG_MS) or (SyncMs >= RATE_SLOW_LOG_MS) or
+      (TotalMs >= RATE_SLOW_LOG_MS);
+    if ShouldLogRateTick then
+    begin
+      FLastRateTickLogMs := RateElapsedMs;
+      if FPlaybackTimer <> nil then
+        WriteVideoMinerRateLog(Format(
+          'playback_tick_rate file="%s" rate=%.3f audio_ms=%d video_ms=%d seek_ms=%d lag_ms=%d drop_count=%d seek_to_audio=%s pump_ms=%.3f decode_ms=%.3f sync_ms=%.3f total_ms=%.3f timer_interval=%d',
+          [ExtractFileName(VideoFile), FPlaybackRate, AudioPositionMs,
+           PositionMs, SeekPositionMs, LagMs, DropCount,
+           BoolToStr(DidSeekToAudio, True), PumpMs, DecodeMs, SyncMs, TotalMs,
+           FPlaybackTimer.Interval]))
+      else
+        WriteVideoMinerRateLog(Format(
+          'playback_tick_rate file="%s" rate=%.3f audio_ms=%d video_ms=%d seek_ms=%d lag_ms=%d drop_count=%d seek_to_audio=%s pump_ms=%.3f decode_ms=%.3f sync_ms=%.3f total_ms=%.3f timer_interval=%d',
+          [ExtractFileName(VideoFile), FPlaybackRate, AudioPositionMs,
+           PositionMs, SeekPositionMs, LagMs, DropCount,
+           BoolToStr(DidSeekToAudio, True), PumpMs, DecodeMs, SyncMs, TotalMs,
+           0]));
+    end;
   end;
   if SlowLogEnabled then
   begin

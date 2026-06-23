@@ -294,6 +294,13 @@ begin
          START_QUEUE_MS, StopMs, OpenMs, SeekMs, DecodeMs, OutputStartMs,
          QueueMs, TotalWatch.Elapsed.TotalMilliseconds, BoolToStr(FFinished, True)]));
 {$ENDIF}
+    if not SameValue(FPlaybackRate, 1.0) then
+      WriteVideoMinerRateLog(Format(
+        'audio_start_rate pos_ms=%d rate=%.3f start_samples=%d queued_input_samples=%d queued_output_samples=%d input_bytes=%d output_bytes=%d start_queue_ms=%d stop_ms=%.3f open_ms=%.3f seek_ms=%.3f decode_ms=%.3f transform_ms=%.3f output_start_ms=%.3f queue_ms=%.3f total_ms=%.3f finished=%s',
+        [PositionMs, FPlaybackRate, FStartSamples, FQueuedSamples,
+         FQueuedOutputSamples, Length(Pcm), Length(OutputPcm), START_QUEUE_MS,
+         StopMs, OpenMs, SeekMs, DecodeMs, TransformMs, OutputStartMs, QueueMs,
+         TotalWatch.Elapsed.TotalMilliseconds, BoolToStr(FFinished, True)]));
 {$IFDEF DEBUG}
     if (TotalWatch.Elapsed.TotalMilliseconds >= SLOW_START_LOG_MS) or
        (OpenMs >= SLOW_START_LOG_MS) or
@@ -485,15 +492,17 @@ begin
   begin
     OutputPcm := TempoPcm;
     OutputSampleCount := TempoSampleCount;
+    WriteVideoMinerRateLog(Format(
+      'audio_tempo rate=%.3f method="atempo" input_frames=%d output_frames=%d input_bytes=%d output_bytes=%d',
+      [FPlaybackRate, InputFrameCount, OutputSampleCount, Length(InputPcm),
+       Length(OutputPcm)]));
     Exit;
   end;
 
-{$IFDEF DEBUG}
-  if (TempoErrorMessage <> '') and VideoMinerDebugLogEnabled then
-    WriteVideoMinerDebugLog(Format(
+  if TempoErrorMessage <> '' then
+    WriteVideoMinerRateLog(Format(
       'audio_tempo_fallback rate=%.3f input_bytes=%d err="%s"',
       [FPlaybackRate, Length(InputPcm), TempoErrorMessage]));
-{$ENDIF}
 
   OutputFrameCount := Floor(InputFrameCount / FPlaybackRate);
   if OutputFrameCount <= 0 then
@@ -550,6 +559,10 @@ begin
     Inc(OutputFrame, STRETCH_WINDOW_FRAMES - STRETCH_OVERLAP_FRAMES);
   end;
   OutputSampleCount := OutputFrameCount;
+  WriteVideoMinerRateLog(Format(
+    'audio_tempo rate=%.3f method="fallback" input_frames=%d output_frames=%d input_bytes=%d output_bytes=%d',
+    [FPlaybackRate, InputFrameCount, OutputSampleCount, Length(InputPcm),
+     Length(OutputPcm)]));
 end;
 
 function TVideoMinerAudioPlayback.Pump(out ErrorMessage: string): Boolean;
@@ -688,6 +701,14 @@ begin
        BoolToStr(FFinished, True),
        BoolToStr(Result, True), ErrorMessage]));
 {$ENDIF}
+  if not SameValue(FPlaybackRate, 1.0) then
+    WriteVideoMinerRateLog(Format(
+      'audio_pump_rate playback_ms=%d rate=%.3f raw_queued_before_samples=%d queued_before_ms=%d queued_after_ms=%d input_bytes=%d output_bytes=%d input_samples=%d queued_output_samples=%d decode_ms=%.3f transform_ms=%.3f queue_ms=%.3f total_ms=%.3f finished=%s result=%s',
+      [PlaybackPositionMs, FPlaybackRate, RawQueuedSampleCount, QueuedBeforeMs,
+       Round((Int64(FQueuedOutputSamples) - PlaybackSamplePosition) * 1000 / OUTPUT_SAMPLE_RATE),
+       Length(Pcm), Length(OutputPcm), FQueuedSamples, FQueuedOutputSamples,
+       DecodeMs, TransformMs, QueueMs, TotalWatch.Elapsed.TotalMilliseconds,
+       BoolToStr(FFinished, True), BoolToStr(Result, True)]));
 {$IFDEF DEBUG}
   if (TotalWatch.Elapsed.TotalMilliseconds >= SLOW_PUMP_LOG_MS) or
      (DecodeMs >= SLOW_PUMP_LOG_MS) or
