@@ -9,12 +9,15 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   System.Diagnostics, System.Math, System.Types,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
-  Vcl.ExtCtrls, Vcl.Graphics, Vcl.StdCtrls, ActiveX, DropAgent, FFmpegDecoder,
-  FFmpegDecoderTypes, FolderWatch, ResizeEdges, ShortcutAction,
+  Vcl.ExtCtrls, Vcl.Graphics, Vcl.StdCtrls, FFmpegDecoder,
+  FFmpegDecoderTypes, ResizeEdges, ShortcutAction,
   VideoMinerAudioPlayback,
-  VideoMinerChapterManager, VideoMinerCommandController, VideoMinerMediaList, VideoMinerDebugLog,
-  VideoMinerFrameCheck, VideoMinerFrameClipboard, VideoMinerMediaOpen, VideoMinerSettings,
-  VideoMinerThumbnailBrowser,
+  VideoMinerChapterController, VideoMinerCommandController,
+  VideoMinerCurrentFileReloadController, VideoMinerMediaList, VideoMinerDebugLog,
+  VideoMinerExternalOpenController, VideoMinerFrameClipboard, VideoMinerFrameGuideController,
+  VideoMinerInfoController, VideoMinerMediaLoadController, VideoMinerMediaOpen,
+  VideoMinerMediaSession, VideoMinerSettings,
+  VideoMinerNavigationController, VideoMinerSeekHoverPreviewController, VideoMinerThumbnailBrowserController,
   VideoMinerPlaybackController, VideoMinerPlaybackTiming,
   VideoMinerVideoView, VideoMinerWindowChrome, VideoMinerWindowModeController;
 
@@ -22,9 +25,6 @@ const
   WM_VM_OPEN_PENDING = WM_APP + 1; // 他プロセスから受けたファイルを安全なタイミングで開く独自メッセージ
 
 type
-  // 押しっぱなし扱いとして一時的に無視するナビゲーションキー集合
-  TVideoMinerKeySet = set of Byte;
-
   TVideoMinerMainForm = class(TForm)
     PanelTitleBar: TPanel;
     LabelAppTitle: TLabel;
@@ -68,85 +68,32 @@ type
     FPreviewDecoder                  : TFFmpegDecoder;                  // シークや先読み表示に使う補助デコーダ
     FAudioPlayback                   : TVideoMinerAudioPlayback;        // 音声出力と音量状態の管理
     FMediaList                       : TVideoMinerMediaList;            // 同じフォルダ内の動画一覧
+    FMediaLoadController             : TVideoMinerMediaLoadController;  // 動画読み込み前後の状態反映
+    FMediaSession                    : TVideoMinerMediaSession;         // 現在動画と再生位置の状態
     FVideoView                       : TVideoMinerVideoView;            // 動画表示と overlay 入力の窓口
-    FVideoFile                       : string;                          // 現在開いている動画ファイル名
-    FVideoInfo                       : TVideoInfo;                      // 現在開いている動画の基本情報
-    FCurrentVideoPositionMs          : Integer;                         // 最後に表示できたフレーム位置 ms
-    FSeekPositionMs                  : Integer;                         // UI と再生制御で共有する現在位置 ms
-    FSeekMaxMs                       : Integer;                         // シーク可能な最大位置 ms
     FUpdatingSeek                    : Boolean;                         // コードからシーク位置を更新中か
     FSeeking                         : Boolean;                         // シーク処理中か
     FSeekGuardTargetMs               : Integer;                         // シーク直後に再生 tick を守る対象位置 ms
     FSeekGuardRemaining              : Integer;                         // シーク guard を残す tick 数
-    FSeekHoverPreviewBitmap          : TBitmap;                         // シークバー hover プレビュー用 Bitmap
-    FSeekHoverPreviewTimer           : TTimer;                          // シークバー hover プレビューのデコード間引き timer
-    FSeekHoverPreviewPending         : Boolean;                         // hover プレビューのデコード待ちがあるか
-    FSeekHoverPreviewPositionMs      : Integer;                         // hover プレビュー要求位置 ms
-    FSeekHoverPreviewPoint           : TPoint;                          // hover プレビュー表示位置
-    FSeekHoverPreviewLastPositionMs  : Integer;                         // 最後にデコードした hover プレビュー位置 ms
-    FSeekHoverPreviewActive          : Boolean;                         // hover プレビューを表示済みで追従更新中か
-    FDropAgent                       : TDropAgent;                      // ファイルドロップ受け口
-    FOleInitialized                  : Boolean;                         // OLE 初期化に成功しているか
-    FPendingOpenFiles                : TStringList;                     // WM 経由で後から開くファイルキュー
-    FProcessingOpenQueue             : Boolean;                         // ファイルキュー処理中か
     FRestartPlaybackTimer            : TTimer;                          // シーク後に再生再開を遅延させるタイマー
-    FReloadCurrentFileTimer          : TTimer;                          // 現在ファイルの更新をまとめて再読込するタイマー
-    FFolderWatcher                   : TFolderWatch;                    // 現在フォルダの変更監視
-    FWatchedFolder                   : string;                          // 監視中フォルダ
-    FReloadingCurrentFile            : Boolean;                         // 現在ファイルの再読込中か
-    FPendingReloadHasStamp           : Boolean;                         // 再読込候補のファイル状態を保持しているか
-    FPendingReloadLastWriteTime      : TDateTime;                       // 再読込候補の更新日時
-    FPendingReloadSize               : Int64;                           // 再読込候補のサイズ
-    FVideoFileLastWriteTime          : TDateTime;                       // 現在ファイルを開いた時点の更新日時
-    FVideoFileSize                   : Int64;                           // 現在ファイルを開いた時点のサイズ
+    FCurrentFileReloadController     : TVideoMinerCurrentFileReloadController; // 現在ファイルの外部更新監視
+    FExternalOpenController          : TVideoMinerExternalOpenController; // 外部からの open 要求制御
+    FInfoController                  : TVideoMinerInfoController;       // caption/情報表示/シーク進捗制御
+    FNavigationController            : TVideoMinerNavigationController; // フォルダ内前後移動と入力抑止
     FPlaybackController              : TVideoMinerPlaybackController;   // 再生/シーク/終端処理の制御
     FCommandController               : TVideoMinerCommandController;    // overlay とショートカットのコマンド接続
+    FSeekHoverPreviewController      : TVideoMinerSeekHoverPreviewController; // シークバー hover プレビュー制御
     FWindowModeController            : TVideoMinerWindowModeController; // 全画面/枠なし/ボスが来たモードの制御
-    FChapterManager                  : TVideoMinerChapterManager;       // 手動/自動チャプターとチェック状態の管理
-    FThumbnailBrowser                : TVideoMinerThumbnailBrowser;     // 同一フォルダ内動画の一覧表示モード
-    FLoopSegmentEndMs                : Integer;                         // ループ再生区間の終端 ms
-    FLoopSegmentStartMs              : Integer;                         // ループ再生区間の開始 ms
-    FEndAction                       : TVideoMinerEndAction;            // 動画終端到達時の動作
+    FChapterController               : TVideoMinerChapterController;    // 手動/自動チャプターとチェック状態の管理
+    FThumbnailBrowserController      : TVideoMinerThumbnailBrowserController; // 同一フォルダ内動画の一覧表示制御
     FSafeAreaVisible                 : Boolean;                         // 90% セーフエリア確認枠を表示中か
     FShortcuts                       : TShortcutAction;                 // キーボードショートカット登録先
     FTitleIcon                       : TImage;                          // 独自タイトルバー左端のアイコン
-    FFrameGuideBottom                : TPanel;                          // hover 時だけ表示する下端外側のフォーム枠
-    FFrameGuideInnerBottom           : TPanel;                          // hover 時だけ表示する下端内側のフォーム枠
-    FFrameGuideInnerLeft             : TPanel;                          // hover 時だけ表示する左端内側のフォーム枠
-    FFrameGuideInnerRight            : TPanel;                          // hover 時だけ表示する右端内側のフォーム枠
-    FFrameGuideInnerTop              : TPanel;                          // hover 時だけ表示する上端内側のフォーム枠
-    FFrameGuideLeft                  : TPanel;                          // hover 時だけ表示する左端外側のフォーム枠
-    FFrameGuideRight                 : TPanel;                          // hover 時だけ表示する右端外側のフォーム枠
-    FFrameGuideTop                   : TPanel;                          // hover 時だけ表示する上端外側のフォーム枠
-    FFrameGuideTimer                 : TTimer;                          // マウス位置を見てフォーム枠表示を切り替える
-    FFrameGuideVisible               : Boolean;                         // hover 用フォーム枠を表示中か
-    FLastInfoUpdateTick              : UInt64;                          // 情報表示を最後に更新した tick
-    FBlockedNavigationKeys           : TVideoMinerKeySet;               // 押しっぱなし抑止中のナビゲーションキー
-    FNavigationInputBlockedUntilTick : UInt64;                          // ナビゲーション入力を無視する終了 tick
+    FFrameGuideController            : TVideoMinerFrameGuideController; // hover 用フォーム枠制御
     // 独自タイトルバー左端のアプリアイコンを作る
     procedure InitializeTitleIcon;
-    // hover 時だけ見えるフォーム枠を作る
-    procedure InitializeFrameGuide;
-    // hover 用フォーム枠の表示/非表示を切り替える
-    procedure SetFrameGuideVisible(Value: Boolean);
-    // hover 用フォーム枠を現在のフォームサイズへ合わせる
-    procedure UpdateFrameGuideLayout;
-    // マウス位置から hover 用フォーム枠の表示状態を更新する
-    procedure UpdateFrameGuideVisibility;
-    // hover 用フォーム枠表示の timer 処理
-    procedure FrameGuideTimer(Sender: TObject);
     // タイトルバーのボタン背景色を切り替える
     procedure SetCaptionButtonColor(Sender: TObject; Color: TColor);
-    // 現在位置に手動チャプターを追加する
-    procedure AddChapterOverlayClick(Sender: TObject);
-    // 音声 PCM から自動チェック用チャプターを更新する
-    procedure MaybeAutoCheckAudio(Sender: TObject; StartSample: Int64; const Pcm: TBytes);
-    // 表示中フレームから自動チェック用チャプターを更新する
-    procedure MaybeAutoCheckFrame(PositionMs: Integer);
-    // Check モードを切り替える
-    procedure CheckOverlayClick(Sender: TObject);
-    // 現在位置付近の手動チャプターを削除する
-    procedure DeleteChapterOverlayClick(Sender: TObject);
     // 動画終端時の動作を順に切り替える
     procedure CycleEndAction;
     // 現在フレームをクリップボードへコピーする
@@ -159,17 +106,6 @@ type
     procedure ToggleFullScreen;
     // 90% セーフエリア確認枠を切り替える
     procedure ToggleSafeArea;
-    // 動画画面右クリックでサムネイル一覧を開く
-    procedure VideoSurfaceMouseDown(Sender: TObject);
-    // サムネイル一覧で選択された動画へ切り替える
-    procedure ThumbnailBrowserSelected(Sender: TObject; Index: Integer;
-      const FileName: string);
-    // サムネイル一覧モードの表示/非表示を切り替える
-    procedure ToggleThumbnailBrowser;
-    // サムネイル一覧モードを閉じる
-    procedure CloseThumbnailBrowser;
-    // manager のチャプター情報を overlay 用表示へ反映する
-    procedure RefreshChapterOverlay;
     // 終端動作ボタンの表示を更新する
     procedure UpdateEndActionButton;
     // 再生速度ボタンの表示を更新する
@@ -179,28 +115,10 @@ type
     // 指定ファイルを開き、必要なら自動再生する
     function LoadVideoFile(const FileName: string; AutoPlay: Boolean;
       RestoreLoopPosition: Boolean = True): Boolean;
-    // ドロップされた先頭ファイルを開く
-    procedure DropFiles(Sender: TObject; Control: TWinControl; const FileNames: TArray<string>);
-    // 前後ファイル移動ボタンの有効状態を更新する
-    procedure UpdateNavigationButtons;
-    // 現在押されているナビゲーションキーを一時的にブロックする
-    procedure BlockPressedNavigationKeys;
-    // メッセージキューに残ったナビゲーションキー入力を捨てる
-    procedure ClearBufferedNavigationKeyMessages;
-    // フォルダ内動画一覧を前後へ移動する
-    procedure NavigateBy(Delta: Integer);
-    // 終端時の next 動作用に次動画へ移動する
-    procedure NavigateNextPlaybackFile;
     // 前後チャプターへ移動する
     procedure NavigateChapterBy(Delta: Integer);
     // ファイル選択ダイアログから動画を開く
     procedure OpenFromDialog;
-    // 指定ファイルの手動チャプターと再開位置を読み込む
-    procedure LoadManualChapterState(const FileName: string);
-    // 現在ファイルの手動チャプターを保存する
-    procedure SaveManualChapterState;
-    // ループ再生用の再開位置を保存する
-    procedure SaveLoopPlaybackPosition;
     // 保存済みのループ再生位置を復元する
     function TryRestoreLoopPlaybackPosition: Boolean;
     // 音量とミュート状態を保存する
@@ -221,22 +139,10 @@ type
     function PlaybackActiveOrPending: Boolean;
     // controller と UI 状態から現在再生位置を返す
     function CurrentPlaybackPositionMs: Integer;
-    // 独自タイトルバーへ文字列を反映する
-    procedure SetTitleBarText(const Text: string);
-    // フォーム caption とタイトルバーを状態表示として更新する
-    procedure SetStatusCaption(const Text: string);
-    // 再生中に進捗と情報表示を更新する
-    procedure UpdatePlaybackProgress(PositionMs: Integer);
     // 再生 tick から指定位置へシークする
     procedure SeekPlaybackTickToMs(PositionMs: Integer);
     // 指定位置へシークし、必要なら再生状態を復元する
     procedure SeekToMs(PositionMs: Integer; ResumeIfPlaying: Boolean = True);
-    // シークバー hover 位置のプレビュー要求を受ける
-    procedure SeekHoverPreview(Sender: TObject; PositionMs: Integer; const Point: TPoint);
-    // シークバー hover プレビューを閉じる
-    procedure SeekHoverPreviewEnd(Sender: TObject);
-    // シークバー hover プレビューを間引いてデコードする
-    procedure SeekHoverPreviewTimer(Sender: TObject);
     // 現在位置から相対移動する
     procedure SeekByMs(DeltaMs: Integer);
     // 先頭フレームへ移動する
@@ -253,27 +159,6 @@ type
     procedure RestartPlaybackTimer(Sender: TObject);
     // 終端到達時の停止/ループ/次動画動作を処理する
     procedure FinishPlaybackAtEnd;
-    // 別プロセスから渡されたファイルを後で開くキューへ積む
-    procedure QueueOpenAndPlayFile(const FileName: string);
-    // 保留中の open キューを順に処理する
-    procedure ProcessOpenQueue;
-    // 現在ファイルのあるフォルダ監視を構成する
-    procedure ConfigureCurrentFileWatch;
-    // 指定リストに現在ファイルが含まれるか返す
-    function CurrentFileInList(const FileNames: TStringList): Boolean;
-    // 現在ファイルを読み取りオープンできるか返す
-    function CurrentFileCanBeRead: Boolean;
-    // 現在ファイルの更新日時とサイズを読む
-    function ReadCurrentFileStamp(out LastWriteTime: TDateTime; out Size: Int64): Boolean;
-    // 現在ファイルの再読込を遅延実行にする
-    procedure ScheduleCurrentFileReload;
-    // 更新が落ち着いたら現在ファイルを開き直す
-    procedure ReloadCurrentFileTimer(Sender: TObject);
-    // フォルダ監視イベントから現在ファイルの変更だけを拾う
-    procedure FolderWatchFileChange(Sender: TObject; const AddFiles: TStringList;
-      const DelFiles: TStringList; const UpdateFiles: TStringList);
-    // 現在ファイルの更新日時とサイズを記録する
-    procedure UpdateCurrentFileStamp;
     // 別プロセスから渡されたファイル名を受け取る
     procedure WMCopyData(var Message: TWMCopyData); message WM_COPYDATA;
     // 通常表示時の移動を window controller へ通知する
@@ -292,8 +177,6 @@ type
     function ShowFrameAtMs(const PositionMs: Integer): Boolean;
     // 入力を先頭から読み直し、最初にデコードできる映像フレームを表示する
     function ShowFirstFrameFromStart: Boolean;
-    // 動画情報ラベルを更新する
-    procedure UpdateInfoLabel;
   protected
     // 枠なしフォーム用の作成パラメータを設定する
     procedure CreateParams(var Params: TCreateParams); override;
@@ -312,22 +195,10 @@ var
 implementation
 
 const
-  COPYDATA_OPEN_FILE            = $564D0001; // 別プロセスからファイル名を受け取る COPYDATA 種別
-  UI_INFO_UPDATE_INTERVAL_MS    = 250;       // 再生中の情報表示を更新する最短間隔 ms
   SEEK_RESTART_DELAY_MS         = 15;        // シーク後に再生再開を遅延させる時間 ms
-  SEEK_HOVER_PREVIEW_INITIAL_DELAY_MS = 140; // 最初の hover でプレビュー表示を始めるまでの待ち時間 ms
-  SEEK_HOVER_PREVIEW_UPDATE_DELAY_MS  = 5;  // 表示済みプレビューを別位置へ更新するまでの待ち時間 ms
-  SEEK_HOVER_PREVIEW_REUSE_MS         = 80; // 近い hover 位置では前回プレビューを再利用する幅 ms
-  CURRENT_FILE_RELOAD_SETTLE_MS = 1500;      // ファイル更新が落ち着くまで再読込を待つ時間 ms
-  NAVIGATION_INPUT_BLOCK_MS     = 300;       // 前後動画移動直後に残留キー入力を無視する時間 ms
   TITLE_BAR_COLOR               = $00171617; // 独自タイトルバーの通常背景色
   CLOSE_BUTTON_HOVER_COLOR      = $00232323; // 閉じるボタン hover 時の背景色
   CAPTION_BUTTON_HOVER_COLOR    = $00232323; // 最小化/最大化ボタン hover 時の背景色
-  FRAME_GUIDE_INNER_COLOR       = clWhite;   // hover 枠の内側色
-  FRAME_GUIDE_OUTER_COLOR       = clWhite;   // hover 枠の外側色
-  FRAME_GUIDE_EDGE_SIZE         = 12;         // hover 枠を出すフォーム端の幅 px
-  FRAME_GUIDE_LINE_SIZE         = 1;          // hover 枠 1 本ぶんの太さ px
-  FRAME_GUIDE_TIMER_INTERVAL_MS = 80;         // hover 枠表示状態を確認する間隔 ms
   MIN_FORM_WIDTH                = 520;        // 下部操作バーが破綻しない最小フォーム幅
   MIN_FORM_HEIGHT               = 360;        // 動画表示と下部操作バーを残せる最小フォーム高さ
 
@@ -355,43 +226,47 @@ begin
   Constraints.MinWidth := MIN_FORM_WIDTH;
   Constraints.MinHeight := MIN_FORM_HEIGHT;
   InitializeTitleIcon;
-  InitializeFrameGuide;
-  FEndAction := LoadEndAction;
+  FMediaSession := TVideoMinerMediaSession.Create;
+  FMediaSession.EndAction := LoadEndAction;
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format('form_create base_ui_settings_ms=%.3f total_ms=%.3f',
     [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds]));
   StepWatch := TStopwatch.StartNew;
 {$ENDIF}
   FShortcuts := TShortcutAction.Create;
-  FOleInitialized := OleInitialize(nil) >= 0;
+  FExternalOpenController := TVideoMinerExternalOpenController.Create(Self,
+    WM_VM_OPEN_PENDING);
+  FExternalOpenController.OnOpenAndPlay := OpenAndPlayFile;
   FDecoder := TFFmpegDecoder.Create;
   FPreviewDecoder := TFFmpegDecoder.Create;
   FAudioPlayback := TVideoMinerAudioPlayback.Create;
-  FAudioPlayback.OnPcmDecoded := MaybeAutoCheckAudio;
   FMediaList := TVideoMinerMediaList.Create;
-  FChapterManager := TVideoMinerChapterManager.Create;
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
-  FVideoView.OnThumbnailBrowserClick := VideoSurfaceMouseDown;
-  FVideoView.OnSeekHoverPreview := SeekHoverPreview;
-  FVideoView.OnSeekHoverPreviewEnd := SeekHoverPreviewEnd;
-  FSeekHoverPreviewBitmap := TBitmap.Create;
-  FSeekHoverPreviewBitmap.PixelFormat := pf32bit;
-  FSeekHoverPreviewLastPositionMs := -1;
+  FInfoController := TVideoMinerInfoController.Create(Self, LabelAppTitle,
+    FMediaSession, FMediaList, FAudioPlayback, FVideoView);
+  FInfoController.OnCurrentPosition := CurrentPlaybackPositionMs;
+  FNavigationController := TVideoMinerNavigationController.Create(FMediaList,
+    FVideoView);
+  FNavigationController.OnOpenFile := LoadVideoFile;
+  FChapterController := TVideoMinerChapterController.Create(FMediaSession,
+    FVideoView);
+  FChapterController.OnCurrentPosition := CurrentPlaybackPositionMs;
+  FChapterController.OnConfigureLoop := ConfigureLoopSegment;
+  FAudioPlayback.OnPcmDecoded := FChapterController.MaybeAutoCheckAudio;
+  FThumbnailBrowserController := TVideoMinerThumbnailBrowserController.Create(Self,
+    FVideoView.SurfaceControl, FMediaList, FMediaSession);
+  FThumbnailBrowserController.OnOpenFile := LoadVideoFile;
+  FVideoView.OnThumbnailBrowserClick := FThumbnailBrowserController.OpenFromSurfaceClick;
+  FSeekHoverPreviewController := TVideoMinerSeekHoverPreviewController.Create(Self,
+    FVideoView, FPreviewDecoder);
+  FVideoView.OnSeekHoverPreview := FSeekHoverPreviewController.SeekHoverPreview;
+  FVideoView.OnSeekHoverPreviewEnd := FSeekHoverPreviewController.SeekHoverPreviewEnd;
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format('form_create core_objects_ms=%.3f total_ms=%.3f ole=%s',
     [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds,
-     BoolToStr(FOleInitialized, True)]));
+     BoolToStr(FExternalOpenController.OleInitialized, True)]));
   StepWatch := TStopwatch.StartNew;
 {$ENDIF}
-  FThumbnailBrowser := TVideoMinerThumbnailBrowser.Create(Self);
-  FThumbnailBrowser.Parent := FVideoView.SurfaceControl.Parent;
-  FThumbnailBrowser.Align := FVideoView.SurfaceControl.Align;
-  FThumbnailBrowser.SetBounds(FVideoView.SurfaceControl.Left,
-    FVideoView.SurfaceControl.Top, FVideoView.SurfaceControl.Width,
-    FVideoView.SurfaceControl.Height);
-  FThumbnailBrowser.Anchors := FVideoView.SurfaceControl.Anchors;
-  FThumbnailBrowser.OnSelected := ThumbnailBrowserSelected;
-  FThumbnailBrowser.SetMediaList(FMediaList);
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format('form_create thumbnail_browser_ms=%.3f total_ms=%.3f',
     [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds]));
@@ -399,11 +274,17 @@ begin
 {$ENDIF}
   FWindowModeController := TVideoMinerWindowModeController.Create(Self,
     PanelTitleBar, LabelMaximizeButton, FVideoView, StopPlayback);
+  FFrameGuideController := TVideoMinerFrameGuideController.Create(Self, Self,
+    PanelTitleBar, FWindowModeController);
   FCommandController := TVideoMinerCommandController.Create(FAudioPlayback,
     FVideoView);
+  FCommandController.OnAddChapter := FChapterController.AddChapterClick;
   FCommandController.OnChapterNavigate := NavigateChapterBy;
+  FCommandController.OnCheckToggle := FChapterController.ToggleCheckClick;
   FCommandController.OnCopyCurrentFrame := CopyCurrentFrameToClipboard;
-  FCommandController.OnNavigate := NavigateBy;
+  FCommandController.OnDeleteChapter := FChapterController.DeleteChapterClick;
+  FCommandController.OnEndActionCycle := EndActionOverlayClick;
+  FCommandController.OnNavigate := FNavigationController.NavigateBy;
   FCommandController.OnOpenDialog := OpenFromDialog;
   FCommandController.OnPlaybackActiveOrPending := PlaybackActiveOrPending;
   FCommandController.OnPlaybackRateCycle := CyclePlaybackRate;
@@ -430,17 +311,11 @@ begin
     [rdTop]);
   TResizeEdgeHelper.AttachEdges(FVideoView.SurfaceControl,
     VIDEO_MINER_RESIZE_BORDER, [rdBottom, rdLeft, rdRight]);
-  TResizeEdgeHelper.AttachEdges(FThumbnailBrowser, VIDEO_MINER_RESIZE_BORDER,
-    [rdBottom, rdLeft, rdRight]);
+  if FThumbnailBrowserController <> nil then
+    FThumbnailBrowserController.AttachResizeEdges(VIDEO_MINER_RESIZE_BORDER);
   FVideoView.OnBossExitClick := BossExitClick;
   FVideoView.OnBossGesture := BossGesture;
-  FVideoView.OnEndActionClick := EndActionOverlayClick;
-  FVideoView.OnAddChapterClick := AddChapterOverlayClick;
-  FVideoView.OnCheckClick := CheckOverlayClick;
-  FVideoView.OnDeleteChapterClick := DeleteChapterOverlayClick;
-  FVideoView.CheckEnabled := FChapterManager.CheckEnabled;
-  RefreshChapterOverlay;
-  FPendingOpenFiles := TStringList.Create;
+  FChapterController.RefreshOverlay;
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format('form_create overlays_resize_ms=%.3f total_ms=%.3f',
     [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds]));
@@ -450,23 +325,19 @@ begin
   FRestartPlaybackTimer.Enabled := False;
   FRestartPlaybackTimer.Interval := SEEK_RESTART_DELAY_MS;
   FRestartPlaybackTimer.OnTimer := RestartPlaybackTimer;
-  FReloadCurrentFileTimer := TTimer.Create(Self);
-  FReloadCurrentFileTimer.Enabled := False;
-  FReloadCurrentFileTimer.Interval := CURRENT_FILE_RELOAD_SETTLE_MS;
-  FReloadCurrentFileTimer.OnTimer := ReloadCurrentFileTimer;
-  FSeekHoverPreviewTimer := TTimer.Create(Self);
-  FSeekHoverPreviewTimer.Enabled := False;
-  FSeekHoverPreviewTimer.Interval := SEEK_HOVER_PREVIEW_INITIAL_DELAY_MS;
-  FSeekHoverPreviewTimer.OnTimer := SeekHoverPreviewTimer;
-  FFrameGuideTimer := TTimer.Create(Self);
-  FFrameGuideTimer.Enabled := True;
-  FFrameGuideTimer.Interval := FRAME_GUIDE_TIMER_INTERVAL_MS;
-  FFrameGuideTimer.OnTimer := FrameGuideTimer;
-  FFolderWatcher := TFolderWatch.Create;
-  FFolderWatcher.FirstScanDone := True;
-  FFolderWatcher.OnFileChange := FolderWatchFileChange;
+  FCurrentFileReloadController :=
+    TVideoMinerCurrentFileReloadController.Create(FMediaSession);
+  FCurrentFileReloadController.OnReload := LoadVideoFile;
   FPlaybackController := TVideoMinerPlaybackController.Create(TimerPlayback,
     FRestartPlaybackTimer, FAudioPlayback, FVideoView, FPreviewDecoder);
+  FMediaLoadController := TVideoMinerMediaLoadController.Create(Self,
+    FMediaSession, FMediaList, TimerPlayback, FPlaybackController,
+    FAudioPlayback, FPreviewDecoder, FVideoView, FCurrentFileReloadController,
+    FChapterController, FSeekHoverPreviewController, FNavigationController,
+    FThumbnailBrowserController);
+  FMediaLoadController.OnSetStatus := FInfoController.SetStatusCaption;
+  FMediaLoadController.OnSetTitleBar := FInfoController.SetTitleBarText;
+  FMediaLoadController.OnUpdateInfo := FInfoController.UpdateInfo;
   UpdateEndActionButton;
   UpdatePlaybackRateButton;
 {$IFDEF DEBUG}
@@ -474,11 +345,11 @@ begin
     [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds]));
   StepWatch := TStopwatch.StartNew;
 {$ENDIF}
-  FCurrentVideoPositionMs := -1;
-  FSeekPositionMs := 0;
-  FSeekMaxMs := 0;
-  FLoopSegmentStartMs := -1;
-  FLoopSegmentEndMs := -1;
+  FMediaSession.CurrentVideoPositionMs := -1;
+  FMediaSession.SeekPositionMs := 0;
+  FMediaSession.SeekMaxMs := 0;
+  FMediaSession.LoopSegmentStartMs := -1;
+  FMediaSession.LoopSegmentEndMs := -1;
   AudioSettings := LoadAudioSettings;
   FAudioPlayback.VolumePercent := AudioSettings.VolumePercent;
   FAudioPlayback.Muted := AudioSettings.Muted;
@@ -492,14 +363,7 @@ begin
     [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds]));
   StepWatch := TStopwatch.StartNew;
 {$ENDIF}
-  FDropAgent := TDropAgent.Create;
-  if FOleInitialized then
-  begin
-    FDropAgent.AcceptKinds := [dakFiles];
-    FDropAgent.OnDropFiles := DropFiles;
-    FDropAgent.Attach(Self);
-  end;
-  SetStatusCaption('No video loaded');
+  FInfoController.SetStatusCaption('No video loaded');
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format('form_create drop_agent_status_ms=%.3f total_ms=%.3f',
     [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds]));
@@ -511,8 +375,11 @@ end;
 // フォーム破棄時にデコーダを解放する
 procedure TVideoMinerMainForm.FormDestroy(Sender: TObject);
 begin
-  SaveManualChapterState;
-  SaveLoopPlaybackPosition;
+  if FChapterController <> nil then
+  begin
+    FChapterController.SaveManualChapterState;
+    FChapterController.SaveLoopPlaybackPosition;
+  end;
   SaveAudioPlaybackSettings;
   if TimerPlayback <> nil then
     TimerPlayback.Enabled := False;
@@ -520,35 +387,33 @@ begin
     FVideoView.PlaybackActive := False;
   if FRestartPlaybackTimer <> nil then
     FRestartPlaybackTimer.Enabled := False;
-  if FReloadCurrentFileTimer <> nil then
-    FReloadCurrentFileTimer.Enabled := False;
-  if FSeekHoverPreviewTimer <> nil then
-    FSeekHoverPreviewTimer.Enabled := False;
-  if FFolderWatcher <> nil then
-    FFolderWatcher.Stop;
+  if FCurrentFileReloadController <> nil then
+    FCurrentFileReloadController.Stop;
   if FAudioPlayback <> nil then
     FAudioPlayback.Stop;
-  FDropAgent.Free;
-  FPendingOpenFiles.Free;
   FCommandController.Free;
   FShortcuts.Free;
+  FExternalOpenController.Free;
+  FMediaLoadController.Free;
   FPlaybackController.Free;
-  FFolderWatcher.Free;
+  FCurrentFileReloadController.Free;
   if FWindowModeController <> nil then
     FWindowModeController.SaveWindowBounds;
+  SaveEndAction(FMediaSession.EndAction);
+  FFrameGuideController.Free;
   FWindowModeController.Free;
-  FThumbnailBrowser.Free;
+  FThumbnailBrowserController.Free;
+  FSeekHoverPreviewController.Free;
+  FChapterController.Free;
+  FNavigationController.Free;
+  FInfoController.Free;
   FVideoView.Free;
-  FSeekHoverPreviewBitmap.Free;
-  FChapterManager.Free;
   FMediaList.Free;
+  FMediaSession.Free;
   FAudioPlayback.Free;
   FPreviewDecoder.Free;
   FDecoder.Free;
   FTitleIcon.Free;
-  SaveEndAction(FEndAction);
-  if FOleInitialized then
-    OleUninitialize;
 end;
 
 procedure TVideoMinerMainForm.ToggleFullScreen;
@@ -562,199 +427,9 @@ begin
   if FVideoView <> nil then
     FVideoView.SafeAreaVisible := FSafeAreaVisible;
   if FSafeAreaVisible then
-    SetStatusCaption('90% safe area guide on.')
+    FInfoController.SetStatusCaption('90% safe area guide on.')
   else
-    SetStatusCaption('90% safe area guide off.');
-end;
-
-procedure TVideoMinerMainForm.InitializeFrameGuide;
-
-  procedure CreateGuidePanel(out Panel: TPanel; Color: TColor);
-  begin
-    Panel := TPanel.Create(Self);
-    Panel.Parent := Self;
-    Panel.BevelOuter := bvNone;
-    Panel.Caption := '';
-    Panel.Color := Color;
-    Panel.ParentBackground := False;
-    Panel.Enabled := False;
-    Panel.Visible := False;
-  end;
-
-begin
-  CreateGuidePanel(FFrameGuideTop, FRAME_GUIDE_OUTER_COLOR);
-  CreateGuidePanel(FFrameGuideBottom, FRAME_GUIDE_OUTER_COLOR);
-  CreateGuidePanel(FFrameGuideLeft, FRAME_GUIDE_OUTER_COLOR);
-  CreateGuidePanel(FFrameGuideRight, FRAME_GUIDE_OUTER_COLOR);
-  CreateGuidePanel(FFrameGuideInnerTop, FRAME_GUIDE_INNER_COLOR);
-  CreateGuidePanel(FFrameGuideInnerBottom, FRAME_GUIDE_INNER_COLOR);
-  CreateGuidePanel(FFrameGuideInnerLeft, FRAME_GUIDE_INNER_COLOR);
-  CreateGuidePanel(FFrameGuideInnerRight, FRAME_GUIDE_INNER_COLOR);
-  UpdateFrameGuideLayout;
-end;
-
-procedure TVideoMinerMainForm.SetFrameGuideVisible(Value: Boolean);
-
-  procedure SetGuidePanelVisible(Panel: TPanel);
-  begin
-    if Panel <> nil then
-      Panel.Visible := Value;
-  end;
-
-  procedure BringGuidePanelToFront(Panel: TPanel);
-  begin
-    if Panel <> nil then
-      Panel.BringToFront;
-  end;
-
-begin
-  if (FFrameGuideVisible = Value) and (not Value) then
-    Exit;
-
-  if FFrameGuideVisible <> Value then
-  begin
-    FFrameGuideVisible := Value;
-    SetGuidePanelVisible(FFrameGuideTop);
-    SetGuidePanelVisible(FFrameGuideBottom);
-    SetGuidePanelVisible(FFrameGuideLeft);
-    SetGuidePanelVisible(FFrameGuideRight);
-    SetGuidePanelVisible(FFrameGuideInnerTop);
-    SetGuidePanelVisible(FFrameGuideInnerBottom);
-    SetGuidePanelVisible(FFrameGuideInnerLeft);
-    SetGuidePanelVisible(FFrameGuideInnerRight);
-  end;
-
-  if Value then
-  begin
-    UpdateFrameGuideLayout;
-    BringGuidePanelToFront(FFrameGuideTop);
-    BringGuidePanelToFront(FFrameGuideBottom);
-    BringGuidePanelToFront(FFrameGuideLeft);
-    BringGuidePanelToFront(FFrameGuideRight);
-    BringGuidePanelToFront(FFrameGuideInnerTop);
-    BringGuidePanelToFront(FFrameGuideInnerBottom);
-    BringGuidePanelToFront(FFrameGuideInnerLeft);
-    BringGuidePanelToFront(FFrameGuideInnerRight);
-  end;
-end;
-
-procedure TVideoMinerMainForm.UpdateFrameGuideLayout;
-var
-  InnerHeight: Integer;
-  InnerWidth: Integer;
-  Thickness: Integer;
-begin
-  Thickness := FRAME_GUIDE_LINE_SIZE;
-  if (ClientWidth <= 0) or (ClientHeight <= 0) then
-    Exit;
-  InnerWidth := Max(0, ClientWidth - Thickness * 2);
-  InnerHeight := Max(0, ClientHeight - Thickness * 2);
-
-  if FFrameGuideTop <> nil then
-    FFrameGuideTop.SetBounds(0, 0, ClientWidth, Thickness);
-  if FFrameGuideBottom <> nil then
-    FFrameGuideBottom.SetBounds(0, ClientHeight - Thickness, ClientWidth,
-      Thickness);
-  if FFrameGuideLeft <> nil then
-    FFrameGuideLeft.SetBounds(0, 0, Thickness, ClientHeight);
-  if FFrameGuideRight <> nil then
-    FFrameGuideRight.SetBounds(ClientWidth - Thickness, 0, Thickness,
-      ClientHeight);
-  if FFrameGuideInnerTop <> nil then
-    FFrameGuideInnerTop.SetBounds(Thickness, Thickness, InnerWidth, Thickness);
-  if FFrameGuideInnerBottom <> nil then
-    FFrameGuideInnerBottom.SetBounds(Thickness, ClientHeight - Thickness * 2,
-      InnerWidth, Thickness);
-  if FFrameGuideInnerLeft <> nil then
-    FFrameGuideInnerLeft.SetBounds(Thickness, Thickness, Thickness,
-      InnerHeight);
-  if FFrameGuideInnerRight <> nil then
-    FFrameGuideInnerRight.SetBounds(ClientWidth - Thickness * 2, Thickness,
-      Thickness, InnerHeight);
-end;
-
-procedure TVideoMinerMainForm.UpdateFrameGuideVisibility;
-var
-  ClientPoint: TPoint;
-  CursorPoint: TPoint;
-  InEdge: Boolean;
-  InForm: Boolean;
-  InTitleBar: Boolean;
-begin
-  if (FWindowModeController <> nil) and
-     (FWindowModeController.FullScreen or FWindowModeController.BossMode) then
-  begin
-    SetFrameGuideVisible(False);
-    Exit;
-  end;
-
-  if WindowState = wsMinimized then
-  begin
-    SetFrameGuideVisible(False);
-    Exit;
-  end;
-
-  GetCursorPos(CursorPoint);
-  ClientPoint := ScreenToClient(CursorPoint);
-  InForm := PtInRect(Rect(0, 0, ClientWidth, ClientHeight), ClientPoint);
-  if not InForm then
-  begin
-    SetFrameGuideVisible(False);
-    Exit;
-  end;
-
-  InTitleBar := (PanelTitleBar <> nil) and PanelTitleBar.Visible and
-    PtInRect(PanelTitleBar.BoundsRect, ClientPoint);
-  InEdge := (ClientPoint.X < FRAME_GUIDE_EDGE_SIZE) or
-    (ClientPoint.X >= ClientWidth - FRAME_GUIDE_EDGE_SIZE) or
-    (ClientPoint.Y < FRAME_GUIDE_EDGE_SIZE) or
-    (ClientPoint.Y >= ClientHeight - FRAME_GUIDE_EDGE_SIZE);
-
-  SetFrameGuideVisible(InTitleBar or InEdge);
-end;
-
-procedure TVideoMinerMainForm.FrameGuideTimer(Sender: TObject);
-begin
-  UpdateFrameGuideVisibility;
-end;
-procedure TVideoMinerMainForm.VideoSurfaceMouseDown(Sender: TObject);
-begin
-  if (FThumbnailBrowser <> nil) and (not FThumbnailBrowser.Visible) then
-    ToggleThumbnailBrowser;
-end;
-procedure TVideoMinerMainForm.ThumbnailBrowserSelected(Sender: TObject;
-  Index: Integer; const FileName: string);
-begin
-  if FileName = '' then
-    Exit;
-
-  if SameText(FileName, FVideoFile) then
-  begin
-    CloseThumbnailBrowser;
-    Exit;
-  end;
-
-  if LoadVideoFile(FileName, True) then
-    CloseThumbnailBrowser;
-end;
-
-procedure TVideoMinerMainForm.ToggleThumbnailBrowser;
-begin
-  if FThumbnailBrowser = nil then
-    Exit;
-
-  WriteVideoMinerSlowLog(Format('thumbnail toggle_begin visible=%s',
-    [BoolToStr(FThumbnailBrowser.Visible, True)]));
-  FThumbnailBrowser.SetMediaList(FMediaList);
-  FThumbnailBrowser.Toggle;
-  WriteVideoMinerSlowLog(Format('thumbnail toggle_end visible=%s',
-    [BoolToStr(FThumbnailBrowser.Visible, True)]));
-end;
-
-procedure TVideoMinerMainForm.CloseThumbnailBrowser;
-begin
-  if FThumbnailBrowser <> nil then
-    FThumbnailBrowser.Close;
+    FInfoController.SetStatusCaption('90% safe area guide off.');
 end;
 
 procedure TVideoMinerMainForm.InitializeTitleIcon;
@@ -786,8 +461,8 @@ end;
 function TVideoMinerMainForm.DoMouseWheel(Shift: TShiftState;
   WheelDelta: Integer; MousePos: TPoint): Boolean;
 begin
-  Result := (FThumbnailBrowser <> nil) and FThumbnailBrowser.Visible and
-    FThumbnailBrowser.HandleMouseWheel(Shift, WheelDelta, MousePos);
+  Result := (FThumbnailBrowserController <> nil) and
+    FThumbnailBrowserController.HandleMouseWheel(Shift, WheelDelta, MousePos);
   if Result then
     Exit;
 
@@ -804,18 +479,18 @@ var
   ShownPositionMs: Integer;
 begin
   Result := False;
-  if (FVideoFile = '') or (FDecoder = nil) then
+  if (FMediaSession.VideoFile = '') or (FDecoder = nil) then
     Exit;
 
-  if not FPlaybackController.ShowFrameNearMs(PositionMs, FSeekMaxMs,
+  if not FPlaybackController.ShowFrameNearMs(PositionMs, FMediaSession.SeekMaxMs,
     ShownPositionMs, ErrorMessage) then
   begin
-    SetStatusCaption('Failed to decode frame: ' + ErrorMessage);
+    FInfoController.SetStatusCaption('Failed to decode frame: ' + ErrorMessage);
     Exit;
   end;
 
-  FCurrentVideoPositionMs := ShownPositionMs;
-  UpdateInfoLabel;
+  FMediaSession.CurrentVideoPositionMs := ShownPositionMs;
+  FInfoController.UpdateInfo;
   Result := True;
 end;
 
@@ -826,31 +501,31 @@ var
   OpenInfo: TVideoInfo;
 begin
   Result := False;
-  if (FVideoFile = '') or (FPreviewDecoder = nil) or (FVideoView = nil) then
+  if (FMediaSession.VideoFile = '') or (FPreviewDecoder = nil) or (FVideoView = nil) then
     Exit;
 
   FPreviewDecoder.Close;
-  if not FPreviewDecoder.Open(FVideoFile, OpenInfo, ErrorMessage) then
+  if not FPreviewDecoder.Open(FMediaSession.VideoFile, OpenInfo, ErrorMessage) then
   begin
-    SetStatusCaption('Failed to reopen preview decoder: ' + ErrorMessage);
+    FInfoController.SetStatusCaption('Failed to reopen preview decoder: ' + ErrorMessage);
     Exit;
   end;
 
   if not FVideoView.ShowNextFrame(FPreviewDecoder, DecodedPositionMs,
     ErrorMessage) then
   begin
-    SetStatusCaption('Failed to decode first frame: ' + ErrorMessage);
+    FInfoController.SetStatusCaption('Failed to decode first frame: ' + ErrorMessage);
     Exit;
   end;
 
-  FCurrentVideoPositionMs := Max(0, DecodedPositionMs);
+  FMediaSession.CurrentVideoPositionMs := Max(0, DecodedPositionMs);
   FUpdatingSeek := True;
   try
-    FSeekPositionMs := 0;
+    FMediaSession.SeekPositionMs := 0;
   finally
     FUpdatingSeek := False;
   end;
-  UpdatePlaybackProgress(0);
+  FInfoController.UpdatePlaybackProgress(0);
   WriteVideoMinerSlowLog(Format('show_first_frame_from_start decoded_ms=%d',
     [DecodedPositionMs]));
   Result := True;
@@ -926,7 +601,7 @@ var
 begin
   if PlaybackActiveOrPending then
   begin
-    SetStatusCaption('Pause video before copying frame.');
+    FInfoController.SetStatusCaption('Pause video before copying frame.');
     Exit;
   end;
 
@@ -935,23 +610,24 @@ begin
     FrameBitmap := FVideoView.CurrentFrameBitmap;
   if (FrameBitmap = nil) or (FrameBitmap.Width <= 0) or (FrameBitmap.Height <= 0) then
   begin
-    SetStatusCaption('No frame to copy.');
+    FInfoController.SetStatusCaption('No frame to copy.');
     Exit;
   end;
 
-  if CopyVideoFrameBitmapToClipboard(FrameBitmap, FVideoInfo.HasAlpha, ErrorMessage) then
-    SetStatusCaption('Copied current frame to clipboard.')
+  if CopyVideoFrameBitmapToClipboard(FrameBitmap, FMediaSession.VideoInfo.HasAlpha, ErrorMessage) then
+    FInfoController.SetStatusCaption('Copied current frame to clipboard.')
   else
-    SetStatusCaption('Failed to copy frame: ' + ErrorMessage);
+    FInfoController.SetStatusCaption('Failed to copy frame: ' + ErrorMessage);
 end;
 
 procedure TVideoMinerMainForm.CycleEndAction;
 begin
-  FEndAction := FPlaybackController.NextEndAction(FEndAction);
+  FMediaSession.EndAction := FPlaybackController.NextEndAction(FMediaSession.EndAction);
   UpdateEndActionButton;
   ConfigureLoopSegment(CurrentPlaybackPositionMs);
-  SaveEndAction(FEndAction);
-  SaveLoopPlaybackPosition;
+  SaveEndAction(FMediaSession.EndAction);
+  if FChapterController <> nil then
+    FChapterController.SaveLoopPlaybackPosition;
 end;
 
 procedure TVideoMinerMainForm.CyclePlaybackRate;
@@ -980,7 +656,7 @@ begin
     StartPlaybackAtMs(PositionMs, True);
   end
   else
-    UpdateInfoLabel;
+    FInfoController.UpdateInfo;
 end;
 
 procedure TVideoMinerMainForm.EndActionOverlayClick(Sender: TObject);
@@ -988,111 +664,12 @@ begin
   CycleEndAction;
 end;
 
-procedure TVideoMinerMainForm.AddChapterOverlayClick(Sender: TObject);
-begin
-  if FChapterManager = nil then
-    Exit;
-
-  FChapterManager.AddManualChapter(CurrentPlaybackPositionMs, FSeekMaxMs);
-  RefreshChapterOverlay;
-  ConfigureLoopSegment(CurrentPlaybackPositionMs);
-  SaveManualChapterState;
-  SaveLoopPlaybackPosition;
-end;
-
-procedure TVideoMinerMainForm.MaybeAutoCheckAudio(Sender: TObject;
-  StartSample: Int64; const Pcm: TBytes);
-var
-  Changed: Boolean;
-begin
-  if FChapterManager = nil then
-    Exit;
-
-  if (not FVideoInfo.Audio.Present) or (FVideoInfo.Audio.OpenError <> '') then
-  begin
-    FChapterManager.MaybeAutoCheckAudio(StartSample, nil, FSeekMaxMs);
-    Exit;
-  end;
-
-  Changed := FChapterManager.MaybeAutoCheckAudio(StartSample, Pcm, FSeekMaxMs);
-  if Changed then
-  begin
-    RefreshChapterOverlay;
-    ConfigureLoopSegment(CurrentPlaybackPositionMs);
-    SaveManualChapterState;
-    SaveLoopPlaybackPosition;
-  end;
-end;
-
-procedure TVideoMinerMainForm.MaybeAutoCheckFrame(PositionMs: Integer);
-var
-  Changed: Boolean;
-  Signature: TVideoMinerFrameSignature;
-begin
-  if (FChapterManager = nil) or (FVideoView = nil) then
-    Exit;
-
-  if not FChapterManager.CheckEnabled then
-  begin
-    FChapterManager.MaybeAutoCheckFrame(PositionMs, False, FSeekMaxMs);
-    FillChar(Signature, SizeOf(Signature), 0);
-    FChapterManager.MaybeAutoCheckFrameDifference(PositionMs, Signature,
-      FSeekMaxMs);
-    Exit;
-  end;
-
-  Changed := FChapterManager.MaybeAutoCheckFrame(PositionMs,
-    FVideoView.CurrentFrameCornersMostlyDark, FSeekMaxMs);
-  if FVideoView.CurrentFrameSignature(Signature) then
-    Changed := FChapterManager.MaybeAutoCheckFrameDifference(PositionMs,
-      Signature, FSeekMaxMs) or Changed;
-  if Changed then
-  begin
-    RefreshChapterOverlay;
-    ConfigureLoopSegment(CurrentPlaybackPositionMs);
-    SaveManualChapterState;
-    SaveLoopPlaybackPosition;
-  end;
-end;
-
-procedure TVideoMinerMainForm.CheckOverlayClick(Sender: TObject);
-begin
-  if FChapterManager = nil then
-    Exit;
-
-  FChapterManager.ToggleCheckEnabled;
-  if FVideoView <> nil then
-    FVideoView.CheckEnabled := FChapterManager.CheckEnabled;
-  RefreshChapterOverlay;
-end;
-
-procedure TVideoMinerMainForm.DeleteChapterOverlayClick(Sender: TObject);
-begin
-  if FChapterManager = nil then
-    Exit;
-
-  if not FChapterManager.DeleteNearestManualChapter(CurrentPlaybackPositionMs,
-    FSeekMaxMs) then
-    Exit;
-
-  RefreshChapterOverlay;
-  ConfigureLoopSegment(CurrentPlaybackPositionMs);
-  SaveManualChapterState;
-  SaveLoopPlaybackPosition;
-end;
-
-procedure TVideoMinerMainForm.RefreshChapterOverlay;
-begin
-  if (FVideoView <> nil) and (FChapterManager <> nil) then
-    FVideoView.Chapters := FChapterManager.DisplayChapters;
-end;
-
 procedure TVideoMinerMainForm.UpdateEndActionButton;
 begin
   if (FVideoView = nil) or (FPlaybackController = nil) then
     Exit;
 
-  FVideoView.EndActionText := FPlaybackController.EndActionText(FEndAction);
+  FVideoView.EndActionText := FPlaybackController.EndActionText(FMediaSession.EndAction);
 end;
 
 procedure TVideoMinerMainForm.UpdatePlaybackRateButton;
@@ -1117,109 +694,11 @@ begin
     FWindowModeController.UpdateMaximizeButton;
 end;
 
-// 動画情報ラベルを更新する
-procedure TVideoMinerMainForm.UpdateInfoLabel;
-var
-  AudioPositionMs: Integer;
-  AlphaText: string;
-  AudioText: string;
-  CurrentPositionMs: Integer;
-  VideoPositionMs: Integer;
-begin
-  if FVideoFile = '' then
-  begin
-    SetStatusCaption('No video loaded');
-    FVideoView.SetSeekProgress(0, 0);
-    Exit;
-  end;
-
-  if FVideoInfo.Audio.Present then
-  begin
-    AudioText := Format('audio: %d Hz / %d ch / %s',
-      [FVideoInfo.Audio.SampleRate, FVideoInfo.Audio.Channels,
-       FVideoInfo.Audio.SampleFormatName]);
-    if FVideoInfo.Audio.OpenError <> '' then
-      AudioText := AudioText + ' / open: ' + FVideoInfo.Audio.OpenError;
-  end
-  else
-    AudioText := 'audio: none';
-
-  if FVideoInfo.HasAlpha then
-    AlphaText := Format(' / pix_fmt: %s / alpha', [FVideoInfo.PixelFormatName])
-  else if FVideoInfo.PixelFormatName <> '' then
-    AlphaText := Format(' / pix_fmt: %s', [FVideoInfo.PixelFormatName])
-  else
-    AlphaText := '';
-
-  CurrentPositionMs := CurrentPlaybackPositionMs;
-  VideoPositionMs := FCurrentVideoPositionMs;
-  if VideoPositionMs < 0 then
-    VideoPositionMs := 0;
-  AudioPositionMs := FAudioPlayback.PlaybackPositionMs;
-  if AudioPositionMs < 0 then
-    AudioPositionMs := 0
-  else if AudioPositionMs > FSeekMaxMs then
-    AudioPositionMs := FSeekMaxMs;
-
-  Caption := Format('%s (%d/%d) - %.3f/%.3f sec  video %.3f  audio %.3f - %dx%d / %.3f fps / %s',
-    [ExtractFileName(FVideoFile), FMediaList.CurrentIndex + 1, FMediaList.Count,
-     CurrentPositionMs / 1000, FSeekMaxMs / 1000,
-     VideoPositionMs / 1000, AudioPositionMs / 1000,
-     FVideoInfo.Width, FVideoInfo.Height, FVideoInfo.Fps, AudioText + AlphaText]);
-  SetTitleBarText(Format('%s (%d/%d)', [ExtractFileName(FVideoFile),
-    FMediaList.CurrentIndex + 1, FMediaList.Count]));
-  FVideoView.SetSeekProgress(CurrentPositionMs, FSeekMaxMs);
-  FLastInfoUpdateTick := GetTickCount64;
-end;
-
-procedure TVideoMinerMainForm.UpdatePlaybackProgress(PositionMs: Integer);
-var
-  CurrentTick: UInt64;
-begin
-  if FVideoView <> nil then
-    FVideoView.SetSeekProgress(PositionMs, FSeekMaxMs);
-
-  CurrentTick := GetTickCount64;
-  if (FLastInfoUpdateTick = 0) or
-     (CurrentTick - FLastInfoUpdateTick >= UI_INFO_UPDATE_INTERVAL_MS) then
-    UpdateInfoLabel;
-end;
-
 procedure TVideoMinerMainForm.OpenFromDialog;
 begin
-  OpenDialogVideo.InitialDir := VideoMinerOpenDialogInitialDir(FVideoFile);
+  OpenDialogVideo.InitialDir := VideoMinerOpenDialogInitialDir(FMediaSession.VideoFile);
   if OpenDialogVideo.Execute then
     LoadVideoFile(OpenDialogVideo.FileName, False);
-end;
-
-procedure TVideoMinerMainForm.LoadManualChapterState(const FileName: string);
-begin
-  if FChapterManager = nil then
-    Exit;
-
-  FChapterManager.LoadManualChapterState(FileName, FSeekMaxMs);
-  RefreshChapterOverlay;
-end;
-
-procedure TVideoMinerMainForm.SaveManualChapterState;
-begin
-  if FChapterManager = nil then
-    Exit;
-
-  FChapterManager.SaveManualChapterState(FVideoFile, FSeekMaxMs);
-end;
-
-procedure TVideoMinerMainForm.SaveLoopPlaybackPosition;
-begin
-  if (FChapterManager = nil) or (FPlaybackController = nil) or
-     (FVideoFile = '') then
-    Exit;
-
-  if (FEndAction = eaLoop) and FChapterManager.HasManualChapters then
-    SaveManualChapterPlaybackPosition(FVideoFile, CurrentPlaybackPositionMs,
-      FSeekMaxMs)
-  else
-    ClearManualChapterPlaybackPosition(FVideoFile);
 end;
 
 function TVideoMinerMainForm.TryRestoreLoopPlaybackPosition: Boolean;
@@ -1229,28 +708,28 @@ var
   ShownPositionMs: Integer;
 begin
   Result := False;
-  if (FChapterManager = nil) or (FVideoFile = '') or
-     (FPlaybackController = nil) or (FEndAction <> eaLoop) or
-     (not FChapterManager.HasManualChapters) then
+  if (FChapterController = nil) or (FMediaSession.VideoFile = '') or
+     (FPlaybackController = nil) or (FMediaSession.EndAction <> eaLoop) or
+     (not FChapterController.HasManualChapters) then
     Exit;
 
-  if not LoadManualChapterPlaybackPosition(FVideoFile, FSeekMaxMs,
+  if not LoadManualChapterPlaybackPosition(FMediaSession.VideoFile, FMediaSession.SeekMaxMs,
     PositionMs) then
     Exit;
 
-  if not FPlaybackController.ShowFrameNearMs(PositionMs, FSeekMaxMs,
+  if not FPlaybackController.ShowFrameNearMs(PositionMs, FMediaSession.SeekMaxMs,
     ShownPositionMs, ErrorMessage) then
     Exit;
 
-  FCurrentVideoPositionMs := ShownPositionMs;
+  FMediaSession.CurrentVideoPositionMs := ShownPositionMs;
   FUpdatingSeek := True;
   try
-    FSeekPositionMs := ShownPositionMs;
+    FMediaSession.SeekPositionMs := ShownPositionMs;
   finally
     FUpdatingSeek := False;
   end;
-  UpdatePlaybackProgress(FSeekPositionMs);
-  ConfigureLoopSegment(FSeekPositionMs);
+  FInfoController.UpdatePlaybackProgress(FMediaSession.SeekPositionMs);
+  ConfigureLoopSegment(FMediaSession.SeekPositionMs);
   Result := True;
 end;
 
@@ -1275,31 +754,12 @@ function TVideoMinerMainForm.CurrentPlaybackPositionMs: Integer;
 begin
   if FPlaybackController = nil then
   begin
-    Result := Max(0, Min(FSeekMaxMs, FSeekPositionMs));
+    Result := Max(0, Min(FMediaSession.SeekMaxMs, FMediaSession.SeekPositionMs));
     Exit;
   end;
 
   Result := FPlaybackController.CurrentPositionMs(PlaybackActiveOrPending,
-    FSeekPositionMs, FCurrentVideoPositionMs, FSeekMaxMs);
-end;
-
-procedure TVideoMinerMainForm.SetStatusCaption(const Text: string);
-begin
-  if Text = '' then
-  begin
-    Caption := 'VideoMiner'
-  end
-  else
-  begin
-    Caption := 'VideoMiner - ' + Text;
-  end;
-  SetTitleBarText(Caption);
-end;
-
-procedure TVideoMinerMainForm.SetTitleBarText(const Text: string);
-begin
-  if LabelAppTitle <> nil then
-    LabelAppTitle.Caption := Text;
+    FMediaSession.SeekPositionMs, FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekMaxMs);
 end;
 
 function TVideoMinerMainForm.LoadVideoFile(const FileName: string;
@@ -1333,7 +793,7 @@ begin
        BoolToStr(AutoPlay, True), ValidateMs, TotalWatch.Elapsed.TotalMilliseconds,
        ErrorMessage]));
 {$ENDIF}
-    SetStatusCaption(ErrorMessage);
+    FInfoController.SetStatusCaption(ErrorMessage);
     Exit;
   end;
 {$IFDEF DEBUG}
@@ -1341,35 +801,8 @@ begin
 
   StepWatch := TStopwatch.StartNew;
 {$ENDIF}
-  if FReloadCurrentFileTimer <> nil then
-    FReloadCurrentFileTimer.Enabled := False;
-  FPendingReloadHasStamp := False;
-
-  SaveManualChapterState;
-  SaveLoopPlaybackPosition;
-
-  TimerPlayback.Enabled := False;
-  FPlaybackController.ClearRestart;
-  FAudioPlayback.Stop;
-  FPreviewDecoder.Close;
-  FSeeking := False;
-  FCurrentVideoPositionMs := -1;
-  FSeekGuardRemaining := 0;
-  FLoopSegmentStartMs := -1;
-  FLoopSegmentEndMs := -1;
-  FChapterManager.Clear;
-  SeekHoverPreviewEnd(Self);
-  FSeekHoverPreviewLastPositionMs := -1;
-  FVideoView.Clear;
-  RefreshChapterOverlay;
-
-  FUpdatingSeek := True;
-  try
-    FSeekPositionMs := 0;
-    FSeekMaxMs := 0;
-  finally
-    FUpdatingSeek := False;
-  end;
+  FMediaLoadController.BeginLoadCleanup(FUpdatingSeek, FSeeking,
+    FSeekGuardRemaining);
 {$IFDEF DEBUG}
   CleanupMs := StepWatch.Elapsed.TotalMilliseconds;
 
@@ -1381,14 +814,7 @@ begin
 {$IFDEF DEBUG}
     OpenMs := StepWatch.Elapsed.TotalMilliseconds;
 {$ENDIF}
-    FVideoFile := '';
-    ConfigureCurrentFileWatch;
-    UpdateCurrentFileStamp;
-    FVideoView.PlaybackActive := False;
-    Caption := 'VideoMiner';
-    SetTitleBarText(Caption);
-    UpdateNavigationButtons;
-    SetStatusCaption(OpenResult.ErrorMessage);
+    FMediaLoadController.ApplyOpenFailure(OpenResult.ErrorMessage);
 {$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
       'open_failed step="decoder_open" file="%s" drive="%s" autoplay=%s validate_ms=%.3f cleanup_ms=%.3f open_ms=%.3f total_ms=%.3f err="%s"',
@@ -1402,32 +828,7 @@ begin
   OpenMs := StepWatch.Elapsed.TotalMilliseconds;
 {$ENDIF}
 
-  FVideoInfo := OpenResult.Info;
-  FVideoFile := OpenResult.FileName;
-  FVideoView.SourceHasAlpha := FVideoInfo.HasAlpha;
-  FVideoView.SeekWheelFrameStepMs := VideoMinerFrameDurationMs(FVideoInfo.Fps);
-  ConfigureCurrentFileWatch;
-  UpdateCurrentFileStamp;
-  Caption := Format('%s (%d/%d)', [ExtractFileName(FVideoFile),
-    FMediaList.CurrentIndex + 1, FMediaList.Count]);
-  SetTitleBarText(Caption);
-
-  FUpdatingSeek := True;
-  try
-    FSeekMaxMs := Round(FVideoInfo.DurationSec * 1000);
-    FSeekPositionMs := 0;
-  finally
-    FUpdatingSeek := False;
-  end;
-
-  TimerPlayback.Interval := VideoMinerTimerIntervalMs(FVideoInfo.Fps);
-
-  LoadManualChapterState(FVideoFile);
-  UpdateNavigationButtons;
-  if FThumbnailBrowser <> nil then
-    FThumbnailBrowser.SetMediaList(FMediaList);
-  UpdateInfoLabel;
-  RefreshChapterOverlay;
+  FMediaLoadController.ApplyOpenSuccess(OpenResult, FUpdatingSeek);
 {$IFDEF DEBUG}
   StepWatch := TStopwatch.StartNew;
 {$ENDIF}
@@ -1449,10 +850,10 @@ begin
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format(
     'open_done file="%s" drive="%s" autoplay=%s restore_loop=%s validate_ms=%.3f cleanup_ms=%.3f open_ms=%.3f first_frame_ms=%.3f autoplay_ms=%.3f total_ms=%.3f duration_ms=%d fps=%.3f',
-    [ExtractFileName(FVideoFile), ExtractFileDrive(FVideoFile),
+    [ExtractFileName(FMediaSession.VideoFile), ExtractFileDrive(FMediaSession.VideoFile),
      BoolToStr(AutoPlay, True), BoolToStr(RestoreLoopPosition, True),
      ValidateMs, CleanupMs, OpenMs, FirstFrameMs, AutoPlayMs,
-     TotalWatch.Elapsed.TotalMilliseconds, FSeekMaxMs, FVideoInfo.Fps]));
+     TotalWatch.Elapsed.TotalMilliseconds, FMediaSession.SeekMaxMs, FMediaSession.VideoInfo.Fps]));
 {$ENDIF}
 end;
 
@@ -1482,7 +883,7 @@ begin
       [ResolveWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
 {$ENDIF}
     if ErrorMessage <> '' then
-      SetStatusCaption(ErrorMessage);
+      FInfoController.SetStatusCaption(ErrorMessage);
     Exit;
   end;
 {$IFDEF DEBUG}
@@ -1495,32 +896,26 @@ begin
   Result := LoadVideoFile(FileName, False);
 end;
 
-procedure TVideoMinerMainForm.DropFiles(Sender: TObject; Control: TWinControl; const FileNames: TArray<string>);
-begin
-  if Length(FileNames) > 0 then
-    OpenAndPlayFile(FileNames[0]);
-end;
-
 procedure TVideoMinerMainForm.PlayFromCurrentPosition;
 var
   FrameShown: Boolean;
 begin
-  if FVideoFile = '' then
+  if FMediaSession.VideoFile = '' then
     Exit;
 
-  FrameShown := FCurrentVideoPositionMs = FSeekPositionMs;
-  if FSeekPositionMs >= FSeekMaxMs then
+  FrameShown := FMediaSession.CurrentVideoPositionMs = FMediaSession.SeekPositionMs;
+  if FMediaSession.SeekPositionMs >= FMediaSession.SeekMaxMs then
   begin
     FUpdatingSeek := True;
     try
-      FSeekPositionMs := 0;
+      FMediaSession.SeekPositionMs := 0;
     finally
       FUpdatingSeek := False;
     end;
     FrameShown := ShowFrameAtMs(0);
   end;
 
-  StartPlaybackAtMs(FSeekPositionMs, FrameShown);
+  StartPlaybackAtMs(FMediaSession.SeekPositionMs, FrameShown);
 end;
 
 procedure TVideoMinerMainForm.BossGesture(Sender: TObject);
@@ -1543,103 +938,28 @@ procedure TVideoMinerMainForm.StopPlayback;
 begin
   if FPlaybackController <> nil then
     FPlaybackController.StopPlayback;
-  UpdateInfoLabel;
+  FInfoController.UpdateInfo;
 end;
 
 // 再生 tick 処理を再生 controller へ委譲する
 procedure TVideoMinerMainForm.TimerPlaybackTimer(Sender: TObject);
 begin
-  FPlaybackController.Tick(FDecoder, FVideoFile, FEndAction, FSeeking,
-    FSeekMaxMs, FLoopSegmentStartMs, FLoopSegmentEndMs,
-    FCurrentVideoPositionMs, FSeekPositionMs, FSeekGuardTargetMs,
-    FSeekGuardRemaining, FUpdatingSeek, SetStatusCaption, FinishPlaybackAtEnd,
-    SeekPlaybackTickToMs, UpdatePlaybackProgress, MaybeAutoCheckFrame);
+  FPlaybackController.Tick(FDecoder, FMediaSession.VideoFile, FMediaSession.EndAction, FSeeking,
+    FMediaSession.SeekMaxMs, FMediaSession.LoopSegmentStartMs, FMediaSession.LoopSegmentEndMs,
+    FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs, FSeekGuardTargetMs,
+    FSeekGuardRemaining, FUpdatingSeek, FInfoController.SetStatusCaption, FinishPlaybackAtEnd,
+    SeekPlaybackTickToMs, FInfoController.UpdatePlaybackProgress, FChapterController.MaybeAutoCheckFrame);
 end;
 
-
-procedure TVideoMinerMainForm.UpdateNavigationButtons;
-begin
-  if FVideoView = nil then
-    Exit;
-
-  if FMediaList = nil then
-  begin
-    FVideoView.CanNavigatePrevious := False;
-    FVideoView.CanNavigateNext := False;
-    Exit;
-  end;
-
-  FVideoView.CanNavigatePrevious := FMediaList.CanNavigate(-1);
-  FVideoView.CanNavigateNext := FMediaList.CanNavigate(1);
-end;
-
-function IsNavigationSwitchKey(Key: Word): Boolean;
-begin
-  Result := (Key = VK_LEFT) or (Key = VK_RIGHT) or
-    (Key = VK_PRIOR) or (Key = VK_NEXT);
-end;
-
-procedure TVideoMinerMainForm.BlockPressedNavigationKeys;
-const
-  NAVIGATION_KEYS: array[0..3] of Word = (VK_LEFT, VK_RIGHT, VK_PRIOR, VK_NEXT);
-var
-  I: Integer;
-  Key: Word;
-begin
-  for I := Low(NAVIGATION_KEYS) to High(NAVIGATION_KEYS) do
-  begin
-    Key := NAVIGATION_KEYS[I];
-    if GetAsyncKeyState(Key) < 0 then
-      Include(FBlockedNavigationKeys, Byte(Key));
-  end;
-end;
-
-procedure TVideoMinerMainForm.ClearBufferedNavigationKeyMessages;
-var
-  Msg: TMsg;
-begin
-  while PeekMessage(Msg, 0, WM_KEYFIRST, WM_KEYLAST, PM_NOREMOVE) do
-  begin
-    if ((Msg.message = WM_KEYDOWN) or (Msg.message = WM_SYSKEYDOWN)) and
-       IsNavigationSwitchKey(Word(Msg.wParam)) then
-    begin
-      PeekMessage(Msg, Msg.hwnd, Msg.message, Msg.message, PM_REMOVE);
-    end
-    else
-      Break;
-  end;
-end;
-
-procedure TVideoMinerMainForm.NavigateBy(Delta: Integer);
-var
-  FileName: string;
-begin
-  FileName := FMediaList.NavigateFile(Delta);
-  if FileName = '' then
-  begin
-    UpdateNavigationButtons;
-    Exit;
-  end;
-
-  LoadVideoFile(FileName, True);
-  FNavigationInputBlockedUntilTick := GetTickCount64 + NAVIGATION_INPUT_BLOCK_MS;
-  BlockPressedNavigationKeys;
-  ClearBufferedNavigationKeyMessages;
-end;
-
-procedure TVideoMinerMainForm.NavigateNextPlaybackFile;
-begin
-  NavigateBy(1);
-end;
 
 procedure TVideoMinerMainForm.NavigateChapterBy(Delta: Integer);
 var
   TargetMs: Integer;
 begin
-  if (FChapterManager = nil) or (Delta = 0) or (FSeekMaxMs <= 0) then
+  if (FChapterController = nil) or (Delta = 0) or (FMediaSession.SeekMaxMs <= 0) then
     Exit;
 
-  TargetMs := FChapterManager.FindNavigationTarget(Delta,
+  TargetMs := FChapterController.FindNavigationTarget(Delta,
     CurrentPlaybackPositionMs, LastFrameSeekPositionMs);
   if TargetMs >= 0 then
     SeekToMs(TargetMs);
@@ -1647,97 +967,10 @@ end;
 
 procedure TVideoMinerMainForm.SeekToMs(PositionMs: Integer; ResumeIfPlaying: Boolean);
 begin
-  FPlaybackController.SeekToMs(FVideoFile, PositionMs, ResumeIfPlaying,
-    FSeekMaxMs, FCurrentVideoPositionMs, FSeekPositionMs, FSeekGuardTargetMs,
-    FSeekGuardRemaining, FUpdatingSeek, FSeeking, SetStatusCaption,
-    UpdateInfoLabel);
-end;
-
-procedure TVideoMinerMainForm.SeekHoverPreview(Sender: TObject;
-  PositionMs: Integer; const Point: TPoint);
-begin
-  if (FVideoFile = '') or (FSeekMaxMs <= 0) or (FVideoView = nil) then
-  begin
-    SeekHoverPreviewEnd(Sender);
-    Exit;
-  end;
-
-  FSeekHoverPreviewPositionMs := Max(0, Min(FSeekMaxMs, PositionMs));
-  FSeekHoverPreviewPoint := Point;
-  if VideoMinerDebugLogEnabled then
-    WriteVideoMinerDebugLog(Format(
-      'seek_hover_preview_request position_ms=%d x=%d y=%d',
-      [FSeekHoverPreviewPositionMs, Point.X, Point.Y]));
-
-  if (FSeekHoverPreviewBitmap <> nil) and
-     (FSeekHoverPreviewBitmap.Width > 0) and
-     (FSeekHoverPreviewLastPositionMs >= 0) and
-     (Abs(FSeekHoverPreviewPositionMs - FSeekHoverPreviewLastPositionMs) <=
-      SEEK_HOVER_PREVIEW_REUSE_MS) then
-  begin
-    FVideoView.SetSeekHoverPreview(FSeekHoverPreviewBitmap,
-      FSeekHoverPreviewLastPositionMs, FSeekHoverPreviewPoint);
-    FSeekHoverPreviewActive := True;
-    Exit;
-  end;
-
-  FSeekHoverPreviewPending := True;
-  if FSeekHoverPreviewTimer <> nil then
-  begin
-    FSeekHoverPreviewTimer.Enabled := False;
-    if FSeekHoverPreviewActive then
-      FSeekHoverPreviewTimer.Interval := SEEK_HOVER_PREVIEW_UPDATE_DELAY_MS
-    else
-      FSeekHoverPreviewTimer.Interval := SEEK_HOVER_PREVIEW_INITIAL_DELAY_MS;
-    FSeekHoverPreviewTimer.Enabled := True;
-  end;
-end;
-
-procedure TVideoMinerMainForm.SeekHoverPreviewEnd(Sender: TObject);
-begin
-  FSeekHoverPreviewPending := False;
-  if FSeekHoverPreviewTimer <> nil then
-    FSeekHoverPreviewTimer.Enabled := False;
-  if FVideoView <> nil then
-    FVideoView.ClearSeekHoverPreview;
-  FSeekHoverPreviewActive := False;
-end;
-
-procedure TVideoMinerMainForm.SeekHoverPreviewTimer(Sender: TObject);
-var
-  ErrorMessage: string;
-  PositionMs: Integer;
-begin
-  if FSeekHoverPreviewTimer <> nil then
-    FSeekHoverPreviewTimer.Enabled := False;
-  if not FSeekHoverPreviewPending then
-    Exit;
-
-  FSeekHoverPreviewPending := False;
-  if (FVideoFile = '') or (FSeekMaxMs <= 0) or (FPreviewDecoder = nil) or
-     (FVideoView = nil) or (FSeekHoverPreviewBitmap = nil) then
-    Exit;
-
-  PositionMs := Max(0, Min(FSeekMaxMs, FSeekHoverPreviewPositionMs));
-  if FVideoView.DecodeFrameToBitmap(FPreviewDecoder, PositionMs,
-    FSeekHoverPreviewBitmap, ErrorMessage, True) or
-     FVideoView.DecodeFrameToBitmap(FPreviewDecoder, PositionMs,
-       FSeekHoverPreviewBitmap, ErrorMessage, False) then
-  begin
-    FSeekHoverPreviewLastPositionMs := PositionMs;
-    FVideoView.SetSeekHoverPreview(FSeekHoverPreviewBitmap, PositionMs,
-      FSeekHoverPreviewPoint);
-    FSeekHoverPreviewActive := True;
-  end
-  else
-  begin
-    if VideoMinerDebugLogEnabled then
-      WriteVideoMinerDebugLog(Format(
-        'seek_hover_preview_decode_failed position_ms=%d err="%s"',
-        [PositionMs, ErrorMessage]));
-    FVideoView.ClearSeekHoverPreview;
-    FSeekHoverPreviewActive := False;
-  end;
+  FPlaybackController.SeekToMs(FMediaSession.VideoFile, PositionMs, ResumeIfPlaying,
+    FMediaSession.SeekMaxMs, FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs, FSeekGuardTargetMs,
+    FSeekGuardRemaining, FUpdatingSeek, FSeeking, FInfoController.SetStatusCaption,
+    FInfoController.UpdateInfo);
 end;
 
 procedure TVideoMinerMainForm.SeekByMs(DeltaMs: Integer);
@@ -1749,7 +982,7 @@ begin
   TargetMs := BaseMs + DeltaMs;
   if TargetMs <= 0 then
     SeekToFirstFrame
-  else if TargetMs >= FSeekMaxMs then
+  else if TargetMs >= FMediaSession.SeekMaxMs then
     SeekToLastFrame
   else
     SeekToMs(TargetMs);
@@ -1770,11 +1003,11 @@ begin
 {$ENDIF}
   FUpdatingSeek := True;
   try
-    FSeekPositionMs := PositionMs;
+    FMediaSession.SeekPositionMs := PositionMs;
   finally
     FUpdatingSeek := False;
   end;
-  UpdatePlaybackProgress(PositionMs);
+  FInfoController.UpdatePlaybackProgress(PositionMs);
 
 {$IFDEF DEBUG}
   StepWatch := TStopwatch.StartNew;
@@ -1789,9 +1022,9 @@ begin
   RestartMs := StepWatch.Elapsed.TotalMilliseconds;
   WriteVideoMinerSlowLog(Format(
     'loop_tick_seek file="%s" target_ms=%d frame_shown=%s preview_ms=%.3f restart_ms=%.3f total_ms=%.3f current_ms=%d seek_ms=%d guard_target_ms=%d guard_remaining=%d',
-    [ExtractFileName(FVideoFile), PositionMs, BoolToStr(FrameShown, True),
+    [ExtractFileName(FMediaSession.VideoFile), PositionMs, BoolToStr(FrameShown, True),
      PreviewMs, RestartMs, TotalWatch.Elapsed.TotalMilliseconds,
-     FCurrentVideoPositionMs, FSeekPositionMs, FSeekGuardTargetMs,
+     FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs, FSeekGuardTargetMs,
      FSeekGuardRemaining]));
 {$ENDIF}
 end;
@@ -1812,43 +1045,44 @@ end;
 
 function TVideoMinerMainForm.LastFrameSeekPositionMs: Integer;
 begin
-  Result := VideoMinerLastFrameSeekPositionMs(FSeekMaxMs, FVideoInfo.Fps);
+  Result := VideoMinerLastFrameSeekPositionMs(FMediaSession.SeekMaxMs, FMediaSession.VideoInfo.Fps);
 end;
 
 function TVideoMinerMainForm.LoopStartPositionMs: Integer;
 begin
-  if FChapterManager = nil then
+  if FChapterController = nil then
     Result := 0
   else
-    Result := FChapterManager.LoopStartPositionMs(LastFrameSeekPositionMs);
+    Result := FChapterController.LoopStartPositionMs(LastFrameSeekPositionMs);
 end;
 
 procedure TVideoMinerMainForm.ConfigureLoopSegment(PositionMs: Integer);
 begin
-  FPlaybackController.ConfigureLoopSegment(FEndAction, FChapterManager,
-    PositionMs, FSeekMaxMs, LastFrameSeekPositionMs, FLoopSegmentStartMs,
-    FLoopSegmentEndMs);
+  FPlaybackController.ConfigureLoopSegment(FMediaSession.EndAction, FChapterController.Manager,
+    PositionMs, FMediaSession.SeekMaxMs, LastFrameSeekPositionMs, FMediaSession.LoopSegmentStartMs,
+    FMediaSession.LoopSegmentEndMs);
 end;
 
 procedure TVideoMinerMainForm.StartPlaybackAtMs(PositionMs: Integer;
   FrameAlreadyShown: Boolean);
 begin
-  FPlaybackController.StartPlaybackAtMs(FDecoder, FVideoFile, FVideoInfo,
-    FEndAction, FChapterManager, FSeekMaxMs, PositionMs, LastFrameSeekPositionMs,
-    FrameAlreadyShown, False, FCurrentVideoPositionMs, FSeekPositionMs,
-    FLoopSegmentStartMs, FLoopSegmentEndMs, FSeekGuardTargetMs,
-    FSeekGuardRemaining, SetStatusCaption);
+  FPlaybackController.StartPlaybackAtMs(FDecoder, FMediaSession.VideoFile, FMediaSession.VideoInfo,
+    FMediaSession.EndAction, FChapterController.Manager, FMediaSession.SeekMaxMs, PositionMs, LastFrameSeekPositionMs,
+    FrameAlreadyShown, False, FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs,
+    FMediaSession.LoopSegmentStartMs, FMediaSession.LoopSegmentEndMs, FSeekGuardTargetMs,
+    FSeekGuardRemaining, FInfoController.SetStatusCaption);
 end;
 
 procedure TVideoMinerMainForm.FinishPlaybackAtEnd;
 var
   CanNavigateNext: Boolean;
 begin
-  CanNavigateNext := (FMediaList <> nil) and FMediaList.CanNavigate(1);
-  FPlaybackController.FinishAtEnd(FEndAction, CanNavigateNext,
-    LoopStartPositionMs, FSeekMaxMs, LastFrameSeekPositionMs,
-    FSeekPositionMs, FUpdatingSeek, ShowFrameAtMs, StartPlaybackAtMs,
-    NavigateNextPlaybackFile, UpdateInfoLabel);
+  CanNavigateNext := (FNavigationController <> nil) and
+    FNavigationController.CanNavigateNext;
+  FPlaybackController.FinishAtEnd(FMediaSession.EndAction, CanNavigateNext,
+    LoopStartPositionMs, FMediaSession.SeekMaxMs, LastFrameSeekPositionMs,
+    FMediaSession.SeekPositionMs, FUpdatingSeek, ShowFrameAtMs, StartPlaybackAtMs,
+    FNavigationController.NavigateNextPlaybackFile, FInfoController.UpdateInfo);
 end;
 
 procedure TVideoMinerMainForm.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
@@ -1874,21 +1108,14 @@ begin
     Exit;
   end;
 
-  if (FThumbnailBrowser <> nil) and FThumbnailBrowser.Visible and
-     FThumbnailBrowser.HandleKeyDown(Key, Shift) then
+  if (FThumbnailBrowserController <> nil) and
+     FThumbnailBrowserController.HandleKeyDown(Key, Shift) then
     Exit;
-
-  if (Key = VK_ESCAPE) and (FThumbnailBrowser <> nil) and
-     FThumbnailBrowser.Visible then
-  begin
-    CloseThumbnailBrowser;
-    Key := 0;
-    Exit;
-  end;
 
   if (Key = VK_TAB) and (Shift = []) then
   begin
-    ToggleThumbnailBrowser;
+    if FThumbnailBrowserController <> nil then
+      FThumbnailBrowserController.Toggle;
     Key := 0;
     Exit;
   end;
@@ -1900,13 +1127,9 @@ begin
     Exit;
   end;
 
-  if (Shift = []) and IsNavigationSwitchKey(Key) and
-     ((Byte(Key) in FBlockedNavigationKeys) or
-      (GetTickCount64 < FNavigationInputBlockedUntilTick)) then
-  begin
-    Key := 0;
+  if (FNavigationController <> nil) and
+     FNavigationController.HandleKeyDown(Key, Shift) then
     Exit;
-  end;
 
   if (FShortcuts <> nil) and FShortcuts.KeyDown(Key, Shift) then
     Exit;
@@ -1915,208 +1138,14 @@ end;
 procedure TVideoMinerMainForm.FormKeyUp(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
-  if IsNavigationSwitchKey(Key) then
-    Exclude(FBlockedNavigationKeys, Byte(Key));
-end;
-
-procedure TVideoMinerMainForm.QueueOpenAndPlayFile(const FileName: string);
-begin
-  if FileName = '' then
-    Exit;
-
-  FPendingOpenFiles.Add(FileName);
-  PostMessage(Handle, WM_VM_OPEN_PENDING, 0, 0);
-end;
-
-procedure TVideoMinerMainForm.ProcessOpenQueue;
-var
-  FileName: string;
-begin
-  if FProcessingOpenQueue then
-    Exit;
-
-  FProcessingOpenQueue := True;
-  try
-    while FPendingOpenFiles.Count > 0 do
-    begin
-      FileName := FPendingOpenFiles[0];
-      FPendingOpenFiles.Delete(0);
-      OpenAndPlayFile(FileName);
-    end;
-  finally
-    FProcessingOpenQueue := False;
-  end;
-end;
-
-procedure TVideoMinerMainForm.ConfigureCurrentFileWatch;
-var
-  Folder: string;
-begin
-  if FFolderWatcher = nil then
-    Exit;
-
-  if FVideoFile = '' then
-  begin
-    FFolderWatcher.Stop;
-    FWatchedFolder := '';
-    Exit;
-  end;
-
-  Folder := IncludeTrailingPathDelimiter(ExtractFilePath(FVideoFile));
-  if SameText(FWatchedFolder, Folder) then
-    Exit;
-
-  FFolderWatcher.Stop;
-  FWatchedFolder := Folder;
-  FFolderWatcher.FolderPath := Folder;
-  FFolderWatcher.IncludeSubFolders := False;
-  FFolderWatcher.FirstScanDone := True;
-  FFolderWatcher.Start;
-end;
-
-function TVideoMinerMainForm.CurrentFileInList(
-  const FileNames: TStringList): Boolean;
-var
-  I: Integer;
-begin
-  Result := False;
-  if (FileNames = nil) or (FVideoFile = '') then
-    Exit;
-
-  for I := 0 to FileNames.Count - 1 do
-  begin
-    if SameText(ExpandFileName(FileNames[I]), ExpandFileName(FVideoFile)) then
-    begin
-      Result := True;
-      Exit;
-    end;
-  end;
-end;
-
-function TVideoMinerMainForm.ReadCurrentFileStamp(
-  out LastWriteTime: TDateTime; out Size: Int64): Boolean;
-var
-  SearchRec: TSearchRec;
-begin
-  LastWriteTime := 0;
-  Size := -1;
-  Result := False;
-  if FVideoFile = '' then
-    Exit;
-
-  if FindFirst(FVideoFile, faAnyFile, SearchRec) <> 0 then
-    Exit;
-  try
-    if (SearchRec.Attr and faDirectory) <> 0 then
-      Exit;
-
-    LastWriteTime := SearchRec.TimeStamp;
-    Size := SearchRec.Size;
-    Result := True;
-  finally
-    FindClose(SearchRec);
-  end;
-end;
-
-function TVideoMinerMainForm.CurrentFileCanBeRead: Boolean;
-var
-  Stream: TFileStream;
-begin
-  Result := False;
-  if FVideoFile = '' then
-    Exit;
-
-  try
-    Stream := TFileStream.Create(FVideoFile, fmOpenRead or fmShareDenyNone);
-    try
-      Result := True;
-    finally
-      Stream.Free;
-    end;
-  except
-    Result := False;
-  end;
-end;
-
-procedure TVideoMinerMainForm.ScheduleCurrentFileReload;
-begin
-  if (FReloadCurrentFileTimer = nil) or (FVideoFile = '') or
-     FReloadingCurrentFile then
-    Exit;
-
-  FPendingReloadHasStamp := False;
-  FReloadCurrentFileTimer.Enabled := False;
-  FReloadCurrentFileTimer.Enabled := True;
-end;
-
-procedure TVideoMinerMainForm.FolderWatchFileChange(Sender: TObject;
-  const AddFiles, DelFiles, UpdateFiles: TStringList);
-begin
-  if FReloadingCurrentFile then
-    Exit;
-
-  if CurrentFileInList(AddFiles) or CurrentFileInList(DelFiles) or
-     CurrentFileInList(UpdateFiles) then
-    ScheduleCurrentFileReload;
-end;
-
-procedure TVideoMinerMainForm.ReloadCurrentFileTimer(Sender: TObject);
-var
-  FileName: string;
-  LastWriteTime: TDateTime;
-  Size: Int64;
-begin
-  if FReloadCurrentFileTimer <> nil then
-    FReloadCurrentFileTimer.Enabled := False;
-
-  if (FVideoFile = '') or FReloadingCurrentFile then
-    Exit;
-
-  if (not ReadCurrentFileStamp(LastWriteTime, Size)) or
-     (not CurrentFileCanBeRead) then
-  begin
-    if FReloadCurrentFileTimer <> nil then
-      FReloadCurrentFileTimer.Enabled := True;
-    Exit;
-  end;
-
-  if (not FPendingReloadHasStamp) or
-     (FPendingReloadLastWriteTime <> LastWriteTime) or
-     (FPendingReloadSize <> Size) then
-  begin
-    FPendingReloadLastWriteTime := LastWriteTime;
-    FPendingReloadSize := Size;
-    FPendingReloadHasStamp := True;
-    if FReloadCurrentFileTimer <> nil then
-      FReloadCurrentFileTimer.Enabled := True;
-    Exit;
-  end;
-
-  FPendingReloadHasStamp := False;
-  if (FVideoFileLastWriteTime = LastWriteTime) and (FVideoFileSize = Size) then
-    Exit;
-
-  FileName := FVideoFile;
-  FReloadingCurrentFile := True;
-  try
-    LoadVideoFile(FileName, False, False);
-  finally
-    FReloadingCurrentFile := False;
-  end;
-end;
-
-procedure TVideoMinerMainForm.UpdateCurrentFileStamp;
-begin
-  if not ReadCurrentFileStamp(FVideoFileLastWriteTime, FVideoFileSize) then
-  begin
-    FVideoFileLastWriteTime := 0;
-    FVideoFileSize := -1;
-  end;
+  if FNavigationController <> nil then
+    FNavigationController.HandleKeyUp(Key);
 end;
 
 procedure TVideoMinerMainForm.WMOpenPending(var Message: TMessage);
 begin
-  ProcessOpenQueue;
+  if FExternalOpenController <> nil then
+    FExternalOpenController.ProcessOpenQueue;
   Message.Result := 1;
 end;
 
@@ -2130,23 +1159,24 @@ begin
     FastSeek) then
     Exit;
 
-  if (FVideoFile = '') or (TargetMs < 0) or (TargetMs >= FSeekMaxMs) then
+  if (FMediaSession.VideoFile = '') or (TargetMs < 0) or (TargetMs >= FMediaSession.SeekMaxMs) then
     Exit;
 
   if VideoMinerDebugLogEnabled then
     WriteVideoMinerDebugLog(Format('restart_playback target_ms=%d',
       [TargetMs]));
-  FPlaybackController.StartPlaybackAtMs(FDecoder, FVideoFile, FVideoInfo,
-    FEndAction, FChapterManager, FSeekMaxMs, TargetMs, LastFrameSeekPositionMs,
-    FrameAlreadyShown, FastSeek, FCurrentVideoPositionMs, FSeekPositionMs,
-    FLoopSegmentStartMs, FLoopSegmentEndMs, FSeekGuardTargetMs,
-    FSeekGuardRemaining, SetStatusCaption);
+  FPlaybackController.StartPlaybackAtMs(FDecoder, FMediaSession.VideoFile, FMediaSession.VideoInfo,
+    FMediaSession.EndAction, FChapterController.Manager, FMediaSession.SeekMaxMs, TargetMs, LastFrameSeekPositionMs,
+    FrameAlreadyShown, FastSeek, FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs,
+    FMediaSession.LoopSegmentStartMs, FMediaSession.LoopSegmentEndMs, FSeekGuardTargetMs,
+    FSeekGuardRemaining, FInfoController.SetStatusCaption);
 end;
 
 procedure TVideoMinerMainForm.WMNCHitTest(var Message: TWMNCHitTest);
 begin
   inherited;
-  UpdateFrameGuideVisibility;
+  if FFrameGuideController <> nil then
+    FFrameGuideController.UpdateVisibility;
   if FWindowModeController <> nil then
     FWindowModeController.HitTestBorderlessResize(
       Point(Message.XPos, Message.YPos), Message.Result);
@@ -2170,9 +1200,10 @@ begin
   inherited;
   if FWindowModeController <> nil then
     FWindowModeController.HandleSize;
-  if FThumbnailBrowser <> nil then
-    TResizeEdgeHelper.AdjustEdges(FThumbnailBrowser);
-  UpdateFrameGuideLayout;
+  if FThumbnailBrowserController <> nil then
+    FThumbnailBrowserController.AdjustResizeEdges;
+  if FFrameGuideController <> nil then
+    FFrameGuideController.UpdateLayout;
 end;
 
 procedure TVideoMinerMainForm.CMDialogKey(var Message: TCMDialogKey);
@@ -2182,8 +1213,9 @@ begin
   begin
     WriteVideoMinerSlowLog('thumbnail tab_dialog_key');
     if (FWindowModeController <> nil) and
-       (not FWindowModeController.BossMode) then
-      ToggleThumbnailBrowser;
+       (not FWindowModeController.BossMode) and
+       (FThumbnailBrowserController <> nil) then
+      FThumbnailBrowserController.Toggle;
     Message.Result := 1;
     Exit;
   end;
@@ -2192,29 +1224,9 @@ begin
 end;
 
 procedure TVideoMinerMainForm.WMCopyData(var Message: TWMCopyData);
-var
-  FileName: string;
 begin
-  if (Message.CopyDataStruct <> nil) and
-     (Message.CopyDataStruct.dwData = COPYDATA_OPEN_FILE) then
-  begin
-    if WindowState = wsMinimized then
-      WindowState := wsNormal;
-    Application.Restore;
-    BringToFront;
-    SetForegroundWindow(Handle);
-
-    FileName := '';
-    if (Message.CopyDataStruct.cbData > SizeOf(Char)) and
-       (Message.CopyDataStruct.lpData <> nil) then
-      FileName := PChar(Message.CopyDataStruct.lpData);
-
-    if FileName <> '' then
-      QueueOpenAndPlayFile(FileName);
-
-    Message.Result := 1;
-  end
-  else
+  if (FExternalOpenController = nil) or
+     (not FExternalOpenController.HandleCopyData(Message)) then
     inherited;
 end;
 

@@ -2215,6 +2215,24 @@ VideoRotationOverride=auto
 - 確認:
   - Win64 Debug: 成功、警告 0 / エラー 0。
 
+## 2026-06-23 MainForm を段階的に配線係へ寄せる移行工程
+- 方針:
+  - 一気に大改造せず、少しずつ `MainForm` を VCL 部品と Windows message の入口、controller 生成と接続を担当する配線係へ寄せる。
+  - 表示状態、操作の意味づけ、再生/シーク/一覧/overlay の制御は、機能単位の controller / session へ移していく。
+  - この 1-4 をひとつの工程として扱い、工程完了までは途中経過を `note.md` に追加しない。
+- 1. `TVideoMinerMediaSession` を作る:
+  - `FVideoFile`、`FVideoInfo`、`FSeekPositionMs`、`FSeekMaxMs`、`FCurrentVideoPositionMs`、ループ区間、終端動作など、現在動画の状態を MainForm から分離する。
+  - 最初は状態置き場として作り、挙動変更は最小にする。
+- 2. `LoadVideoFile` の状態初期化/更新を session へ寄せる:
+  - validate、decoder open、UI 更新、自動再生などは急に動かさず、まず現在ファイル状態の clear / configure / restore だけを session 経由にする。
+  - `MainForm` の `LoadVideoFile` は徐々に「手順の呼び出し」に近づける。
+- 3. `OverlayController` を作る:
+  - `VideoView` の overlay イベント接続、Check、チャプター追加/削除、終端動作、再生速度、シーク要求などを MainForm 直結から外す。
+  - MainForm は overlay event を controller に渡し、controller が必要な command / session / view 更新へつなぐ。
+- 4. `MainForm` を composition root 化する:
+  - MainForm に残す責務を、VCL 部品保持、controller 生成と接続、フォーム固有 Windows message、最小限の UI entry point に絞る。
+  - 工程 1-4 が完了した時点で、最終状態と確認結果を改めて `note.md` に記録する。
+
 ## 2026-06-23 シークバー hover プレビュー更新遅延を分離
 - 報告:
   - 最初の hover で少し待ってからプレビューを出すタイミングは良い。
@@ -2223,6 +2241,28 @@ VideoRotationOverride=auto
   - `SEEK_HOVER_PREVIEW_INITIAL_DELAY_MS = 140` を初回 hover 用の待ち時間として残した。
   - `SEEK_HOVER_PREVIEW_UPDATE_DELAY_MS = 45` を追加し、プレビュー表示済みの追従更新だけ短い待ち時間にした。
   - hover を抜けたら表示済み状態を解除し、次回 hover は再び初回待ち時間から始める。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+
+## 2026-06-23 シークバー hover プレビュー制御を MainForm から分離
+- 目的:
+  - hover プレビュー追加で `VideoMinerMainForm.pas` に timer、Bitmap、デコード調停の状態が増えたため、フォーム肥大化を抑える。
+- 対策:
+  - `VideoMinerSeekHoverPreviewController.pas` を追加した。
+  - `FSeekHoverPreview...` 一式、hover プレビュー timer、デコード処理、初回/更新 delay 定数を controller へ移した。
+  - `MainForm` は controller の生成、`VideoView` へのイベント接続、動画読み込み時の `ConfigureMedia` 呼び出しだけを担当する形にした。
+  - `SEEK_HOVER_PREVIEW_INITIAL_DELAY_MS = 140`、`SEEK_HOVER_PREVIEW_UPDATE_DELAY_MS = 5`、`SEEK_HOVER_PREVIEW_REUSE_MS = 80` は新 controller unit 側へ移動した。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+
+## 2026-06-23 hover 用フォーム枠制御を MainForm から分離
+- 目的:
+  - `MainForm` に残っていたフォーム端/タイトルバー hover 枠の Panel 群、timer、表示判定を切り出し、フォーム肥大化をさらに抑える。
+- 対策:
+  - `VideoMinerFrameGuideController.pas` を追加した。
+  - `FFrameGuide...` 一式、`InitializeFrameGuide`、`SetFrameGuideVisible`、`UpdateFrameGuideLayout`、`UpdateFrameGuideVisibility`、`FrameGuideTimer` を controller へ移した。
+  - `MainForm` は controller の生成、`WM_NCHITTEST` での visibility 更新、`WM_SIZE` での layout 更新だけを担当する形にした。
+  - hover 枠の色、端判定幅、線幅、timer 間隔の const は新 controller unit 側へ移動した。
 - 確認:
   - Win64 Debug: 成功、警告 0 / エラー 0。
   - Win64 Release: 成功、既存 H2077 hint 40 件のみ / エラー 0。
@@ -2337,6 +2377,41 @@ VideoRotationOverride=auto
   - hover しながら高速移動したときの追従感とデコード負荷のバランスを実機で確認する。
   - プレビューサイズ、枠色、表示位置、時間ラベル表示の有無を操作感に合わせて調整する。
   - 必要なら専用デコーダやキャッシュを検討する。
+
+## 2026-06-23 MainForm 肥大化防止工程 完了
+- 方針:
+  - `VideoMinerMainForm` を VCL 部品保持、Windows message 入口、controller 生成と接続を担当する配線係へ寄せる。
+  - 表示状態、操作の意味づけ、再生/シーク/一覧/overlay の制御は機能単位の controller / session へ分離する。
+- 追加/分離した主なユニット:
+  - `VideoMinerMediaSession.pas`
+    - 現在ファイル、動画情報、シーク位置、現在表示位置、ループ区間、終端動作を保持する状態置き場。
+  - `VideoMinerSeekHoverPreviewController.pas`
+    - シークバー hover プレビューの timer、デコード、再利用、表示/消去を担当する。
+  - `VideoMinerFrameGuideController.pas`
+    - hover 用フォーム枠の Panel 群、timer、表示判定、layout 更新を担当する。
+  - `VideoMinerThumbnailBrowserController.pas`
+    - 同一フォルダ内動画一覧の生成、表示切り替え、選択、キー/ホイール処理を担当する。
+  - `VideoMinerCurrentFileReloadController.pas`
+    - 現在ファイルの外部更新監視、更新落ち着き待ち、再読込を担当する。
+  - `VideoMinerChapterController.pas`
+    - Check/チャプター操作、overlay 反映、手動チャプター保存/復元、ループ位置保存を担当する。
+  - `VideoMinerExternalOpenController.pas`
+    - ドラッグ&ドロップ、二重起動からの `WM_COPYDATA`、保留 open キュー、OLE 初期化/終了を担当する。
+  - `VideoMinerNavigationController.pas`
+    - フォルダ内の前後動画移動、前後ボタン状態、移動直後の残留キー入力抑止を担当する。
+  - `VideoMinerMediaLoadController.pas`
+    - 動画読み込み前後の停止/クリア、失敗時/成功時の各 controller 反映を担当する。
+  - `VideoMinerInfoController.pas`
+    - caption、独自タイトルバー、動画/音声情報表示、シーク進捗、情報更新間引きを担当する。
+- `VideoMinerCommandController.pas`
+  - overlay の `+` / `-` / `Check` / 終端動作クリックも command controller 経由に寄せた。
+- 結果:
+  - `VideoMinerMainForm.pas` は、工程開始時より大きく縮小した。
+  - 2026-06-23 の最終段階で `VideoMinerMainForm.pas` は 1122 行。
+  - MainForm に残す責務は、フォーム生成/破棄、VCL イベント入口、Windows message 入口、controller 接続、再生/シークの最小限の橋渡しとした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
 
 ## 2026-06-23 シークバー hover プレビューが表示されない場合の改善
 - 報告:

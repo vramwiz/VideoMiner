@@ -7,7 +7,7 @@
 interface
 
 uses
-  Vcl.ExtCtrls, VideoMinerAudioPlayback, VideoMinerShortcutBindings,
+  System.Classes, Vcl.ExtCtrls, VideoMinerAudioPlayback, VideoMinerShortcutBindings,
   VideoMinerDebugLog, VideoMinerVideoView, ShortcutAction;
 
 type
@@ -25,8 +25,12 @@ type
   private
     FAudioPlayback             : TVideoMinerAudioPlayback;      // 音量とミュートを操作する再生ラッパ
     FVideoView                 : TVideoMinerVideoView;          // overlay イベントと表示状態を中継する動画ビュー
+    FOnAddChapter              : TNotifyEvent;                  // 現在位置にチャプター追加の委譲先
     FOnChapterNavigate         : TVideoMinerCommandDeltaProc;   // 前後チャプター移動の委譲先
+    FOnCheckToggle             : TNotifyEvent;                  // Check モード切り替えの委譲先
     FOnCopyCurrentFrame        : TVideoMinerCommandProc;        // 現在フレームコピーの委譲先
+    FOnDeleteChapter           : TNotifyEvent;                  // 現在位置付近のチャプター削除の委譲先
+    FOnEndActionCycle          : TNotifyEvent;                  // 終端動作切り替えの委譲先
     FOnNavigate                : TVideoMinerCommandDeltaProc;   // 前後ファイル移動の委譲先
     FOnOpenDialog              : TVideoMinerCommandProc;        // ファイル選択ダイアログ表示の委譲先
     FOnPlaybackActiveOrPending : TVideoMinerCommandBoolFunc;    // 再生中または再開待ちかを問い合わせる委譲先
@@ -53,10 +57,18 @@ type
     procedure RegisterShortcuts(Shortcuts: TShortcutAction);
     // 現在音量を指定パーセントぶん増減し、ミュートを解除する
     procedure ChangeVolumeBy(DeltaPercent: Integer);
+    // overlay のチャプター追加ボタンから現在位置にチャプターを追加する
+    procedure AddChapterClick(Sender: TObject);
+    // overlay の Check ボタンから Check モードを切り替える
+    procedure CheckClick(Sender: TObject);
     // 現在フレームコピーをアプリ側へ委譲する
     procedure CopyCurrentFrame;
     // 再生速度の段階切り替えをアプリ側へ委譲する
     procedure CyclePlaybackRate;
+    // overlay のチャプター削除ボタンから現在位置付近のチャプターを削除する
+    procedure DeleteChapterClick(Sender: TObject);
+    // overlay の終端動作ボタンから終端動作を切り替える
+    procedure EndActionClick(Sender: TObject);
     // overlay の先頭フレームボタンから先頭移動を実行する
     procedure FirstFrameClick(Sender: TObject);
     // overlay の全画面ボタンから全画面切り替えを実行する
@@ -111,8 +123,12 @@ type
     procedure VolumeDown;
     // 音量を 5% 上げる
     procedure VolumeUp;
+    property OnAddChapter: TNotifyEvent read FOnAddChapter write FOnAddChapter;
     property OnChapterNavigate: TVideoMinerCommandDeltaProc read FOnChapterNavigate write FOnChapterNavigate;
+    property OnCheckToggle: TNotifyEvent read FOnCheckToggle write FOnCheckToggle;
     property OnCopyCurrentFrame: TVideoMinerCommandProc read FOnCopyCurrentFrame write FOnCopyCurrentFrame;
+    property OnDeleteChapter: TNotifyEvent read FOnDeleteChapter write FOnDeleteChapter;
+    property OnEndActionCycle: TNotifyEvent read FOnEndActionCycle write FOnEndActionCycle;
     property OnNavigate: TVideoMinerCommandDeltaProc read FOnNavigate write FOnNavigate;
     property OnOpenDialog: TVideoMinerCommandProc read FOnOpenDialog write FOnOpenDialog;
     property OnPlaybackActiveOrPending: TVideoMinerCommandBoolFunc
@@ -150,6 +166,10 @@ begin
   if FVideoView = nil then
     Exit;
 
+  FVideoView.OnAddChapterClick := AddChapterClick;
+  FVideoView.OnCheckClick := CheckClick;
+  FVideoView.OnDeleteChapterClick := DeleteChapterClick;
+  FVideoView.OnEndActionClick := EndActionClick;
   FVideoView.OnFirstFrameClick := FirstFrameClick;
   FVideoView.OnFullScreenClick := FullScreenClick;
   FVideoView.OnLastFrameClick := LastFrameClick;
@@ -214,6 +234,18 @@ begin
     FOnSaveAudioSettings;
 end;
 
+procedure TVideoMinerCommandController.AddChapterClick(Sender: TObject);
+begin
+  if Assigned(FOnAddChapter) then
+    FOnAddChapter(Sender);
+end;
+
+procedure TVideoMinerCommandController.CheckClick(Sender: TObject);
+begin
+  if Assigned(FOnCheckToggle) then
+    FOnCheckToggle(Sender);
+end;
+
 procedure TVideoMinerCommandController.CopyCurrentFrame;
 begin
   if Assigned(FOnCopyCurrentFrame) then
@@ -224,6 +256,18 @@ procedure TVideoMinerCommandController.CyclePlaybackRate;
 begin
   if Assigned(FOnPlaybackRateCycle) then
     FOnPlaybackRateCycle;
+end;
+
+procedure TVideoMinerCommandController.DeleteChapterClick(Sender: TObject);
+begin
+  if Assigned(FOnDeleteChapter) then
+    FOnDeleteChapter(Sender);
+end;
+
+procedure TVideoMinerCommandController.EndActionClick(Sender: TObject);
+begin
+  if Assigned(FOnEndActionCycle) then
+    FOnEndActionCycle(Sender);
 end;
 
 procedure TVideoMinerCommandController.FirstFrameClick(Sender: TObject);
