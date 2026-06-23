@@ -82,6 +82,10 @@ type
     procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
     // シークバー上ホイール操作の通知先を設定する
     procedure SetOnSeekByWheel(Value: TVideoMinerOverlaySeekEvent);
+    // シークバー hover プレビュー要求先を設定する
+    procedure SetOnSeekHoverPreview(Value: TVideoMinerOverlaySeekHoverEvent);
+    // シークバー hover プレビュー終了通知先を設定する
+    procedure SetOnSeekHoverPreviewEnd(Value: TNotifyEvent);
     // 10 秒戻しボタンのクリック先を設定する
     procedure SetOnSkipBackwardClick(Value: TNotifyEvent);
     // 10 秒進みボタンのクリック先を設定する
@@ -113,6 +117,9 @@ type
     function ShowFrameAt(Decoder: TFFmpegDecoder; PositionMs: Integer;
       out ErrorMessage: string; PresentFrame: Boolean = True;
       FastSeek: Boolean = False): Boolean;
+    // 指定位置のフレームを任意 Bitmap へデコードする
+    function DecodeFrameToBitmap(Decoder: TFFmpegDecoder; PositionMs: Integer;
+      Bitmap: TBitmap; out ErrorMessage: string; FastSeek: Boolean = False): Boolean;
     // 次フレームを読み、必要なら表示用 BGRX32 へ変換する
     function DecodeNextFrame(Decoder: TFFmpegDecoder; ConvertFrame: Boolean;
       out PositionMs: Integer; out ErrorMessage: string): Boolean;
@@ -135,6 +142,10 @@ type
     procedure PresentImmediate(Bitmap: TBitmap);
     // overlay のシーク進捗を更新する
     procedure SetSeekProgress(PositionMs, MaxMs: Integer);
+    // シークバー hover 位置の小型プレビューを表示する
+    procedure SetSeekHoverPreview(Bitmap: TBitmap; PositionMs: Integer; const AnchorPoint: TPoint);
+    // シークバー hover プレビューを消す
+    procedure ClearSeekHoverPreview;
     property BossMode: Boolean write SetBossMode;
     property CanNavigateNext: Boolean write SetCanNavigateNext;
     property CanNavigatePrevious: Boolean write SetCanNavigatePrevious;
@@ -159,6 +170,8 @@ type
     property OnThumbnailBrowserClick: TNotifyEvent write SetOnThumbnailBrowserClick;
     property OnSeek: TVideoMinerOverlaySeekEvent write SetOnSeek;
     property OnSeekByWheel: TVideoMinerOverlaySeekEvent write SetOnSeekByWheel;
+    property OnSeekHoverPreview: TVideoMinerOverlaySeekHoverEvent write SetOnSeekHoverPreview;
+    property OnSeekHoverPreviewEnd: TNotifyEvent write SetOnSeekHoverPreviewEnd;
     property OnSkipBackwardClick: TNotifyEvent write SetOnSkipBackwardClick;
     property OnSkipForwardClick: TNotifyEvent write SetOnSkipForwardClick;
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent write SetOnVolumeChange;
@@ -422,6 +435,19 @@ begin
     FSurface.OnSeekByWheel := Value;
 end;
 
+procedure TVideoMinerVideoView.SetOnSeekHoverPreview(
+  Value: TVideoMinerOverlaySeekHoverEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnSeekHoverPreview := Value;
+end;
+
+procedure TVideoMinerVideoView.SetOnSeekHoverPreviewEnd(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnSeekHoverPreviewEnd := Value;
+end;
+
 procedure TVideoMinerVideoView.SetOnVolumeChange(
   Value: TVideoMinerOverlayVolumeEvent);
 begin
@@ -525,6 +551,19 @@ begin
     FSurface.SetSeekProgress(PositionMs, MaxMs);
 end;
 
+procedure TVideoMinerVideoView.SetSeekHoverPreview(Bitmap: TBitmap;
+  PositionMs: Integer; const AnchorPoint: TPoint);
+begin
+  if FSurface <> nil then
+    FSurface.SetSeekHoverPreview(Bitmap, PositionMs, AnchorPoint);
+end;
+
+procedure TVideoMinerVideoView.ClearSeekHoverPreview;
+begin
+  if FSurface <> nil then
+    FSurface.ClearSeekHoverPreview;
+end;
+
 procedure TVideoMinerVideoView.SetSeekWheelFrameStepMs(Value: Integer);
 begin
   if FSurface <> nil then
@@ -541,6 +580,46 @@ procedure TVideoMinerVideoView.SetMuted(Value: Boolean);
 begin
   if FSurface <> nil then
     FSurface.Muted := Value;
+end;
+
+function TVideoMinerVideoView.DecodeFrameToBitmap(Decoder: TFFmpegDecoder;
+  PositionMs: Integer; Bitmap: TBitmap; out ErrorMessage: string;
+  FastSeek: Boolean): Boolean;
+var
+  Buffer: Pointer;
+  BufferStride: Integer;
+begin
+  ErrorMessage := '';
+  Result := False;
+  if Decoder = nil then
+  begin
+    ErrorMessage := 'Decoder is nil.';
+    Exit;
+  end;
+  if Bitmap = nil then
+  begin
+    ErrorMessage := 'Bitmap is nil.';
+    Exit;
+  end;
+
+  if not PrepareBitmapFrameBuffer(Bitmap, Decoder.Info.Width,
+    Decoder.Info.Height, Buffer, BufferStride) then
+  begin
+    ErrorMessage := 'Failed to prepare preview frame buffer.';
+    Exit;
+  end;
+
+  if FastSeek then
+    Result := Decoder.DecodeFrameToBgrx32Fast(PositionMs, Buffer,
+      BufferStride, ErrorMessage)
+  else
+    Result := Decoder.DecodeFrameToBgrx32(PositionMs, Buffer, BufferStride,
+      ErrorMessage);
+  if not Result then
+    Exit;
+
+  RotateBitmapByDegrees(Bitmap,
+    EffectiveVideoRotationDegrees(Decoder.Info.RotationDegrees));
 end;
 
 function TVideoMinerVideoView.ShowFrameAt(Decoder: TFFmpegDecoder;

@@ -52,6 +52,8 @@ type
     FOnThumbnailBrowserClick: TNotifyEvent;                      // サムネイル一覧表示を求める右クリック通知先
     FOnSeek                 : TVideoMinerOverlaySeekEvent;       // シークバー操作の通知先
     FOnSeekByWheel          : TVideoMinerOverlaySeekEvent;       // シークバー上ホイール操作の通知先
+    FOnSeekHoverPreview     : TVideoMinerOverlaySeekHoverEvent;  // シークバー hover プレビュー要求先
+    FOnSeekHoverPreviewEnd  : TNotifyEvent;                      // シークバー hover プレビュー終了通知先
     FOnSkipBackwardClick    : TNotifyEvent;                      // 10 秒戻しボタンの通知先
     FOnSkipForwardClick     : TNotifyEvent;                      // 10 秒進みボタンの通知先
     FOnVolumeChange         : TVideoMinerOverlayVolumeEvent;     // 音量変更の通知先
@@ -62,6 +64,10 @@ type
     FSafeAreaVisible        : Boolean;                           // 90% セーフエリア確認枠を表示中か
     FSeekBar                : TVideoMinerOverlaySeekBar;         // 下側のシーク/音量/状態操作バー
     FSeekBarVisible         : Boolean;                           // 下側シークバーを表示中か
+    FSeekPreviewAnchor      : TPoint;                            // hover プレビューを寄せるクライアント座標
+    FSeekPreviewBitmap      : TBitmap;                           // シークバー hover 用の小型プレビュー
+    FSeekPreviewPositionMs  : Integer;                           // hover プレビューの対象位置 ms
+    FSeekPreviewVisible     : Boolean;                           // シークバー hover プレビューを表示中か
     FSeekWheelFrameStepMs   : Integer;                           // Check 中ホイールシークの 1 ステップ幅 ms
     FSkipBackwardButton     : TVideoMinerOverlaySkipButton;      // 10 秒戻しの中央ボタン
     FSkipForwardButton      : TVideoMinerOverlaySkipButton;      // 10 秒進みの中央ボタン
@@ -85,6 +91,8 @@ type
     procedure DrawFrame(Canvas: TCanvas; const DestRect: TRect);
     // 動画座標の中央 90% を確認用ガイドとして描く
     procedure DrawSafeAreaGuide(Canvas: TCanvas; const DestRect: TRect);
+    // シークバー hover 位置のフレームプレビューを描く
+    procedure DrawSeekHoverPreview(Canvas: TCanvas);
     // alpha 確認用の市松模様合成 Bitmap を最新化する
     procedure EnsureAlphaCompositeBitmap;
 {$IFDEF DEBUG}
@@ -163,6 +171,10 @@ type
     procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
     // シークバー上ホイール操作の通知先を設定する
     procedure SetOnSeekByWheel(Value: TVideoMinerOverlaySeekEvent);
+    // シークバー hover プレビュー要求先を設定する
+    procedure SetOnSeekHoverPreview(Value: TVideoMinerOverlaySeekHoverEvent);
+    // シークバー hover プレビュー終了通知先を設定する
+    procedure SetOnSeekHoverPreviewEnd(Value: TNotifyEvent);
     // 10 秒戻しボタンの通知先を設定する
     procedure SetOnSkipBackwardClick(Value: TNotifyEvent);
     // 10 秒進みボタンの通知先を設定する
@@ -218,6 +230,10 @@ type
     procedure PresentImmediate;
     // 下側シークバーの現在位置を更新する
     procedure SetSeekProgress(PositionMs, MaxMs: Integer);
+    // シークバー hover 位置の小型プレビューを表示する
+    procedure SetSeekHoverPreview(Bitmap: TBitmap; PositionMs: Integer; const AnchorPoint: TPoint);
+    // シークバー hover プレビューを消す
+    procedure ClearSeekHoverPreview;
     property BossMode: Boolean read FBossMode write SetBossMode;
     property Bitmap: TBitmap read FBitmap;
     property CanNavigateNext: Boolean write SetCanNavigateNext;
@@ -245,6 +261,10 @@ type
     property OnThumbnailBrowserClick: TNotifyEvent read FOnThumbnailBrowserClick write FOnThumbnailBrowserClick;
     property OnSeek: TVideoMinerOverlaySeekEvent read FOnSeek write SetOnSeek;
     property OnSeekByWheel: TVideoMinerOverlaySeekEvent read FOnSeekByWheel write SetOnSeekByWheel;
+    property OnSeekHoverPreview: TVideoMinerOverlaySeekHoverEvent read FOnSeekHoverPreview
+      write SetOnSeekHoverPreview;
+    property OnSeekHoverPreviewEnd: TNotifyEvent read FOnSeekHoverPreviewEnd
+      write SetOnSeekHoverPreviewEnd;
     property OnSkipBackwardClick: TNotifyEvent read FOnSkipBackwardClick write SetOnSkipBackwardClick;
     property OnSkipForwardClick: TNotifyEvent read FOnSkipForwardClick write SetOnSkipForwardClick;
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent read FOnVolumeChange write SetOnVolumeChange;
@@ -269,6 +289,8 @@ const
   SEEK_WHEEL_STEP_MS    = 1000; // 通常時のホイールシーク幅 ms
   WHEEL_ZOOM_STEP       = 1.20; // ホイール 1 ノッチあたりのズーム倍率
   ALPHA_CHECK_SIZE      = 16;   // alpha 確認表示の市松模様 1 マス px
+  SEEK_PREVIEW_WIDTH    = 160;  // シークバー hover プレビューの標準幅 px
+  SEEK_PREVIEW_MARGIN   = 8;    // シークバー hover プレビューの余白 px
 
 constructor TVideoMinerVideoSurface.Create(AOwner: TComponent);
 begin
@@ -284,8 +306,11 @@ begin
   FBossGestureDetector := TVideoMinerBossGestureDetector.Create;
   FPaintBuffer := TBitmap.Create;
   FPaintBuffer.PixelFormat := pf32bit;
+  FSeekPreviewBitmap := TBitmap.Create;
+  FSeekPreviewBitmap.PixelFormat := pf32bit;
   FOverlayVisible := False;
   FSeekBarVisible := False;
+  FSeekPreviewVisible := False;
   FSeekWheelFrameStepMs := DEFAULT_FRAME_STEP_MS;
   ResetZoom;
   FPreviousFileButton := TVideoMinerOverlayFileNavButton.Create(fndPrevious);
@@ -325,6 +350,7 @@ begin
   FSkipBackwardButton.Free;
   FFirstFrameButton.Free;
   FPreviousFileButton.Free;
+  FSeekPreviewBitmap.Free;
   FPaintBuffer.Free;
   FAlphaCompositeBitmap.Free;
   FBitmap.Free;
@@ -396,6 +422,7 @@ begin
     FNextFileButton.Visible := False;
   if FSeekBar <> nil then
     FSeekBar.SetProgress(0, 0);
+  ClearSeekHoverPreview;
   SetSeekBarVisible(False);
   Invalidate;
   Update;
@@ -740,6 +767,55 @@ begin
     RestoreDC(Canvas.Handle, ClipState);
   end;
 end;
+
+procedure TVideoMinerVideoSurface.DrawSeekHoverPreview(Canvas: TCanvas);
+var
+  BorderRect: TRect;
+  DrawRect: TRect;
+  PreviewHeight: Integer;
+  PreviewWidth: Integer;
+  SeekBarTop: Integer;
+begin
+  if (not FSeekPreviewVisible) or (FSeekPreviewBitmap = nil) or
+     (FSeekPreviewBitmap.Width <= 0) or (FSeekPreviewBitmap.Height <= 0) then
+    Exit;
+
+  PreviewWidth := Min(SEEK_PREVIEW_WIDTH, Max(80, ClientWidth - SEEK_PREVIEW_MARGIN * 2 - 4));
+  PreviewHeight := Max(1, Round(PreviewWidth * FSeekPreviewBitmap.Height /
+    Max(1, FSeekPreviewBitmap.Width)));
+  if PreviewHeight > 120 then
+  begin
+    PreviewHeight := 120;
+    PreviewWidth := Max(1, Round(PreviewHeight * FSeekPreviewBitmap.Width /
+      Max(1, FSeekPreviewBitmap.Height)));
+  end;
+
+  BorderRect := Rect(FSeekPreviewAnchor.X - PreviewWidth div 2 - 2, 0,
+    FSeekPreviewAnchor.X - PreviewWidth div 2 + PreviewWidth + 2, 0);
+  if BorderRect.Left < SEEK_PREVIEW_MARGIN then
+    OffsetRect(BorderRect, SEEK_PREVIEW_MARGIN - BorderRect.Left, 0)
+  else if BorderRect.Right > ClientWidth - SEEK_PREVIEW_MARGIN then
+    OffsetRect(BorderRect, ClientWidth - SEEK_PREVIEW_MARGIN - BorderRect.Right, 0);
+
+  SeekBarTop := ClientHeight;
+  if FSeekBar <> nil then
+    SeekBarTop := FSeekBar.BoundsRect.Top;
+  BorderRect.Top := Max(SEEK_PREVIEW_MARGIN, SeekBarTop - PreviewHeight -
+    SEEK_PREVIEW_MARGIN - 4);
+  BorderRect.Bottom := BorderRect.Top + PreviewHeight + 4;
+  DrawRect := Rect(BorderRect.Left + 2, BorderRect.Top + 2,
+    BorderRect.Right - 2, BorderRect.Bottom - 2);
+
+  Canvas.Brush.Color := clBlack;
+  Canvas.FillRect(BorderRect);
+  Canvas.StretchDraw(DrawRect, FSeekPreviewBitmap);
+  Canvas.Brush.Style := bsClear;
+  Canvas.Pen.Color := $00F0A040;
+  Canvas.Pen.Width := 2;
+  Canvas.Rectangle(BorderRect);
+  Canvas.Brush.Style := bsSolid;
+end;
+
 function TVideoMinerVideoSurface.ImagePointFromClient(const Point: TPoint;
   out ImageX, ImageY: Double): Boolean;
 var
@@ -899,6 +975,12 @@ begin
   FSeekBarVisible := Value;
   if FSeekBar <> nil then
     FSeekBar.Visible := Value;
+  if not Value then
+  begin
+    ClearSeekHoverPreview;
+    if Assigned(FOnSeekHoverPreviewEnd) then
+      FOnSeekHoverPreviewEnd(Self);
+  end;
   InvalidateOverlayControl(FSeekBar);
 end;
 
@@ -940,6 +1022,9 @@ begin
   if (Button = mbLeft) and (FSeekBar <> nil) and HitSeekBar(Point(X, Y)) then
   begin
     SetSeekBarVisible(True);
+    ClearSeekHoverPreview;
+    if Assigned(FOnSeekHoverPreviewEnd) then
+      FOnSeekHoverPreviewEnd(Self);
     if FSeekBar.MouseDown(Point(X, Y)) then
       InvalidateOverlayControl(FSeekBar);
     MouseCapture := True;
@@ -971,6 +1056,7 @@ end;
 procedure TVideoMinerVideoSurface.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   DestRect: TRect;
+  HoverPositionMs: Integer;
   MousePoint: TPoint;
   SourceHeight: Double;
   SourceWidth: Double;
@@ -1048,6 +1134,15 @@ begin
   if FSeekBarVisible and (FSeekBar <> nil) and FSeekBar.MouseMove(MousePoint) then
     InvalidateOverlayControl(FSeekBar);
 
+  if (FSeekBarVisible and (FSeekBar <> nil) and
+      (not FSeekBar.Dragging) and
+      FSeekBar.HoverPositionFromPoint(MousePoint, HoverPositionMs)) then
+  begin
+    if Assigned(FOnSeekHoverPreview) then
+      FOnSeekHoverPreview(Self, HoverPositionMs, MousePoint);
+  end
+  else if Assigned(FOnSeekHoverPreviewEnd) then
+    FOnSeekHoverPreviewEnd(Self);
 end;
 
 procedure TVideoMinerVideoSurface.MouseUp(Button: TMouseButton;
@@ -1254,7 +1349,7 @@ begin
     Exit;
   end;
 
-  UsePaintBuffer := FOverlayVisible or FSeekBarVisible or
+  UsePaintBuffer := FOverlayVisible or FSeekBarVisible or FSeekPreviewVisible or
     ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible) or
     ((FNextFileButton <> nil) and FNextFileButton.Visible);
   if UsePaintBuffer then
@@ -1335,6 +1430,7 @@ begin
     FNextFileButton.Paint(DrawCanvas);
   if FSeekBarVisible and (FSeekBar <> nil) then
     FSeekBar.Paint(DrawCanvas);
+  DrawSeekHoverPreview(DrawCanvas);
   if UsePaintBuffer then
     Canvas.Draw(0, 0, FPaintBuffer);
 {$IFDEF DEBUG}
@@ -1387,6 +1483,34 @@ begin
     if FSeekBarVisible then
       InvalidateOverlayControl(FSeekBar);
   end;
+end;
+
+procedure TVideoMinerVideoSurface.SetSeekHoverPreview(Bitmap: TBitmap;
+  PositionMs: Integer; const AnchorPoint: TPoint);
+begin
+  if (Bitmap = nil) or (Bitmap.Width <= 0) or (Bitmap.Height <= 0) or
+     (FSeekPreviewBitmap = nil) then
+  begin
+    ClearSeekHoverPreview;
+    Exit;
+  end;
+
+  FSeekPreviewBitmap.Assign(Bitmap);
+  FSeekPreviewPositionMs := PositionMs;
+  FSeekPreviewAnchor := AnchorPoint;
+  FSeekPreviewVisible := True;
+  Invalidate;
+end;
+
+procedure TVideoMinerVideoSurface.ClearSeekHoverPreview;
+begin
+  if not FSeekPreviewVisible then
+    Exit;
+
+  FSeekPreviewVisible := False;
+  if FSeekPreviewBitmap <> nil then
+    FSeekPreviewBitmap.SetSize(0, 0);
+  Invalidate;
 end;
 
 procedure TVideoMinerVideoSurface.SetSafeAreaVisible(Value: Boolean);
@@ -1574,6 +1698,17 @@ procedure TVideoMinerVideoSurface.SetOnSeekByWheel(
   Value: TVideoMinerOverlaySeekEvent);
 begin
   FOnSeekByWheel := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnSeekHoverPreview(
+  Value: TVideoMinerOverlaySeekHoverEvent);
+begin
+  FOnSeekHoverPreview := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnSeekHoverPreviewEnd(Value: TNotifyEvent);
+begin
+  FOnSeekHoverPreviewEnd := Value;
 end;
 
 procedure TVideoMinerVideoSurface.SetOnVolumeChange(

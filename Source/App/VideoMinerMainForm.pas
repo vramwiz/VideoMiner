@@ -78,6 +78,13 @@ type
     FSeeking                         : Boolean;                         // シーク処理中か
     FSeekGuardTargetMs               : Integer;                         // シーク直後に再生 tick を守る対象位置 ms
     FSeekGuardRemaining              : Integer;                         // シーク guard を残す tick 数
+    FSeekHoverPreviewBitmap          : TBitmap;                         // シークバー hover プレビュー用 Bitmap
+    FSeekHoverPreviewTimer           : TTimer;                          // シークバー hover プレビューのデコード間引き timer
+    FSeekHoverPreviewPending         : Boolean;                         // hover プレビューのデコード待ちがあるか
+    FSeekHoverPreviewPositionMs      : Integer;                         // hover プレビュー要求位置 ms
+    FSeekHoverPreviewPoint           : TPoint;                          // hover プレビュー表示位置
+    FSeekHoverPreviewLastPositionMs  : Integer;                         // 最後にデコードした hover プレビュー位置 ms
+    FSeekHoverPreviewActive          : Boolean;                         // hover プレビューを表示済みで追従更新中か
     FDropAgent                       : TDropAgent;                      // ファイルドロップ受け口
     FOleInitialized                  : Boolean;                         // OLE 初期化に成功しているか
     FPendingOpenFiles                : TStringList;                     // WM 経由で後から開くファイルキュー
@@ -224,6 +231,12 @@ type
     procedure SeekPlaybackTickToMs(PositionMs: Integer);
     // 指定位置へシークし、必要なら再生状態を復元する
     procedure SeekToMs(PositionMs: Integer; ResumeIfPlaying: Boolean = True);
+    // シークバー hover 位置のプレビュー要求を受ける
+    procedure SeekHoverPreview(Sender: TObject; PositionMs: Integer; const Point: TPoint);
+    // シークバー hover プレビューを閉じる
+    procedure SeekHoverPreviewEnd(Sender: TObject);
+    // シークバー hover プレビューを間引いてデコードする
+    procedure SeekHoverPreviewTimer(Sender: TObject);
     // 現在位置から相対移動する
     procedure SeekByMs(DeltaMs: Integer);
     // 先頭フレームへ移動する
@@ -302,6 +315,9 @@ const
   COPYDATA_OPEN_FILE            = $564D0001; // 別プロセスからファイル名を受け取る COPYDATA 種別
   UI_INFO_UPDATE_INTERVAL_MS    = 250;       // 再生中の情報表示を更新する最短間隔 ms
   SEEK_RESTART_DELAY_MS         = 15;        // シーク後に再生再開を遅延させる時間 ms
+  SEEK_HOVER_PREVIEW_INITIAL_DELAY_MS = 140; // 最初の hover でプレビュー表示を始めるまでの待ち時間 ms
+  SEEK_HOVER_PREVIEW_UPDATE_DELAY_MS  = 5;  // 表示済みプレビューを別位置へ更新するまでの待ち時間 ms
+  SEEK_HOVER_PREVIEW_REUSE_MS         = 80; // 近い hover 位置では前回プレビューを再利用する幅 ms
   CURRENT_FILE_RELOAD_SETTLE_MS = 1500;      // ファイル更新が落ち着くまで再読込を待つ時間 ms
   NAVIGATION_INPUT_BLOCK_MS     = 300;       // 前後動画移動直後に残留キー入力を無視する時間 ms
   TITLE_BAR_COLOR               = $00171617; // 独自タイトルバーの通常背景色
@@ -356,6 +372,11 @@ begin
   FChapterManager := TVideoMinerChapterManager.Create;
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
   FVideoView.OnThumbnailBrowserClick := VideoSurfaceMouseDown;
+  FVideoView.OnSeekHoverPreview := SeekHoverPreview;
+  FVideoView.OnSeekHoverPreviewEnd := SeekHoverPreviewEnd;
+  FSeekHoverPreviewBitmap := TBitmap.Create;
+  FSeekHoverPreviewBitmap.PixelFormat := pf32bit;
+  FSeekHoverPreviewLastPositionMs := -1;
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format('form_create core_objects_ms=%.3f total_ms=%.3f ole=%s',
     [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds,
@@ -433,6 +454,10 @@ begin
   FReloadCurrentFileTimer.Enabled := False;
   FReloadCurrentFileTimer.Interval := CURRENT_FILE_RELOAD_SETTLE_MS;
   FReloadCurrentFileTimer.OnTimer := ReloadCurrentFileTimer;
+  FSeekHoverPreviewTimer := TTimer.Create(Self);
+  FSeekHoverPreviewTimer.Enabled := False;
+  FSeekHoverPreviewTimer.Interval := SEEK_HOVER_PREVIEW_INITIAL_DELAY_MS;
+  FSeekHoverPreviewTimer.OnTimer := SeekHoverPreviewTimer;
   FFrameGuideTimer := TTimer.Create(Self);
   FFrameGuideTimer.Enabled := True;
   FFrameGuideTimer.Interval := FRAME_GUIDE_TIMER_INTERVAL_MS;
@@ -497,6 +522,8 @@ begin
     FRestartPlaybackTimer.Enabled := False;
   if FReloadCurrentFileTimer <> nil then
     FReloadCurrentFileTimer.Enabled := False;
+  if FSeekHoverPreviewTimer <> nil then
+    FSeekHoverPreviewTimer.Enabled := False;
   if FFolderWatcher <> nil then
     FFolderWatcher.Stop;
   if FAudioPlayback <> nil then
@@ -512,6 +539,7 @@ begin
   FWindowModeController.Free;
   FThumbnailBrowser.Free;
   FVideoView.Free;
+  FSeekHoverPreviewBitmap.Free;
   FChapterManager.Free;
   FMediaList.Free;
   FAudioPlayback.Free;
@@ -1330,6 +1358,8 @@ begin
   FLoopSegmentStartMs := -1;
   FLoopSegmentEndMs := -1;
   FChapterManager.Clear;
+  SeekHoverPreviewEnd(Self);
+  FSeekHoverPreviewLastPositionMs := -1;
   FVideoView.Clear;
   RefreshChapterOverlay;
 
@@ -1621,6 +1651,93 @@ begin
     FSeekMaxMs, FCurrentVideoPositionMs, FSeekPositionMs, FSeekGuardTargetMs,
     FSeekGuardRemaining, FUpdatingSeek, FSeeking, SetStatusCaption,
     UpdateInfoLabel);
+end;
+
+procedure TVideoMinerMainForm.SeekHoverPreview(Sender: TObject;
+  PositionMs: Integer; const Point: TPoint);
+begin
+  if (FVideoFile = '') or (FSeekMaxMs <= 0) or (FVideoView = nil) then
+  begin
+    SeekHoverPreviewEnd(Sender);
+    Exit;
+  end;
+
+  FSeekHoverPreviewPositionMs := Max(0, Min(FSeekMaxMs, PositionMs));
+  FSeekHoverPreviewPoint := Point;
+  if VideoMinerDebugLogEnabled then
+    WriteVideoMinerDebugLog(Format(
+      'seek_hover_preview_request position_ms=%d x=%d y=%d',
+      [FSeekHoverPreviewPositionMs, Point.X, Point.Y]));
+
+  if (FSeekHoverPreviewBitmap <> nil) and
+     (FSeekHoverPreviewBitmap.Width > 0) and
+     (FSeekHoverPreviewLastPositionMs >= 0) and
+     (Abs(FSeekHoverPreviewPositionMs - FSeekHoverPreviewLastPositionMs) <=
+      SEEK_HOVER_PREVIEW_REUSE_MS) then
+  begin
+    FVideoView.SetSeekHoverPreview(FSeekHoverPreviewBitmap,
+      FSeekHoverPreviewLastPositionMs, FSeekHoverPreviewPoint);
+    FSeekHoverPreviewActive := True;
+    Exit;
+  end;
+
+  FSeekHoverPreviewPending := True;
+  if FSeekHoverPreviewTimer <> nil then
+  begin
+    FSeekHoverPreviewTimer.Enabled := False;
+    if FSeekHoverPreviewActive then
+      FSeekHoverPreviewTimer.Interval := SEEK_HOVER_PREVIEW_UPDATE_DELAY_MS
+    else
+      FSeekHoverPreviewTimer.Interval := SEEK_HOVER_PREVIEW_INITIAL_DELAY_MS;
+    FSeekHoverPreviewTimer.Enabled := True;
+  end;
+end;
+
+procedure TVideoMinerMainForm.SeekHoverPreviewEnd(Sender: TObject);
+begin
+  FSeekHoverPreviewPending := False;
+  if FSeekHoverPreviewTimer <> nil then
+    FSeekHoverPreviewTimer.Enabled := False;
+  if FVideoView <> nil then
+    FVideoView.ClearSeekHoverPreview;
+  FSeekHoverPreviewActive := False;
+end;
+
+procedure TVideoMinerMainForm.SeekHoverPreviewTimer(Sender: TObject);
+var
+  ErrorMessage: string;
+  PositionMs: Integer;
+begin
+  if FSeekHoverPreviewTimer <> nil then
+    FSeekHoverPreviewTimer.Enabled := False;
+  if not FSeekHoverPreviewPending then
+    Exit;
+
+  FSeekHoverPreviewPending := False;
+  if (FVideoFile = '') or (FSeekMaxMs <= 0) or (FPreviewDecoder = nil) or
+     (FVideoView = nil) or (FSeekHoverPreviewBitmap = nil) then
+    Exit;
+
+  PositionMs := Max(0, Min(FSeekMaxMs, FSeekHoverPreviewPositionMs));
+  if FVideoView.DecodeFrameToBitmap(FPreviewDecoder, PositionMs,
+    FSeekHoverPreviewBitmap, ErrorMessage, True) or
+     FVideoView.DecodeFrameToBitmap(FPreviewDecoder, PositionMs,
+       FSeekHoverPreviewBitmap, ErrorMessage, False) then
+  begin
+    FSeekHoverPreviewLastPositionMs := PositionMs;
+    FVideoView.SetSeekHoverPreview(FSeekHoverPreviewBitmap, PositionMs,
+      FSeekHoverPreviewPoint);
+    FSeekHoverPreviewActive := True;
+  end
+  else
+  begin
+    if VideoMinerDebugLogEnabled then
+      WriteVideoMinerDebugLog(Format(
+        'seek_hover_preview_decode_failed position_ms=%d err="%s"',
+        [PositionMs, ErrorMessage]));
+    FVideoView.ClearSeekHoverPreview;
+    FSeekHoverPreviewActive := False;
+  end;
 end;
 
 procedure TVideoMinerMainForm.SeekByMs(DeltaMs: Integer);

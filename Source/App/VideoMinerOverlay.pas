@@ -29,6 +29,8 @@ type
 
   TVideoMinerOverlayChapters = TArray<TVideoMinerOverlayChapter>;
   TVideoMinerOverlaySeekEvent = procedure(Sender: TObject; PositionMs: Integer) of object;
+  TVideoMinerOverlaySeekHoverEvent = procedure(Sender: TObject; PositionMs: Integer;
+    const Point: TPoint) of object;
   TVideoMinerOverlaySkipDirection = (sdBackward, sdForward);
   TVideoMinerOverlayVolumeEvent = procedure(Sender: TObject; VolumePercent: Integer) of object;
 
@@ -251,6 +253,7 @@ type
     function MouseDown(const Point: TPoint): Boolean; override;
     function MouseMove(const Point: TPoint): Boolean; override;
     function MouseUp(const Point: TPoint): Boolean; override;
+    function HoverPositionFromPoint(const Point: TPoint; out PositionMs: Integer): Boolean;
     procedure SetProgress(PositionMs, MaxMs: Integer);
     function WheelPosition(WheelDelta, StepMs: Integer): Integer;
     property CheckEnabled: Boolean read FCheckEnabled write SetCheckEnabled;
@@ -2156,6 +2159,30 @@ begin
 
   Result := Round((LocalX - Track.Left) / Max(1, Track.Width) * FMaxMs);
   Result := Max(0, Min(FMaxMs, Result));
+end;
+
+function TVideoMinerOverlaySeekBar.HoverPositionFromPoint(const Point: TPoint;
+  out PositionMs: Integer): Boolean;
+var
+  HitRect: TRect;
+  Track: TRect;
+begin
+  PositionMs := 0;
+  Result := False;
+  if (FMaxMs <= 0) or Bounds.IsEmpty then
+    Exit;
+
+  Track := TrackRect;
+  if Track.IsEmpty then
+    Exit;
+
+  HitRect := Rect(Bounds.Left + Track.Left, Bounds.Top,
+    Bounds.Left + Track.Right, Bounds.Bottom);
+  if not PtInRect(HitRect, Point) then
+    Exit;
+
+  PositionMs := PositionFromPoint(Point);
+  Result := True;
 end;
 
 function TVideoMinerOverlaySeekBar.WheelPosition(WheelDelta,
