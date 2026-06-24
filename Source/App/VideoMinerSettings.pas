@@ -53,6 +53,9 @@ function LoadLastMedia: TVideoMinerLastMedia;
 function LoadFolderHistory: TVideoMinerFolderHistory;
 // 指定ファイルに対応する手動チャプター位置を読み込む
 function LoadManualChapterPositions(const FileName: string): TVideoMinerChapterPositions;
+// 指定ファイルに対応する動画時間を読み込む
+function LoadCachedVideoDurationMs(const FileName: string;
+  out DurationMs: Integer): Boolean;
 // 指定ファイルに対応する再生再開位置を読み込む
 function LoadManualChapterPlaybackPosition(const FileName: string; MaxMs: Integer;
   out PositionMs: Integer): Boolean;
@@ -73,6 +76,8 @@ procedure DeleteFolderHistory(const Folder: string);
 // 指定ファイルに対応する手動チャプター位置を保存する
 procedure SaveManualChapterPositions(const FileName: string;
   const Positions: TVideoMinerChapterPositions);
+// 指定ファイルに対応する動画時間を保存する
+procedure SaveCachedVideoDurationMs(const FileName: string; DurationMs: Integer);
 // 指定ファイルに対応する再生再開位置を保存する
 procedure SaveManualChapterPlaybackPosition(const FileName: string;
   PositionMs, MaxMs: Integer);
@@ -90,8 +95,8 @@ function VideoRotationOverrideToText(Value: TVideoRotationOverride): string;
 implementation
 
 uses
-  System.IniFiles, System.Math, System.SysUtils, Winapi.ShlObj, Winapi.Windows,
-  VideoMinerDebugLog;
+  System.IniFiles, System.IOUtils, System.Math, System.SysUtils, Winapi.ShlObj,
+  Winapi.Windows, VideoMinerDebugLog;
 
 const
   SECTION_SETTINGS       = 'VideoMiner';         // アプリ全体設定の INI セクション
@@ -121,6 +126,11 @@ const
   KEY_CHAPTER_COUNT      = 'Count';              // 手動チャプター数の INI キー
   KEY_CHAPTER_POS_PREFIX = 'Position';           // 手動チャプター位置キーの接頭辞
   KEY_CHAPTER_PLAYBACK   = 'PlaybackPositionMs'; // 手動チャプター再生位置の INI キー
+  SECTION_VIDEO_META_PREFIX = 'VideoMeta:';      // ファイル別動画メタ情報のセクション接頭辞
+  KEY_VIDEO_META_FILE       = 'FileName';        // 動画メタ情報対象ファイルの INI キー
+  KEY_VIDEO_META_SIZE       = 'Size';            // 動画メタ情報対象ファイルサイズの INI キー
+  KEY_VIDEO_META_TIME_UTC   = 'LastWriteUtc';    // 動画メタ情報対象更新日時の INI キー
+  KEY_VIDEO_META_DURATION   = 'DurationMs';      // 動画時間 ms の INI キー
 
 var
   CurrentVideoDecoderMode : TVideoDecoderMode = vdmAuto; // 読み込み済みのデコード方式
@@ -241,6 +251,12 @@ end;
 function ManualChapterSectionName(const FileName: string): string;
 begin
   Result := SECTION_CHAPTER_PREFIX + ExpandFileName(FileName);
+end;
+
+// ファイルごとの動画メタ情報保存セクション名を作る
+function VideoMetaSectionName(const FileName: string): string;
+begin
+  Result := SECTION_VIDEO_META_PREFIX + ExpandFileName(FileName);
 end;
 
 // 初回参照時にアプリ全体設定だけをキャッシュする
@@ -474,6 +490,43 @@ begin
   end;
 end;
 
+function LoadCachedVideoDurationMs(const FileName: string;
+  out DurationMs: Integer): Boolean;
+var
+  CachedSize: Int64;
+  CachedTimeUtc: Double;
+  CurrentSize: Int64;
+  CurrentTimeUtc: TDateTime;
+  Ini: TIniFile;
+  Section: string;
+begin
+  Result := False;
+  DurationMs := 0;
+  if (FileName = '') or (not TFile.Exists(FileName)) then
+    Exit;
+
+  Section := VideoMetaSectionName(FileName);
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    if not Ini.ValueExists(Section, KEY_VIDEO_META_DURATION) then
+      Exit;
+
+    CurrentSize := TFile.GetSize(FileName);
+    CurrentTimeUtc := TFile.GetLastWriteTimeUtc(FileName);
+    CachedSize := StrToInt64Def(Ini.ReadString(Section, KEY_VIDEO_META_SIZE,
+      '-1'), -1);
+    CachedTimeUtc := Ini.ReadFloat(Section, KEY_VIDEO_META_TIME_UTC, -1);
+    if (CachedSize <> CurrentSize) or
+       (Abs(CachedTimeUtc - CurrentTimeUtc) > 1 / MSecsPerDay) then
+      Exit;
+
+    DurationMs := Ini.ReadInteger(Section, KEY_VIDEO_META_DURATION, 0);
+    Result := DurationMs > 0;
+  finally
+    Ini.Free;
+  end;
+end;
+
 procedure SaveEndAction(Value: TVideoMinerEndAction);
 var
   Ini: TIniFile;
@@ -636,6 +689,28 @@ begin
     Ini.WriteString(Section, KEY_CHAPTER_FILE, ExpandFileName(FileName));
     Ini.WriteInteger(Section, KEY_CHAPTER_PLAYBACK,
       Max(0, Min(MaxMs, PositionMs)));
+  finally
+    Ini.Free;
+  end;
+end;
+
+procedure SaveCachedVideoDurationMs(const FileName: string; DurationMs: Integer);
+var
+  Ini: TIniFile;
+  Section: string;
+begin
+  if (FileName = '') or (DurationMs <= 0) or (not TFile.Exists(FileName)) then
+    Exit;
+
+  Section := VideoMetaSectionName(FileName);
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    Ini.WriteString(Section, KEY_VIDEO_META_FILE, ExpandFileName(FileName));
+    Ini.WriteString(Section, KEY_VIDEO_META_SIZE,
+      IntToStr(TFile.GetSize(FileName)));
+    Ini.WriteFloat(Section, KEY_VIDEO_META_TIME_UTC,
+      TFile.GetLastWriteTimeUtc(FileName));
+    Ini.WriteInteger(Section, KEY_VIDEO_META_DURATION, DurationMs);
   finally
     Ini.Free;
   end;

@@ -41,6 +41,7 @@ type
     FScrollIndicatorDragOffset : Integer; // つまみ上端から掴んだ位置までの距離 px
     FSelectedIndex : Integer;             // キーボード操作で選択中の一覧位置
     FThumbnailFiles  : TArray<string>;    // サムネイル状態が対応するファイル名
+    FThumbnailDurationsMs : TArray<Integer>; // サムネイルに表示する動画時間 ms
     FThumbnailStates : TArray<TVideoMinerThumbnailState>; // サムネイル生成状態
     FThumbnails      : TArray<TBitmap>;   // 生成済みサムネイル画像
     FThumbnailTimer  : TTimer;            // サムネイルを少しずつ生成するタイマー
@@ -118,6 +119,9 @@ type
     procedure PreviewTimer(Sender: TObject);
     // タイル内にサムネイル画像または生成状態を描く
     procedure DrawThumbnail(Canvas: TCanvas; Index: Integer; const Bounds: TRect);
+    // サムネイル右下に動画時間を描く
+    procedure DrawDurationBadge(Canvas: TCanvas; const ImageRect: TRect;
+      DurationMs: Integer);
     // タイル下部に表示するファイル名を描く
     procedure DrawFileName(Canvas: TCanvas; const Bounds: TRect; const FileName: string);
     // 1 つのタイルを描く
@@ -220,6 +224,12 @@ const
   SCROLL_INDICATOR_WIDTH         = 6;         // 仮想スクロールバーの幅 px
   SCROLL_INDICATOR_HIT_PADDING   = 8;         // 見た目より広く取る操作判定幅 px
   SCROLL_INDICATOR_MIN_HEIGHT    = 28;        // 仮想スクロールバーつまみの最小高さ px
+  DURATION_BADGE_COLOR           = clBlack;   // 動画時間バッジの背景色
+  DURATION_BADGE_PADDING_X       = 6;         // 動画時間バッジの左右余白 px
+  DURATION_BADGE_PADDING_Y       = 2;         // 動画時間バッジの上下余白 px
+  DURATION_BADGE_MARGIN          = 4;         // サムネイル端から動画時間バッジまでの余白 px
+  DURATION_BADGE_MIN_FONT_SIZE   = 9;         // 動画時間バッジの最小文字サイズ pt
+  DURATION_BADGE_MAX_FONT_SIZE   = 11;        // 動画時間バッジの最大文字サイズ pt
   TILE_GAP                       = 14;        // タイル間の余白 px
   TILE_MARGIN                    = 22;        // 一覧外周の余白 px
   NAME_BAND_HEIGHT               = 28;        // ファイル名を重ねる帯の高さ px
@@ -354,6 +364,7 @@ begin
   SetLength(FThumbnails, 0);
   SetLength(FThumbnailStates, 0);
   SetLength(FThumbnailFiles, 0);
+  SetLength(FThumbnailDurationsMs, 0);
 end;
 
 procedure TVideoMinerThumbnailBrowser.ClearThumbnailCache;
@@ -382,6 +393,9 @@ begin
     SetLength(FThumbnails, Count);
     SetLength(FThumbnailStates, Count);
     SetLength(FThumbnailFiles, Count);
+    SetLength(FThumbnailDurationsMs, Count);
+    for I := 0 to Count - 1 do
+      FThumbnailDurationsMs[I] := -1;
   end;
 
   for I := 0 to Count - 1 do
@@ -393,6 +407,7 @@ begin
       FThumbnails[I] := nil;
       FThumbnailStates[I] := tsNone;
       FThumbnailFiles[I] := FileName;
+      FThumbnailDurationsMs[I] := -1;
     end;
   end;
 end;
@@ -430,6 +445,8 @@ function TVideoMinerThumbnailBrowser.TryLoadCachedThumbnail(Index: Integer;
   const FileName: string): Boolean;
 var
   Dest: TBitmap;
+  ErrorMessage: string;
+  Info: TVideoInfo;
 begin
   Result := False;
   if (Index < 0) or (Index >= Length(FThumbnailStates)) or
@@ -444,12 +461,25 @@ begin
     FThumbnails[Index].Free;
     FThumbnails[Index] := Dest;
     Dest := nil;
+    if Index < Length(FThumbnailDurationsMs) then
+    begin
+      if not LoadCachedVideoDurationMs(FileName,
+        FThumbnailDurationsMs[Index]) then
+      begin
+        if TFFmpegDecoder.ReadVideoInfo(FileName, Info, ErrorMessage) then
+        begin
+          FThumbnailDurationsMs[Index] := Round(Info.DurationSec * 1000);
+          SaveCachedVideoDurationMs(FileName, FThumbnailDurationsMs[Index]);
+        end;
+      end;
+    end;
     FThumbnailStates[Index] := tsReady;
     Result := True;
   finally
     Dest.Free;
   end;
 end;
+
 procedure TVideoMinerThumbnailBrowser.GenerateThumbnail(Index: Integer;
   const FileName: string);
 var
@@ -481,6 +511,11 @@ begin
       end;
 
       DurationMs := Round(Info.DurationSec * 1000);
+      if Index < Length(FThumbnailDurationsMs) then
+      begin
+        FThumbnailDurationsMs[Index] := DurationMs;
+        SaveCachedVideoDurationMs(FileName, DurationMs);
+      end;
       if DurationMs <= 0 then
         PositionMs := 0
       else if DurationMs < 1000 then
@@ -767,6 +802,58 @@ begin
     FThumbnailTimer.Enabled := False;
 end;
 
+procedure TVideoMinerThumbnailBrowser.DrawDurationBadge(Canvas: TCanvas;
+  const ImageRect: TRect; DurationMs: Integer);
+var
+  BadgeRect: TRect;
+  Hours: Integer;
+  Minutes: Integer;
+  Seconds: Integer;
+  Text: string;
+  TextHeight: Integer;
+  TextWidth: Integer;
+begin
+  if (DurationMs <= 0) or IsRectEmpty(ImageRect) then
+    Exit;
+
+  Seconds := DurationMs div 1000;
+  Hours := Seconds div 3600;
+  Minutes := (Seconds div 60) mod 60;
+  Seconds := Seconds mod 60;
+  if Hours > 0 then
+    Text := Format('%d:%.2d:%.2d', [Hours, Minutes, Seconds])
+  else
+    Text := Format('%d:%.2d', [Minutes, Seconds]);
+
+  Canvas.Font.Color := clWhite;
+  Canvas.Font.Size := Max(DURATION_BADGE_MIN_FONT_SIZE,
+    Min(DURATION_BADGE_MAX_FONT_SIZE, ImageRect.Height div 8));
+  Canvas.Font.Style := [fsBold];
+  TextWidth := Canvas.TextWidth(Text);
+  TextHeight := Canvas.TextHeight(Text);
+  BadgeRect := Rect(
+    ImageRect.Right - DURATION_BADGE_MARGIN - TextWidth -
+      DURATION_BADGE_PADDING_X * 2,
+    ImageRect.Bottom - DURATION_BADGE_MARGIN - TextHeight -
+      DURATION_BADGE_PADDING_Y * 2,
+    ImageRect.Right - DURATION_BADGE_MARGIN,
+    ImageRect.Bottom - DURATION_BADGE_MARGIN);
+
+  if BadgeRect.Left < ImageRect.Left + DURATION_BADGE_MARGIN then
+    BadgeRect.Left := ImageRect.Left + DURATION_BADGE_MARGIN;
+
+  Canvas.Brush.Color := DURATION_BADGE_COLOR;
+  Canvas.Pen.Style := psClear;
+  Canvas.RoundRect(BadgeRect.Left, BadgeRect.Top, BadgeRect.Right,
+    BadgeRect.Bottom, 4, 4);
+  Canvas.Pen.Style := psSolid;
+  InflateRect(BadgeRect, -DURATION_BADGE_PADDING_X,
+    -DURATION_BADGE_PADDING_Y);
+  DrawText(Canvas.Handle, PChar(Text), -1, BadgeRect,
+    DT_CENTER or DT_VCENTER or DT_SINGLELINE);
+  Canvas.Font.Style := [];
+end;
+
 procedure TVideoMinerThumbnailBrowser.DrawThumbnail(Canvas: TCanvas;
   Index: Integer; const Bounds: TRect);
 var
@@ -798,6 +885,8 @@ begin
       Bounds.Left + (Bounds.Width - ThumbWidth) div 2 + ThumbWidth,
       Bounds.Top + (Bounds.Height - ThumbHeight) div 2 + ThumbHeight);
     Canvas.StretchDraw(DestRect, FPreviewBitmap);
+    if Index < Length(FThumbnailDurationsMs) then
+      DrawDurationBadge(Canvas, DestRect, FThumbnailDurationsMs[Index]);
     Exit;
   end;
   case FThumbnailStates[Index] of
@@ -815,6 +904,8 @@ begin
             Bounds.Left + (Bounds.Width - ThumbWidth) div 2 + ThumbWidth,
             Bounds.Top + (Bounds.Height - ThumbHeight) div 2 + ThumbHeight);
           Canvas.StretchDraw(DestRect, Bitmap);
+          if Index < Length(FThumbnailDurationsMs) then
+            DrawDurationBadge(Canvas, DestRect, FThumbnailDurationsMs[Index]);
           Exit;
         end;
       end;
