@@ -17,13 +17,14 @@ type
 
   TVideoMinerAudioPlayback = class
   private const
-    OUTPUT_SAMPLE_RATE = 48000; // waveOut へ渡す PCM のサンプルレート
-    OUTPUT_CHANNELS    = 2;     // waveOut へ渡す PCM のチャンネル数
-    TARGET_QUEUE_MS    = 600;   // 再生中に維持したい音声キュー長 ms
-    START_QUEUE_MS     = 100;   // 再生開始前に先読みする音声キュー長 ms
-    FADE_IN_MS         = 12;    // seek 直後のクリックノイズを抑えるフェードイン長 ms
-    SLOW_START_LOG_MS  = 120;   // 音声開始処理を slow log に出す閾値 ms
-    SLOW_PUMP_LOG_MS   = 60;    // 音声 pump を slow log に出す閾値 ms
+    OUTPUT_SAMPLE_RATE   = 48000; // waveOut へ渡す PCM のサンプルレート
+    OUTPUT_CHANNELS      = 2;     // waveOut へ渡す PCM のチャンネル数
+    TARGET_QUEUE_MS      = 600;   // 1.0x 再生中に維持したい音声キュー長 ms
+    RATE_TARGET_QUEUE_MS = 220;   // 倍速再生中に維持したい音声キュー長 ms
+    START_QUEUE_MS       = 100;   // 再生開始前に先読みする音声キュー長 ms
+    FADE_IN_MS           = 12;    // seek 直後のクリックノイズを抑えるフェードイン長 ms
+    SLOW_START_LOG_MS    = 120;   // 音声開始処理を slow log に出す閾値 ms
+    SLOW_PUMP_LOG_MS     = 60;    // 音声 pump を slow log に出す閾値 ms
   private
     FDecoder             : TFFmpegDecoder;                   // 音声専用に使う FFmpeg デコーダ
     FFinished            : Boolean;                          // 入力音声を最後まで読み終えたか
@@ -54,6 +55,8 @@ type
     // PCM を現在の再生速度に合わせて変換する
     function TransformPcmForPlaybackRate(const InputPcm: TBytes;
       out OutputPcm: TBytes; out OutputSampleCount: Integer): Boolean;
+    // 現在の再生速度に応じて waveOut へ先行投入する目標キュー長を返す
+    function TargetQueueMs: Integer;
   public
     // 音声デコーダを作成し、既定の音量/速度状態を初期化する
     constructor Create;
@@ -351,9 +354,18 @@ begin
 end;
 
 function TVideoMinerAudioPlayback.PlaybackSamplePosition: Int64;
+var
+  PlayedSampleCount: Integer;
 begin
   if not FPlaybackClockActive then
     Exit(FStartSamples);
+
+  if FDecoder <> nil then
+  begin
+    PlayedSampleCount := FDecoder.PlayedAudioSampleCount;
+    if PlayedSampleCount >= 0 then
+      Exit(FStartSamples + PlayedSampleCount);
+  end;
 
   Result := FStartSamples +
     Round(FPlaybackClock.Elapsed.TotalMilliseconds * OUTPUT_SAMPLE_RATE / 1000);
@@ -390,6 +402,14 @@ begin
     Exit;
 
   FPlaybackRate := Value;
+end;
+
+function TVideoMinerAudioPlayback.TargetQueueMs: Integer;
+begin
+  if SameValue(FPlaybackRate, 1.0) then
+    Result := TARGET_QUEUE_MS
+  else
+    Result := RATE_TARGET_QUEUE_MS;
 end;
 
 procedure TVideoMinerAudioPlayback.ApplyOutputVolume;
@@ -620,7 +640,7 @@ begin
   else
     QueuedSampleCount := RawQueuedSampleCount;
   QueuedBeforeMs := Round(Int64(QueuedSampleCount) * 1000 / OUTPUT_SAMPLE_RATE);
-  TargetQueuedSampleCount := Round(TARGET_QUEUE_MS * OUTPUT_SAMPLE_RATE / 1000);
+  TargetQueuedSampleCount := Round(TargetQueueMs * OUTPUT_SAMPLE_RATE / 1000);
   if QueuedSampleCount >= TargetQueuedSampleCount then
   begin
 {$IFDEF DEBUG}
@@ -628,7 +648,7 @@ begin
       WriteVideoMinerDebugLog(Format(
         'audio_pump_skip reason="queue_full" playback_ms=%d raw_queued_samples=%d queued_ms=%d target_ms=%d queued_samples=%d',
         [PlaybackPositionMs, RawQueuedSampleCount, QueuedBeforeMs,
-         TARGET_QUEUE_MS, FQueuedSamples]));
+         TargetQueueMs, FQueuedSamples]));
 {$ENDIF}
     Exit;
   end;
@@ -708,12 +728,13 @@ begin
 {$ENDIF}
   if not SameValue(FPlaybackRate, 1.0) then
     WriteVideoMinerRateLog(Format(
-      'audio_pump_rate playback_ms=%d rate=%.3f raw_queued_before_samples=%d queued_before_ms=%d queued_after_ms=%d input_bytes=%d output_bytes=%d input_samples=%d queued_output_samples=%d decode_ms=%.3f transform_ms=%.3f queue_ms=%.3f total_ms=%.3f finished=%s result=%s',
+      'audio_pump_rate playback_ms=%d rate=%.3f raw_queued_before_samples=%d queued_before_ms=%d queued_after_ms=%d target_queue_ms=%d input_bytes=%d output_bytes=%d input_samples=%d queued_output_samples=%d decode_ms=%.3f transform_ms=%.3f queue_ms=%.3f total_ms=%.3f finished=%s result=%s',
       [PlaybackPositionMs, FPlaybackRate, RawQueuedSampleCount, QueuedBeforeMs,
        Round((Int64(FQueuedOutputSamples) - PlaybackSamplePosition) * 1000 / OUTPUT_SAMPLE_RATE),
-       Length(Pcm), Length(OutputPcm), FQueuedSamples, FQueuedOutputSamples,
-       DecodeMs, TransformMs, QueueMs, TotalWatch.Elapsed.TotalMilliseconds,
-       BoolToStr(FFinished, True), BoolToStr(Result, True)]));
+       TargetQueueMs, Length(Pcm), Length(OutputPcm), FQueuedSamples,
+       FQueuedOutputSamples, DecodeMs, TransformMs, QueueMs,
+       TotalWatch.Elapsed.TotalMilliseconds, BoolToStr(FFinished, True),
+       BoolToStr(Result, True)]));
 {$IFDEF DEBUG}
   if (TotalWatch.Elapsed.TotalMilliseconds >= SLOW_PUMP_LOG_MS) or
      (DecodeMs >= SLOW_PUMP_LOG_MS) or
@@ -730,12 +751,34 @@ begin
 end;
 
 function TVideoMinerAudioPlayback.PlaybackPositionMs: Integer;
+var
+  InputSampleSpan: Int64;
+  OutputPlayedSamples: Int64;
+  OutputSampleSpan: Int64;
+  PositionSamples: Int64;
 begin
   if (FDecoder = nil) or (FQueuedSamples <= 0) or (not FPlaybackClockActive) then
     Exit(-1);
 
-  Result := FPlaybackBaseMs +
-    Round(FPlaybackClock.Elapsed.TotalMilliseconds * FPlaybackRate);
+  OutputPlayedSamples := PlaybackSamplePosition - FStartSamples;
+  if OutputPlayedSamples < 0 then
+    OutputPlayedSamples := 0;
+
+  InputSampleSpan := FQueuedSamples - FStartSamples;
+  OutputSampleSpan := FQueuedOutputSamples - FStartSamples;
+  if (InputSampleSpan > 0) and (OutputSampleSpan > 0) then
+  begin
+    PositionSamples := FStartSamples +
+      Round(OutputPlayedSamples * InputSampleSpan / OutputSampleSpan);
+    if PositionSamples > FQueuedSamples then
+      PositionSamples := FQueuedSamples;
+  end
+  else
+    PositionSamples := FStartSamples +
+      Round(FPlaybackClock.Elapsed.TotalMilliseconds * OUTPUT_SAMPLE_RATE *
+        FPlaybackRate / 1000);
+
+  Result := Round(PositionSamples * 1000 / OUTPUT_SAMPLE_RATE);
 end;
 
 end.
