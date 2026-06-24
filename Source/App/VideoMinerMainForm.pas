@@ -1079,11 +1079,19 @@ begin
   end;
   if (FPreviewDecoder <> nil) and (FMediaSession.VideoFile <> '') then
   begin
-    if FPreviewDecoder.Open(FMediaSession.VideoFile, PreviewInfo, ErrorMessage) then
+    if FPreviewDecoder.IsOpenForFile(FMediaSession.VideoFile) then
     begin
 {$IFDEF DEBUG}
       WriteVideoMinerSlowLog(Format(
-        'main_seek_to_ms reopen_preview ok file="%s" width=%d height=%d',
+        'main_seek_to_ms reuse_preview file="%s"',
+        [ExtractFileName(FMediaSession.VideoFile)]));
+{$ENDIF}
+    end
+    else if FPreviewDecoder.Open(FMediaSession.VideoFile, PreviewInfo, ErrorMessage) then
+    begin
+{$IFDEF DEBUG}
+      WriteVideoMinerSlowLog(Format(
+        'main_seek_to_ms open_preview ok file="%s" width=%d height=%d',
         [ExtractFileName(FMediaSession.VideoFile), PreviewInfo.Width, PreviewInfo.Height]));
 {$ENDIF}
     end
@@ -1091,7 +1099,7 @@ begin
     begin
 {$IFDEF DEBUG}
       WriteVideoMinerSlowLog(Format(
-        'main_seek_to_ms reopen_preview failed file="%s" err="%s"',
+        'main_seek_to_ms open_preview failed file="%s" err="%s"',
         [ExtractFileName(FMediaSession.VideoFile), ErrorMessage]));
 {$ENDIF}
     end;

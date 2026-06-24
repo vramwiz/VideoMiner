@@ -41,6 +41,7 @@ type
     FDirectSwsSrcHeight  : Integer;                 // 直接出力用swsの入力高さ
     FDirectSwsSrcFormat  : Integer;                 // 直接出力用swsの入力ピクセル形式
     FDirectSwsDstFormat  : Integer;                 // 直接出力用swsの出力ピクセル形式
+    FDecodeGeneration    : Int64;                   // seek/next decode でデコーダ位置が進んだ世代番号
     FContext             : TFFmpegDecoderContext;   // サブユニットへ渡すデコード状態
     // 現在のフィールド状態をContextへ反映する
     procedure SyncContextFromFields;
@@ -53,6 +54,8 @@ type
     destructor Destroy; override;
     // 保持しているFFmpegリソースを解放する
     procedure Close;
+    // 指定ファイルをデコード可能な状態で開いているか確認する
+    function IsOpenForFile(const FileName: string): Boolean;
     // 動画を開いてデコード可能な状態にする
     function Open(const FileName: string; out Info: TVideoInfo; out ErrorMessage: string): Boolean;
     // 指定ミリ秒位置へシークしてフレームをBitmapへ変換する
@@ -99,6 +102,7 @@ type
     class function ReadVideoInfo(const FileName: string; out Info: TVideoInfo; out ErrorMessage: string): Boolean; static;
     // 一時デコーダで指定位置のフレームだけを読む
     class function DecodeFrameToBitmap(const FileName: string; PositionMs: Integer; Bitmap: TBitmap; out ErrorMessage: string): Boolean; overload; static;
+    property DecodeGeneration: Int64 read FDecodeGeneration;
     property Info: TVideoInfo read FInfo;
     property FileName: string read FFileName;
   end;
@@ -218,7 +222,15 @@ begin
   FVideoUsesQsv := False;
   FAudioStream := nil;
   FAudioStreamIndex := -1;
+  FDecodeGeneration := 0;
   FillChar(FInfo, SizeOf(FInfo), 0);
+end;
+
+// 指定ファイルをデコード可能な状態で開いているか確認する
+function TFFmpegDecoder.IsOpenForFile(const FileName: string): Boolean;
+begin
+  Result := (FFormatContext <> nil) and (FFileName <> '') and
+    SameText(ExpandFileName(FFileName), ExpandFileName(FileName));
 end;
 
 
@@ -704,6 +716,7 @@ end;
 // 指定ミリ秒位置へシークしてフレームを32bit BGRxバッファへ直接変換する
 function TFFmpegDecoder.DecodeFrameToBgrx32(PositionMs: Integer; Buffer: Pointer; BufferStride: Integer; out ErrorMessage: string): Boolean;
 begin
+  Inc(FDecodeGeneration);
   SyncContextFromFields;
   Result := FFmpegDecoderSeekBgrx32.DecodeFrameToBgrx32(
     FContext, PositionMs, Buffer, BufferStride, ErrorMessage);
@@ -714,6 +727,7 @@ end;
 function TFFmpegDecoder.DecodeFrameToBgrx32Fast(PositionMs: Integer;
   Buffer: Pointer; BufferStride: Integer; out ErrorMessage: string): Boolean;
 begin
+  Inc(FDecodeGeneration);
   SyncContextFromFields;
   Result := FFmpegDecoderSeekBgrx32.DecodeFrameToBgrx32Fast(
     FContext, PositionMs, Buffer, BufferStride, ErrorMessage);
@@ -825,6 +839,7 @@ end;
 
 function TFFmpegDecoder.DecodeNextFrameToBgrx32Optional(Buffer: Pointer; BufferStride: Integer; ConvertFrame: Boolean; out PositionMs: Integer; out ErrorMessage: string): Boolean;
 begin
+  Inc(FDecodeGeneration);
   SyncContextFromFields;
   Result := FFmpegDecoderNextBgrx32.DecodeNextFrameToBgrx32Optional(
     FContext, Buffer, BufferStride, ConvertFrame, PositionMs, ErrorMessage);

@@ -48,6 +48,8 @@ type
     FRateClockBaseMs          : Integer;                  // 倍速用単調時計の開始位置 ms
     FRateTickLogClock         : TStopwatch;               // 倍速 tick ログの間引きに使う単調時計
     FLastRateTickLogMs        : Int64;                    // 最後に倍速 tick ログを出した経過 ms
+    FPreviewShownPositionMs   : Integer;                  // preview decoder で最後に表示した位置 ms
+    FPreviewShownGeneration   : Int64;                    // 最後に表示した時点の preview decoder 世代番号
     FVideoView                : TVideoMinerVideoView;     // 表示更新と scratch frame 表示を行う動画ビュー
     FPlaybackTimer            : TTimer;                   // 再生 tick を発火する timer
     FPreviewDecoder           : TFFmpegDecoder;           // seek preview 用に使うデコーダ
@@ -156,6 +158,10 @@ type
     // 指定位置付近のフレーム表示を試し、失敗時は近い位置へ fallback する
     function ShowFrameNearMs(PositionMs, SeekMaxMs: Integer;
       out ShownPositionMs: Integer; out ErrorMessage: string): Boolean;
+    // preview decoder の現在位置から次フレームを読むだけで済む場合は seek せず表示する
+    function TryShowNextPreviewFrame(TargetMs, CurrentVideoPositionMs,
+      SeekMaxMs: Integer; out ShownPositionMs: Integer;
+      out ErrorMessage: string): Boolean;
     // 指定位置へ seek し、必要なら再生再開を予約する
     procedure SeekToMs(const VideoFile: string; PositionMs: Integer;
       ResumeIfPlaying: Boolean; SeekMaxMs: Integer;
@@ -189,12 +195,14 @@ uses
   System.Math, System.SysUtils, VideoMinerDebugLog, VideoMinerPlaybackTiming;
 
 const
-  SLOW_PREVIEW_LOG_MS = 120; // preview frame 表示を slow log に出す閾値 ms
-  SLOW_START_LOG_MS   = 150; // 再生開始処理を slow log に出す閾値 ms
-  SLOW_TICK_LOG_MS    = 80;  // 再生 tick を slow log に出す閾値 ms
-  RATE_TICK_LOG_MS    = 1000; // 倍速 tick ログを通常サンプル出力する間隔 ms
-  RATE_LAG_LOG_MS     = 120;  // 倍速 tick ログを即時出力する同期ズレ幅 ms
-  RATE_SLOW_LOG_MS    = 50;   // 倍速 tick ログを即時出力する処理時間 ms
+  SLOW_PREVIEW_LOG_MS           = 120;  // preview frame 表示を slow log に出す閾値 ms
+  SLOW_START_LOG_MS             = 150;  // 再生開始処理を slow log に出す閾値 ms
+  SLOW_TICK_LOG_MS              = 80;   // 再生 tick を slow log に出す閾値 ms
+  RATE_TICK_LOG_MS              = 1000; // 倍速 tick ログを通常サンプル出力する間隔 ms
+  RATE_LAG_LOG_MS               = 120;  // 倍速 tick ログを即時出力する同期ズレ幅 ms
+  RATE_SLOW_LOG_MS              = 50;   // 倍速 tick ログを即時出力する処理時間 ms
+  PREVIEW_NEXT_MAX_STEP_MS      = 80;   // preview decoder の順方向読みで代替する最大移動幅 ms
+  PREVIEW_POSITION_TOLERANCE_MS = 3;    // preview decoder 位置と表示位置を同一視する許容誤差 ms
 
 constructor TVideoMinerPlaybackController.Create(PlaybackTimer,
   RestartTimer: TTimer; AudioPlayback: TVideoMinerAudioPlayback;
@@ -215,6 +223,8 @@ begin
   FRestartFrameAlreadyShown := True;
   FRestartPending := False;
   FRestartPositionMs := -1;
+  FPreviewShownPositionMs := -1;
+  FPreviewShownGeneration := -1;
 end;
 
 function TVideoMinerPlaybackController.ActiveOrPending: Boolean;
@@ -793,6 +803,8 @@ begin
       LastErrorMessage) then
     begin
       ShownPositionMs := AttemptMs;
+      FPreviewShownPositionMs := ShownPositionMs;
+      FPreviewShownGeneration := FPreviewDecoder.DecodeGeneration;
       Result := True;
 {$IFDEF DEBUG}
       TotalMs := TotalWatch.Elapsed.TotalMilliseconds;
@@ -815,6 +827,61 @@ begin
     'show_frame_near_failed target_ms=%d attempts=%d total_ms=%.3f err="%s"',
     [PositionMs, TriedCount, TotalWatch.Elapsed.TotalMilliseconds,
      ErrorMessage]));
+{$ENDIF}
+end;
+
+function TVideoMinerPlaybackController.TryShowNextPreviewFrame(TargetMs,
+  CurrentVideoPositionMs, SeekMaxMs: Integer; out ShownPositionMs: Integer;
+  out ErrorMessage: string): Boolean;
+var
+  NextPositionMs: Integer;
+{$IFDEF DEBUG}
+  TotalWatch: TStopwatch;
+{$ENDIF}
+begin
+  Result := False;
+  ShownPositionMs := TargetMs;
+  ErrorMessage := '';
+  if (FVideoView = nil) or (FPreviewDecoder = nil) or
+     (FPreviewShownPositionMs < 0) then
+    Exit;
+  if FPreviewShownGeneration <> FPreviewDecoder.DecodeGeneration then
+    Exit;
+  if TargetMs <= FPreviewShownPositionMs then
+    Exit;
+  if TargetMs > SeekMaxMs then
+    Exit;
+  if TargetMs - FPreviewShownPositionMs > PREVIEW_NEXT_MAX_STEP_MS then
+    Exit;
+  if Abs(CurrentVideoPositionMs - FPreviewShownPositionMs) >
+     PREVIEW_POSITION_TOLERANCE_MS then
+    Exit;
+
+{$IFDEF DEBUG}
+  TotalWatch := TStopwatch.StartNew;
+  WriteVideoMinerSlowLog(Format(
+    'show_frame_next_begin target_ms=%d preview_ms=%d current_ms=%d',
+    [TargetMs, FPreviewShownPositionMs, CurrentVideoPositionMs]));
+{$ENDIF}
+  if not FVideoView.DecodeNextFrame(FPreviewDecoder, True, NextPositionMs,
+    ErrorMessage) then
+  begin
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format(
+      'show_frame_next_failed target_ms=%d preview_ms=%d err="%s"',
+      [TargetMs, FPreviewShownPositionMs, ErrorMessage]));
+{$ENDIF}
+    Exit;
+  end;
+
+  ShownPositionMs := NextPositionMs;
+  FPreviewShownPositionMs := NextPositionMs;
+  FPreviewShownGeneration := FPreviewDecoder.DecodeGeneration;
+  Result := True;
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format(
+    'show_frame_next_done target_ms=%d shown_ms=%d total_ms=%.3f',
+    [TargetMs, ShownPositionMs, TotalWatch.Elapsed.TotalMilliseconds]));
 {$ENDIF}
 end;
 
@@ -888,7 +955,16 @@ begin
 {$IFDEF DEBUG}
       StepWatch := TStopwatch.StartNew;
 {$ENDIF}
-      if not ShowFrameNearMs(TargetMs, SeekMaxMs, ShownPositionMs,
+      if (not WasPlaying) and TryShowNextPreviewFrame(TargetMs,
+        CurrentVideoPositionMs, SeekMaxMs, ShownPositionMs, ErrorMessage) then
+      begin
+{$IFDEF DEBUG}
+        WriteVideoMinerSlowLog(Format(
+          'seek_preview_next target_ms=%d shown_ms=%d',
+          [TargetMs, ShownPositionMs]));
+{$ENDIF}
+      end
+      else if not ShowFrameNearMs(TargetMs, SeekMaxMs, ShownPositionMs,
         ErrorMessage) then
       begin
 {$IFDEF DEBUG}

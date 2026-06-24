@@ -63,6 +63,7 @@ type
     FOnSkipForwardClick     : TNotifyEvent;                      // 10 秒進みボタンの通知先
     FOnVolumeChange         : TVideoMinerOverlayVolumeEvent;     // 音量変更の通知先
     FOverlayVisible         : Boolean;                           // 中央 overlay ボタン群を表示中か
+    FPlaybackActive         : Boolean;                           // 現在再生中か
     FPlayPauseButton        : TVideoMinerOverlayPlayPauseButton; // 再生/一時停止の中央ボタン
     FPreviousFileButton     : TVideoMinerOverlayFileNavButton;   // 前動画へ移動する左端ボタン
     FPreviewRect            : TRect;                             // 動画フレームが実際に描画される領域
@@ -73,7 +74,7 @@ type
     FSeekPreviewBitmap      : TBitmap;                           // シークバー hover 用の小型プレビュー
     FSeekPreviewPositionMs  : Integer;                           // hover プレビューの対象位置 ms
     FSeekPreviewVisible     : Boolean;                           // シークバー hover プレビューを表示中か
-    FSeekWheelFrameStepMs   : Integer;                           // Check 中ホイールシークの 1 ステップ幅 ms
+    FSeekWheelFrameStepMs   : Integer;                           // フレーム単位ホイールシークの 1 ステップ幅 ms
     FSkipBackwardButton     : TVideoMinerOverlaySkipButton;      // 10 秒戻しの中央ボタン
     FSkipForwardButton      : TVideoMinerOverlaySkipButton;      // 10 秒進みの中央ボタン
     FSourceHasAlpha         : Boolean;                           // 現在の動画が alpha を持つ形式か
@@ -1346,7 +1347,7 @@ begin
     if FSeekBar.BoundsHitTest(LocalPoint) then
     begin
       SetSeekBarVisible(True);
-      if FSeekBar.CheckEnabled then
+      if FSeekBar.CheckEnabled or (not FPlaybackActive) then
         StepMs := FSeekWheelFrameStepMs
       else
         StepMs := SEEK_WHEEL_STEP_MS;
@@ -1618,6 +1619,7 @@ begin
 end;
 procedure TVideoMinerVideoSurface.SetPlaybackActive(Value: Boolean);
 begin
+  FPlaybackActive := Value;
   if (FPlayPauseButton <> nil) and (FPlayPauseButton.IsPlaying <> Value) then
   begin
     FPlayPauseButton.IsPlaying := Value;

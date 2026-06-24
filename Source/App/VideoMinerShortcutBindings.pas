@@ -45,6 +45,7 @@ begin
   Shortcuts.Clear;
   Shortcuts.Add(Ord('O')  , [ssCtrl], Handlers.OpenDialog);
   Shortcuts.Add(Ord('C')  , [ssCtrl], Handlers.CopyCurrentFrame);
+  Shortcuts.Add(Ord('G')  , []      , Handlers.ToggleSafeArea);
   Shortcuts.Add(Ord('G')  , [ssCtrl], Handlers.ToggleSafeArea);
   Shortcuts.Add(VK_LEFT   , [ssCtrl], Handlers.ChapterPrevious);
   Shortcuts.Add(VK_RIGHT  , [ssCtrl], Handlers.ChapterNext);

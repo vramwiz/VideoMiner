@@ -311,8 +311,10 @@ function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
 - 2026-06-16 時点では、フォルダ内動画の並び順を作成日時の古い順に変更済み。
 - 2026-06-16 時点では、左右キー/PageUp/PageDown の前後動画移動で、キーリピートや残留キー入力が次々処理されにくいよう入力ガードを入れている。
 - 2026-06-16 時点では、下側シークバー上のホイール操作で一時停止してシークできる。
-  - 通常時は 1 秒単位で移動する。
-  - `Check` ON 中は 1 フレーム目安で移動し、シークバー表示を概算の `Frame n / total` に切り替える。
+  - 一時停止中は 1 フレーム目安、再生中は 1 秒単位で移動して再生を継続する。
+  - `Check` ON 中は再生状態に関係なく 1 フレーム目安で移動し、シークバー表示を概算の `Frame n / total` に切り替える。
+  - 一時停止中の連続した前方向フレーム送りは preview decoder の順方向デコードで進め、毎回 seek しない。
+  - 戻し方向や大きな移動はまだ seek が必要なため、必要なら近傍フレームのリングキャッシュを今後検討する。
 - 2026-06-17 時点では、alpha 付き動画の確認用に、入力 pixel format 名と alpha 有無をデコーダ情報へ持たせるようにした。
   - `yuva` / `rgba` / `bgra` / `argb` / `abgr` / `gbrap` / `ya` 系の pixel format を alpha 付きとして扱う。
   - alpha 付き動画では、表示面で BGRA の alpha を市松模様へ手動合成して表示する。
@@ -407,7 +409,7 @@ function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
 
 - `Play` / `Stop` による動画再生と停止。
 - シークバー操作で指定位置のフレームを表示する。
-- 下側シークバー上でマウスホイールを回すと、再生中でも一時停止して位置を移動する。
+- 下側シークバー上でマウスホイールを回すと、一時停止中は 1 フレーム目安、再生中は 1 秒単位で位置を移動して再生を継続する。
   - `Check` OFF では 1 秒単位で移動する。
   - `Check` ON ではフレーム確認向けに 1 フレーム目安で移動し、シークバー表示も `Frame n / total` の概算表示へ切り替える。
 - キーボード操作で `-10s` / `+10s` 相当の移動を行う。
@@ -877,19 +879,9 @@ powershell -ExecutionPolicy Bypass -File tools\InstallGitHooks.ps1
 1. ループ再生の先頭戻りを滑らかにする。
    - 現在の最優先課題として扱う。
    - ループ末尾から先頭へ戻る時の一瞬の止まりや違和感を減らす。
-   - 2026-06-24 の `videominer_loop_debug_60fps.mp4` 実測では、2 周目以降の先頭フレームキャッシュは `loop_frame_cache_hit` している。
-   - ただし実再生の再開はまだ遅く、`start_playback_done total_ms` は約 195ms、その大半は `audio_start_ms` / `output_start_ms` の約 170ms。
-   - 現状の主因は映像 seek ではなく、ループ/seek 再開ごとに `waveOut` を閉じて開き直す音声出力開始処理と見る。
-   - 次の改善は、同じ音声出力形式のままなら `waveOutOpen` を毎回呼ばず、`waveOutReset` とキュー破棄だけで再利用する方向を優先する。
-   - 同日対応で `waveOut` ハンドルを保持したままキューだけ reset するよう変更し、ループ時の `output_start_ms` は約 170ms から約 1ms へ改善した。
-   - ループ時の `start_playback_done total_ms` は約 195ms から約 29-31ms へ改善した。残る主な待ちは映像側の先頭 seek 約 24-27ms。
-   - 追加調査で、Debug 版は滑らかなのに Release 版だけ 1 秒前後止まる現象を確認した。
-   - Release 版では 0ms へ戻す再生用デコーダ seek が `Frame could not be decoded.` で失敗し、`video_reopen=True` の fallback に落ちていた。
-   - 原因は 0ms seek 後の先頭フレーム判定が厳しすぎ、timestamp が 0ms ぴったりでない先頭近傍フレームを捨て続けていたこと。
-   - `FFmpegDecoderSeekBgrx32.AcceptSeekFrame` は `PositionMs <= 0` の場合、seek 後に返った最初のフレームを先頭フレームとして採用するよう変更した。
-   - Release 実測では、修正前のループ再開は `start_playback_summary total_ms` が約 1027-1189ms、`video_reopen=True`。
-   - 修正後は `video_reopen=False`、`video_seek_ms` 約 16-18ms、`audio_start_ms` 約 3-4ms、`start_playback_summary total_ms` 約 20-23ms。
-   - Release 比較用に `audio_start_summary`、`start_playback_summary`、`finish_at_end_loop_summary`、`loop_restart_summary`、`start_playback_reuse_failed_summary` を `WriteVideoMinerRateLog` へ出すようにした。
+   - 当初より大きく改善し、Debug/Release とも体感上は滑らかになった。
+   - ただし本当の目標は、ループ再開時の待ち時間を 0ms に近づけること。
+   - 現状はまだ seek / 再同期 / 音声再開のためにわずかな待ちが残るため、引き続き課題として扱う。
 2. サムネイル生成のバックグラウンド worker 化を再挑戦する。
    - 裏でサムネイルを作ろうとしているが、現状はうまくいっていない。
    - 現在の同期生成を壊さず、worker の寿命管理と UI 反映タイミングを小さく検証する。
@@ -904,10 +896,9 @@ powershell -ExecutionPolicy Bypass -File tools\InstallGitHooks.ps1
   - 短い動画やチャプター区間ループで先頭へ戻る時、デコーダ再オープンや seek により一瞬再生が止まることがある。
   - 対策として、ループ先頭の数フレームをあらかじめ表示しやすい画像データとして保持し、2 回目以降のループ開始を滑らかにする案がある。
   - これはキャッシュファイルではなく、デコード済みまたは表示用に取り出しやすいフレーム画像データをメモリ上で管理する意味のキャッシュとする。
-  - 2026-06-24 時点では、先頭側 4 フレームのメモリキャッシュは入り、2 周目以降に即時表示できるところまでは確認済み。
-  - その後の待ち時間は `audio_start_slow` の `output_start_ms` が支配的で、waveOut 再オープン回避が次の焦点。
-  - `waveOutOpen` の再実行を避ける変更後、ループ中の `audio_start total_ms` は約 2-3ms まで下がった。
-  - 初回再生開始だけは実際に `waveOutOpen` が必要なため、`output_start_ms` が数百 ms になることがある。
+  - 先頭側フレームキャッシュと再開処理の改善により、当初よりかなり滑らかになった。
+  - 今後は残るわずかな待ちをさらに詰め、理想的には 0ms 再開に近づける。
+  - 次の検討では、ループ先頭フレームの事前準備、再生用デコーダ位置の維持、音声再開の先行準備をまとめて見る。
 - 長い読み込み中に止まっていないことを見せる。
   - 大きい動画やネットワーク越しの動画では、フォーム表示後に読み込みへ進んでも、画面が静止していると固まったように見える可能性がある。
   - `Loading` 表示や周辺のどこかを軽くアニメーションさせ、処理中であることがユーザーに伝わるようにする。

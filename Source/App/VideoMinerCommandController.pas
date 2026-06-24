@@ -348,7 +348,7 @@ procedure TVideoMinerCommandController.SeekByWheel(Sender: TObject;
   PositionMs: Integer);
 begin
   if Assigned(FOnSeekToMs) then
-    FOnSeekToMs(PositionMs, False);
+    FOnSeekToMs(PositionMs, True);
 end;
 
 procedure TVideoMinerCommandController.SeekToFirstFrame;

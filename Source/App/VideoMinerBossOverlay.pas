@@ -76,7 +76,7 @@ const
         '# Review and inspection',
         '',
         '| Ctrl+C | Copy current paused frame to clipboard |',
-        '| Ctrl+G | Toggle 90% safe area guide |',
+    '| G / Ctrl+G | Toggle 90% safe area guide |',
         '| Check | Toggle lightweight video/audio checks |',
         '| + / seekbar right click | Add/remove manual chapter |',
         '| - | Delete a nearby manual chapter |',
