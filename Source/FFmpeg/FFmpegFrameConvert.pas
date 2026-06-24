@@ -124,6 +124,23 @@ begin
   end;
 end;
 
+// 正方向の一時 packed バッファを、呼び出し側の符号付き stride バッファへコピーする。
+procedure CopyPackedRowsToSignedStride(const Src: TBytes; SrcStride: Integer;
+  Dst: Pointer; DstStride, RowBytes, Height: Integer);
+var
+  Y      : Integer; // コピー中の行番号
+  DstRow : PByte;   // 呼び出し側バッファのコピー先行
+begin
+  if (Length(Src) <= 0) or (Dst = nil) then
+    raise Exception.Create('Packed copy buffer is invalid.');
+
+  for Y := 0 to Height - 1 do
+  begin
+    DstRow := PByte(NativeInt(Dst) + NativeInt(Y) * DstStride);
+    Move(Src[Y * SrcStride], DstRow^, RowBytes);
+  end;
+end;
+
 // 8bit Y 成分を YC48 の Y 範囲へ変換する。
 function Y8ToYc48Value(Y: Byte): Integer;
 begin
@@ -259,17 +276,33 @@ var
   DstData     : array[0..3] of PByte;   // sws_scale へ渡す出力 plane
   DstLinesize : array[0..3] of Integer; // sws_scale へ渡す出力 stride
   DstFormat   : Integer;                // FFmpeg の出力ピクセル形式
+  RowBytes    : Integer;                // 1 行分の表示バイト数
+  TempBuffer  : TBytes;                 // 負 stride 回避用の一時出力先
+  TempStride  : Integer;                // 一時出力先の stride
 begin
   EnsureFrameAndBuffer(Frame, Buffer);
   if BufferStride = 0 then
     BufferStride := Frame.width * 4;
   DstFormat := AV_PIX_FMT_BGRA;
+  RowBytes := Frame.width * 4;
+  TempStride := RowBytes;
+
+  if BufferStride < 0 then
+    SetLength(TempBuffer, NativeInt(TempStride) * Frame.height);
 
   FillChar(DstData, SizeOf(DstData), 0);
   FillChar(DstLinesize, SizeOf(DstLinesize), 0);
 
-  DstData[0] := PByte(Buffer);
-  DstLinesize[0] := BufferStride;
+  if Length(TempBuffer) > 0 then
+  begin
+    DstData[0] := @TempBuffer[0];
+    DstLinesize[0] := TempStride;
+  end
+  else
+  begin
+    DstData[0] := PByte(Buffer);
+    DstLinesize[0] := BufferStride;
+  end;
 
   EnsureSwsContext(Frame, DstFormat, ScaleContext, CachedSrcWidth, CachedSrcHeight,
     CachedSrcFormat, CachedDstFormat);
@@ -277,6 +310,10 @@ begin
   if TFFmpegApi.sws_scale(PSwsContext(ScaleContext), @Frame.data[0], @Frame.linesize[0], 0,
     Frame.height, @DstData[0], @DstLinesize[0]) <= 0 then
     raise Exception.Create('sws_scale failed.');
+
+  if Length(TempBuffer) > 0 then
+    CopyPackedRowsToSignedStride(TempBuffer, TempStride, Buffer, BufferStride,
+      RowBytes, Frame.height);
 end;
 
 // AVFrame を呼び出し側が指定した先頭行と符号付き stride の BGR24 表示バッファへ変換する。
@@ -487,6 +524,9 @@ var
   DstData      : array[0..3] of PByte;   // sws_scale へ渡す Bitmap 側 plane
   DstLinesize  : array[0..3] of Integer; // sws_scale へ渡す Bitmap 側 stride
   Stride       : NativeInt;              // Bitmap の実 stride
+  RowBytes     : Integer;                // 1 行分の BGR24 バイト数
+  TempBuffer   : TBytes;                 // 負 stride 回避用の一時出力先
+  TempStride   : Integer;                // 一時出力先の stride
 begin
   if (Frame = nil) or (Frame.width <= 0) or (Frame.height <= 0) then
     raise Exception.Create('Decoded frame has invalid size.');
@@ -502,7 +542,16 @@ begin
     Stride := NativeInt(Bitmap.ScanLine[1]) - NativeInt(Bitmap.ScanLine[0])
   else
     Stride := Bgr24Stride(Frame.width);
-  DstLinesize[0] := Integer(Stride);
+  RowBytes := Frame.width * 3;
+  TempStride := Bgr24Stride(Frame.width);
+  if Stride < 0 then
+  begin
+    SetLength(TempBuffer, NativeInt(TempStride) * Frame.height);
+    DstData[0] := @TempBuffer[0];
+    DstLinesize[0] := TempStride;
+  end
+  else
+    DstLinesize[0] := Integer(Stride);
 
   ScaleContext := TFFmpegApi.sws_getContext(Frame.width, Frame.height, Frame.format,
     Frame.width, Frame.height, AV_PIX_FMT_BGR24, SWS_BILINEAR, nil, nil, nil);
@@ -512,6 +561,9 @@ begin
     if TFFmpegApi.sws_scale(ScaleContext, @Frame.data[0], @Frame.linesize[0], 0,
       Frame.height, @DstData[0], @DstLinesize[0]) <= 0 then
       raise Exception.Create('sws_scale failed.');
+    if Length(TempBuffer) > 0 then
+      CopyPackedRowsToSignedStride(TempBuffer, TempStride, Bitmap.ScanLine[0],
+        Integer(Stride), RowBytes, Frame.height);
   finally
     TFFmpegApi.sws_freeContext(ScaleContext);
   end;

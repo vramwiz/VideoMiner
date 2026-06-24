@@ -2,6 +2,22 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-25 縦動画読み込みクラッシュの修正
+- `C:\Users\vramw\Videos\test_out_r.mp4` を Debug 版で開くと、初回フレームの BGRX32 変換中に `swscale-9.dll` でアクセス違反が発生することを確認した。
+  - 対象動画は H.264 1080x1920、約 30fps、約 5.1 秒。
+  - 直前ログでは `seek_bgrx32_copy ... frame=1080x1920 ... stride=-4320` の直後に落ちていた。
+- VCL `TBitmap` の負 stride を `sws_scale` へ直接渡すと縦長動画で不安定になるため、BGRX32/BGR24 の packed 変換では負 stride の場合だけ正方向の一時バッファへ変換し、行単位で呼び出し側バッファへコピーするようにした。
+- 修正後、同じ `test_out_r.mp4` は 8 秒再生してクラッシュせず、通常終了できた。
+  - `media_open_done total_ms=29.764`
+  - `open_done total_ms=425.517`
+  - ループ戻りの `start_playback total_ms=5.679`、`video_seek_ms=0.000`
+  - 再生中 `decode_ms` は p50 約 10.9ms / p90 約 15.9ms、`paint_ms` は p50 約 0.57ms。
+- `C:\Users\vramw\Videos\videominer_loop_debug_60fps.mp4` でも再計測し、ループ戻りの `video_seek_ms=0.000` は維持された。
+  - `open_done total_ms=415.860`
+  - ループ戻りの `start_playback total_ms=4.590`
+  - 再生中 `decode_ms` は p50 約 6.5ms / p90 約 10.7ms、`paint_ms` は p50 約 0.63ms。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+
 ## 2026-06-25 デコード経路の段階的改善と計測
 - テスト動画 `C:\Users\vramw\Videos\videominer_loop_debug_60fps.mp4` で、修正ごとに Debug ログ計測を行った。
 - Step 1: `auto` デコード判定を調整した。
