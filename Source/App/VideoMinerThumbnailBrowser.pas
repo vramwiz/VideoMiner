@@ -469,13 +469,13 @@ begin
       Source.PixelFormat := pf32bit;
       Source.SetSize(Info.Width, Info.Height);
       if Info.Height > 1 then
-        BufferStride := Abs(NativeInt(Source.ScanLine[1]) -
-          NativeInt(Source.ScanLine[0]))
+        BufferStride := NativeInt(Source.ScanLine[1]) -
+          NativeInt(Source.ScanLine[0])
       else
         BufferStride := Info.Width * 4;
-      Buffer := Source.ScanLine[Info.Height - 1];
+      Buffer := Source.ScanLine[0];
 
-      if (Buffer = nil) or (BufferStride <= 0) or
+      if (Buffer = nil) or (BufferStride = 0) or
          (not Decoder.DecodeFrameToBgrx32(PositionMs, Buffer, BufferStride,
            ErrorMessage)) then
       begin
@@ -559,12 +559,12 @@ begin
       Source.PixelFormat := pf32bit;
       Source.SetSize(FPreviewInfo.Width, FPreviewInfo.Height);
       if FPreviewInfo.Height > 1 then
-        BufferStride := Abs(NativeInt(Source.ScanLine[1]) -
-          NativeInt(Source.ScanLine[0]))
+        BufferStride := NativeInt(Source.ScanLine[1]) -
+          NativeInt(Source.ScanLine[0])
       else
         BufferStride := FPreviewInfo.Width * 4;
-      Buffer := Source.ScanLine[FPreviewInfo.Height - 1];
-      if (Buffer = nil) or (BufferStride <= 0) then
+      Buffer := Source.ScanLine[0];
+      if (Buffer = nil) or (BufferStride = 0) then
         Exit;
 
       DurationMs := Round(FPreviewInfo.DurationSec * 1000);

@@ -467,11 +467,24 @@ procedure TVideoMinerPlaybackController.FinishAtEnd(
   UpdateInfo: TVideoMinerPlaybackNotifyProc);
 var
   FrameShown: Boolean;
+  LoopFrameCacheShown: Boolean;
   StopFrameMs: Integer;
 begin
   case FinishResult(EndAction, CanNavigateNext) of
     perLoop:
       begin
+        LoopFrameCacheShown := (FVideoView <> nil) and
+          FVideoView.TryPresentLoopFrameCache(LoopStartMs);
+        WriteVideoMinerRateLog(Format(
+          'finish_at_end_loop_summary target_ms=%d cache_shown=%s',
+          [LoopStartMs, BoolToStr(LoopFrameCacheShown, True)]));
+{$IFDEF DEBUG}
+        WriteVideoMinerSlowLog(Format(
+          'finish_at_end_loop target_ms=%d cache_shown=%s',
+          [LoopStartMs, BoolToStr(LoopFrameCacheShown, True)]));
+{$ENDIF}
+        if FVideoView <> nil then
+          FVideoView.BeginLoopFrameCacheCapture(LoopStartMs);
         UpdatingSeek := True;
         try
           SeekPositionMs := LoopStartMs;
@@ -503,14 +516,11 @@ begin
   finally
     UpdatingSeek := False;
   end;
-{$IFDEF DEBUG}
   FrameShown := Assigned(ShowFrameAtMs) and ShowFrameAtMs(StopFrameMs);
+{$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format(
     'finish_at_end_stop seek_max_ms=%d last_frame_ms=%d shown=%s',
     [SeekMaxMs, StopFrameMs, BoolToStr(FrameShown, True)]));
-{$ELSE}
-  if Assigned(ShowFrameAtMs) then
-    ShowFrameAtMs(StopFrameMs);
 {$ENDIF}
   StopAtEnd;
   if Assigned(UpdateInfo) then
@@ -1006,6 +1016,11 @@ begin
     not FrameAlreadyShown, FastSeek) then
   begin
     VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
+    WriteVideoMinerRateLog(Format(
+      'start_playback_reuse_failed_summary file="%s" target_ms=%d frame_already_shown=%s fast_seek=%s video_seek_ms=%.3f total_ms=%.3f err="%s"',
+      [ExtractFileName(VideoFile), TargetMs, BoolToStr(FrameAlreadyShown, True),
+       BoolToStr(FastSeek, True), VideoSeekMs,
+       TotalWatch.Elapsed.TotalMilliseconds, ReuseErrorMessage]));
 {$IFDEF DEBUG}
     if DebugLogEnabled then
       WriteVideoMinerDebugLog(Format(
@@ -1110,6 +1125,11 @@ begin
     VideoInfo.Fps, FPlaybackRate);
   FPlaybackTimer.Enabled := True;
   FVideoView.PlaybackActive := True;
+  WriteVideoMinerRateLog(Format(
+    'start_playback_summary file="%s" target_ms=%d frame_already_shown=%s video_reopen=%s video_prepare_ms=%.3f video_seek_ms=%.3f audio_start_ms=%.3f total_ms=%.3f',
+    [ExtractFileName(VideoFile), TargetMs, BoolToStr(FrameAlreadyShown, True),
+     BoolToStr(VideoReopened, True), VideoPrepareMs, VideoSeekMs,
+     AudioStartMs, TotalWatch.Elapsed.TotalMilliseconds]));
 {$IFDEF DEBUG}
   if DebugLogEnabled then
     WriteVideoMinerDebugLog(Format(
@@ -1264,6 +1284,7 @@ var
   ShouldLogRateTick: Boolean;
   TotalMs: Double;
   NextSeekPositionMs: Integer;
+  LoopFrameCacheShown: Boolean;
 begin
   DebugLogEnabled := VideoMinerDebugLogEnabled;
   SlowLogEnabled := VideoMinerSlowLogEnabled;
@@ -1405,14 +1426,24 @@ begin
   if ShouldRestartLoop(EndAction, LoopSegmentStartMs, LoopSegmentEndMs,
     CurrentVideoPositionMs, NextSeekPositionMs, LoopTargetMs) then
   begin
-{$IFDEF DEBUG}
-    WriteVideoMinerSlowLog(Format(
-      'loop_restart_request file="%s" current_ms=%d position_ms=%d seek_candidate_ms=%d audio_ms=%d target_ms=%d segment_start_ms=%d segment_end_ms=%d pump_ms=%.3f decode_ms=%.3f sync_ms=%.3f total_ms=%.3f',
+    LoopFrameCacheShown := (FVideoView <> nil) and
+      FVideoView.TryPresentLoopFrameCache(LoopTargetMs);
+    WriteVideoMinerRateLog(Format(
+      'loop_restart_summary file="%s" current_ms=%d position_ms=%d seek_candidate_ms=%d audio_ms=%d target_ms=%d segment_start_ms=%d segment_end_ms=%d cache_shown=%s pump_ms=%.3f decode_ms=%.3f sync_ms=%.3f total_ms=%.3f',
       [ExtractFileName(VideoFile), CurrentVideoPositionMs, PositionMs,
        NextSeekPositionMs, AudioPositionMs, LoopTargetMs, LoopSegmentStartMs,
-       LoopSegmentEndMs, PumpMs, DecodeMs, SyncMs,
+       LoopSegmentEndMs, BoolToStr(LoopFrameCacheShown, True), PumpMs,
+       DecodeMs, SyncMs, TotalWatch.Elapsed.TotalMilliseconds]));
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format(
+      'loop_restart_request file="%s" current_ms=%d position_ms=%d seek_candidate_ms=%d audio_ms=%d target_ms=%d segment_start_ms=%d segment_end_ms=%d cache_shown=%s pump_ms=%.3f decode_ms=%.3f sync_ms=%.3f total_ms=%.3f',
+      [ExtractFileName(VideoFile), CurrentVideoPositionMs, PositionMs,
+       NextSeekPositionMs, AudioPositionMs, LoopTargetMs, LoopSegmentStartMs,
+       LoopSegmentEndMs, BoolToStr(LoopFrameCacheShown, True), PumpMs, DecodeMs, SyncMs,
        TotalWatch.Elapsed.TotalMilliseconds]));
 {$ENDIF}
+    if FVideoView <> nil then
+      FVideoView.BeginLoopFrameCacheCapture(LoopTargetMs);
     if Assigned(SeekToMs) then
     begin
       UpdatingSeek := True;

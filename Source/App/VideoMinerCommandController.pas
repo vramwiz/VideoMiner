@@ -117,7 +117,7 @@ type
     procedure SkipForwardClick(Sender: TObject);
     // 全画面切り替えをアプリ側へ委譲する
     procedure ToggleFullScreen;
-    // 動画面右クリックから現在位置の手動チャプターをトグルする
+    // シークバー右クリックから指定位置の手動チャプターをトグルする
     procedure ToggleChapterClick(Sender: TObject; PositionMs: Integer);
     // 90% セーフエリア確認枠切り替えをアプリ側へ委譲する
     procedure ToggleSafeArea;

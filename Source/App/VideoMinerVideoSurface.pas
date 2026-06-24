@@ -53,7 +53,8 @@ type
     FOnNavigatePreviousClick: TNotifyEvent;                      // 前動画ボタンの通知先
     FOnPlaybackRateClick    : TNotifyEvent;                      // 再生速度ボタンの通知先
     FOnPlayPauseClick       : TNotifyEvent;                      // 再生/一時停止ボタンまたは単クリックの通知先
-    FOnToggleChapterClick   : TVideoMinerOverlaySeekEvent;       // 動画面右クリックのチャプタートグル通知先
+    FOnSurfaceRightClick    : TNotifyEvent;                      // 動画面右クリックの通知先
+    FOnToggleChapterClick   : TVideoMinerOverlaySeekEvent;       // シークバー右クリックのチャプタートグル通知先
     FOnSeek                 : TVideoMinerOverlaySeekEvent;       // シークバー操作の通知先
     FOnSeekByWheel          : TVideoMinerOverlaySeekEvent;       // シークバー上ホイール操作の通知先
     FOnSeekHoverPreview     : TVideoMinerOverlaySeekHoverEvent;  // シークバー hover プレビュー要求先
@@ -173,6 +174,8 @@ type
     procedure SetOnPlaybackRateClick(Value: TNotifyEvent);
     // 再生/一時停止ボタンと単クリックの通知先を設定する
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
+    // 動画面右クリックの通知先を設定する
+    procedure SetOnSurfaceRightClick(Value: TNotifyEvent);
     // シークバー操作の通知先を設定する
     procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
     // シークバー上ホイール操作の通知先を設定する
@@ -270,6 +273,7 @@ type
       write SetOnNavigatePreviousClick;
     property OnPlaybackRateClick: TNotifyEvent read FOnPlaybackRateClick write SetOnPlaybackRateClick;
     property OnPlayPauseClick: TNotifyEvent read FOnPlayPauseClick write SetOnPlayPauseClick;
+    property OnSurfaceRightClick: TNotifyEvent read FOnSurfaceRightClick write SetOnSurfaceRightClick;
     property OnToggleChapterClick: TVideoMinerOverlaySeekEvent read FOnToggleChapterClick write FOnToggleChapterClick;
     property OnSeek: TVideoMinerOverlaySeekEvent read FOnSeek write SetOnSeek;
     property OnSeekByWheel: TVideoMinerOverlaySeekEvent read FOnSeekByWheel write SetOnSeekByWheel;
@@ -1042,8 +1046,13 @@ begin
       FSeekBar.UpdateLayout(SeekBarLayoutRect);
       if FSeekBar.HoverPositionFromPoint(Point(X, Y), TogglePositionMs) and
          Assigned(FOnToggleChapterClick) then
+      begin
         FOnToggleChapterClick(Self, TogglePositionMs);
+        Exit;
+      end;
     end;
+    if CanStartSurfaceClick(Point(X, Y)) and Assigned(FOnSurfaceRightClick) then
+      FOnSurfaceRightClick(Self);
     Exit;
   end;
 
@@ -1767,6 +1776,11 @@ begin
   FOnPlayPauseClick := Value;
   if FPlayPauseButton <> nil then
     FPlayPauseButton.OnClick := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnSurfaceRightClick(Value: TNotifyEvent);
+begin
+  FOnSurfaceRightClick := Value;
 end;
 
 procedure TVideoMinerVideoSurface.SetOnBossExitClick(Value: TNotifyEvent);

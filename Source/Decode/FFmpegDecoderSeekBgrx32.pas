@@ -32,9 +32,6 @@ uses
   System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegQsvDecode,
   FFmpegStreamInfo, VideoMinerDebugLog;
 
-const
-  FIRST_FRAME_EXACT_TOLERANCE_MS = 5; // 0ms シークで先頭フレームとして許容する誤差
-
 // フレームの表示時刻を、取得できる範囲で最も信頼できる値として返す。
 function DisplayFrameTimestamp(Frame: PAVFrame): Int64;
 begin
@@ -51,21 +48,11 @@ begin
 end;
 
 // 0ms シーク時に、前回位置から残った遅延フレームを採用しないようにする。
-function AcceptSeekFrame(Stream: PAVStream; PositionMs: Integer;
-  TargetTs, FrameTs: Int64): Boolean;
-var
-  FrameMs: Integer; // フレーム timestamp を ms へ直した値
+function AcceptSeekFrame(PositionMs: Integer; TargetTs, FrameTs: Int64): Boolean;
 begin
   if PositionMs <= 0 then
   begin
-    if FrameTs = AV_NOPTS_VALUE then
-    begin
-      Result := True;
-      Exit;
-    end;
-
-    FrameMs := StreamTimestampToMs(Stream, FrameTs);
-    Result := FrameMs <= FIRST_FRAME_EXACT_TOLERANCE_MS;
+    Result := True;
     Exit;
   end;
 
@@ -155,7 +142,7 @@ begin
         while TFFmpegApi.avcodec_receive_frame(CodecContext, Frame) = 0 do
         begin
           FrameTs := DisplayFrameTimestamp(Frame);
-          if FastSeek or AcceptSeekFrame(Stream, PositionMs, TargetTs, FrameTs) then
+          if FastSeek or AcceptSeekFrame(PositionMs, TargetTs, FrameTs) then
           begin
             ConvertSourceFrame := Frame;
             DidTransfer := False;

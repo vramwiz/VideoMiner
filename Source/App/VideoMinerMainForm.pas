@@ -141,6 +141,8 @@ type
     procedure BossExitClick(Sender: TObject);
     // マウス往復ジェスチャー成立時にボスが来たモードへ入る
     procedure BossGesture(Sender: TObject);
+    // 動画面右クリックからサムネイル一覧を開閉する
+    procedure SurfaceRightClick(Sender: TObject);
     // ヘルプキーからヘルプ兼用画面を表示する
     procedure ShowHelpOverlay;
     // 再生中または再生再開待ちか返す
@@ -273,6 +275,7 @@ begin
   FThumbnailBrowserController.OnOpenFile := LoadVideoFile;
   FSeekHoverPreviewController := TVideoMinerSeekHoverPreviewController.Create(Self,
     FVideoView, FSeekHoverPreviewDecoder);
+  FVideoView.OnSurfaceRightClick := SurfaceRightClick;
   FVideoView.OnSeekHoverPreview := FSeekHoverPreviewController.SeekHoverPreview;
   FVideoView.OnSeekHoverPreviewEnd := FSeekHoverPreviewController.SeekHoverPreviewEnd;
 {$IFDEF DEBUG}
@@ -992,6 +995,15 @@ begin
   FWindowModeController.EnterBossMode;
 end;
 
+procedure TVideoMinerMainForm.SurfaceRightClick(Sender: TObject);
+begin
+  if (FWindowModeController <> nil) and FWindowModeController.BossMode then
+    Exit;
+
+  if FThumbnailBrowserController <> nil then
+    FThumbnailBrowserController.Toggle;
+end;
+
 procedure TVideoMinerMainForm.ShowHelpOverlay;
 begin
   FWindowModeController.EnterBossMode;
@@ -1013,11 +1025,23 @@ end;
 // 再生 tick 処理を再生 controller へ委譲する
 procedure TVideoMinerMainForm.TimerPlaybackTimer(Sender: TObject);
 begin
-  FPlaybackController.Tick(FDecoder, FMediaSession.VideoFile, FMediaSession.EndAction, FSeeking,
-    FMediaSession.SeekMaxMs, FMediaSession.LoopSegmentStartMs, FMediaSession.LoopSegmentEndMs,
-    FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs, FSeekGuardTargetMs,
-    FSeekGuardRemaining, FUpdatingSeek, FInfoController.SetStatusCaption, FinishPlaybackAtEnd,
-    SeekPlaybackTickToMs, FInfoController.UpdatePlaybackProgress, FChapterController.MaybeAutoCheckFrame);
+  try
+    FPlaybackController.Tick(FDecoder, FMediaSession.VideoFile, FMediaSession.EndAction, FSeeking,
+      FMediaSession.SeekMaxMs, FMediaSession.LoopSegmentStartMs, FMediaSession.LoopSegmentEndMs,
+      FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs, FSeekGuardTargetMs,
+      FSeekGuardRemaining, FUpdatingSeek, FInfoController.SetStatusCaption, FinishPlaybackAtEnd,
+      SeekPlaybackTickToMs, FInfoController.UpdatePlaybackProgress, FChapterController.MaybeAutoCheckFrame);
+  except
+    on E: Exception do
+    begin
+      WriteVideoMinerSlowLog(Format('playback_timer_exception class="%s" message="%s"',
+        [E.ClassName, E.Message]));
+      if FPlaybackController <> nil then
+        FPlaybackController.StopPlayback;
+      if FInfoController <> nil then
+        FInfoController.SetStatusCaption('Playback stopped by error: ' + E.Message);
+    end;
+  end;
 end;
 
 

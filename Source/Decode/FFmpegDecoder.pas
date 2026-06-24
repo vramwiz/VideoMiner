@@ -91,6 +91,8 @@ type
     function QueuedAudioSampleCount: Integer;
     function PlayedAudioSampleCount: Integer;
     procedure SetAudioOutputVolume(VolumePercent: Integer);
+    // waveOut ハンドルを保持したまま、投入済み音声だけを止める
+    procedure ResetAudioPlayback;
     // ���\bY�
     procedure StopAudioPlayback;
     // 一時デコーダで動画情報だけを読む
@@ -249,6 +251,12 @@ end;
 procedure TFFmpegDecoder.SetAudioOutputVolume(VolumePercent: Integer);
 begin
   FFmpegDecoderAudioPlayback.SetAudioOutputVolume(FWaveOut, VolumePercent);
+end;
+
+procedure TFFmpegDecoder.ResetAudioPlayback;
+begin
+  FFmpegDecoderAudioPlayback.ResetAudioPlayback(FWaveOut, FAudioPlaybackActive,
+    FAudioBuffers);
 end;
 
 // ���\bY�

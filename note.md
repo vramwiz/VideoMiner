@@ -877,6 +877,19 @@ powershell -ExecutionPolicy Bypass -File tools\InstallGitHooks.ps1
 1. ループ再生の先頭戻りを滑らかにする。
    - 現在の最優先課題として扱う。
    - ループ末尾から先頭へ戻る時の一瞬の止まりや違和感を減らす。
+   - 2026-06-24 の `videominer_loop_debug_60fps.mp4` 実測では、2 周目以降の先頭フレームキャッシュは `loop_frame_cache_hit` している。
+   - ただし実再生の再開はまだ遅く、`start_playback_done total_ms` は約 195ms、その大半は `audio_start_ms` / `output_start_ms` の約 170ms。
+   - 現状の主因は映像 seek ではなく、ループ/seek 再開ごとに `waveOut` を閉じて開き直す音声出力開始処理と見る。
+   - 次の改善は、同じ音声出力形式のままなら `waveOutOpen` を毎回呼ばず、`waveOutReset` とキュー破棄だけで再利用する方向を優先する。
+   - 同日対応で `waveOut` ハンドルを保持したままキューだけ reset するよう変更し、ループ時の `output_start_ms` は約 170ms から約 1ms へ改善した。
+   - ループ時の `start_playback_done total_ms` は約 195ms から約 29-31ms へ改善した。残る主な待ちは映像側の先頭 seek 約 24-27ms。
+   - 追加調査で、Debug 版は滑らかなのに Release 版だけ 1 秒前後止まる現象を確認した。
+   - Release 版では 0ms へ戻す再生用デコーダ seek が `Frame could not be decoded.` で失敗し、`video_reopen=True` の fallback に落ちていた。
+   - 原因は 0ms seek 後の先頭フレーム判定が厳しすぎ、timestamp が 0ms ぴったりでない先頭近傍フレームを捨て続けていたこと。
+   - `FFmpegDecoderSeekBgrx32.AcceptSeekFrame` は `PositionMs <= 0` の場合、seek 後に返った最初のフレームを先頭フレームとして採用するよう変更した。
+   - Release 実測では、修正前のループ再開は `start_playback_summary total_ms` が約 1027-1189ms、`video_reopen=True`。
+   - 修正後は `video_reopen=False`、`video_seek_ms` 約 16-18ms、`audio_start_ms` 約 3-4ms、`start_playback_summary total_ms` 約 20-23ms。
+   - Release 比較用に `audio_start_summary`、`start_playback_summary`、`finish_at_end_loop_summary`、`loop_restart_summary`、`start_playback_reuse_failed_summary` を `WriteVideoMinerRateLog` へ出すようにした。
 2. サムネイル生成のバックグラウンド worker 化を再挑戦する。
    - 裏でサムネイルを作ろうとしているが、現状はうまくいっていない。
    - 現在の同期生成を壊さず、worker の寿命管理と UI 反映タイミングを小さく検証する。
@@ -891,7 +904,10 @@ powershell -ExecutionPolicy Bypass -File tools\InstallGitHooks.ps1
   - 短い動画やチャプター区間ループで先頭へ戻る時、デコーダ再オープンや seek により一瞬再生が止まることがある。
   - 対策として、ループ先頭の数フレームをあらかじめ表示しやすい画像データとして保持し、2 回目以降のループ開始を滑らかにする案がある。
   - これはキャッシュファイルではなく、デコード済みまたは表示用に取り出しやすいフレーム画像データをメモリ上で管理する意味のキャッシュとする。
-  - 一度試したが安定していないため、今後の再挑戦課題として残す。
+  - 2026-06-24 時点では、先頭側 4 フレームのメモリキャッシュは入り、2 周目以降に即時表示できるところまでは確認済み。
+  - その後の待ち時間は `audio_start_slow` の `output_start_ms` が支配的で、waveOut 再オープン回避が次の焦点。
+  - `waveOutOpen` の再実行を避ける変更後、ループ中の `audio_start total_ms` は約 2-3ms まで下がった。
+  - 初回再生開始だけは実際に `waveOutOpen` が必要なため、`output_start_ms` が数百 ms になることがある。
 - 長い読み込み中に止まっていないことを見せる。
   - 大きい動画やネットワーク越しの動画では、フォーム表示後に読み込みへ進んでも、画面が静止していると固まったように見える可能性がある。
   - `Loading` 表示や周辺のどこかを軽くアニメーションさせ、処理中であることがユーザーに伝わるようにする。

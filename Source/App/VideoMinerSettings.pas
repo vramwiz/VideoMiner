@@ -10,7 +10,7 @@ type
   TVideoMinerChapterPositions = TArray<Integer>;
   // 最近開いたフォルダを順位付きで保持する配列
   TVideoMinerFolderHistory = TArray<string>;
-  // デコード方式の希望値。Debug では auto を software 扱いにして調査しやすくする。
+  // デコード方式の希望値。Debug/Release とも同じ設定値を使う。
   TVideoDecoderMode = (vdmAuto, vdmQsv, vdmSoftware);
   // 動画終端へ到達したときの再生動作
   TVideoMinerEndAction = (eaStop, eaLoop, eaNext);
@@ -271,10 +271,6 @@ function GetVideoDecoderMode: TVideoDecoderMode;
 begin
   LoadSettings;
   Result := CurrentVideoDecoderMode;
-{$IFDEF DEBUG}
-  if Result = vdmAuto then
-    Result := vdmSoftware;
-{$ENDIF}
 end;
 
 function GetVideoRotationOverride: TVideoRotationOverride;

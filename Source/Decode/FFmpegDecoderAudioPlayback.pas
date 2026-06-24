@@ -25,6 +25,13 @@ procedure StopAudioPlayback(
   AudioBuffers: TList<PAudioWaveBuffer>
 );
 
+// waveOut ハンドルを保持したまま、再生中の PCM キューだけを停止・解放する。
+procedure ResetAudioPlayback(
+  WaveOut: HWAVEOUT;
+  var AudioPlaybackActive: Boolean;
+  AudioBuffers: TList<PAudioWaveBuffer>
+);
+
 // PCM16 stereo 48kHz のデータを waveOut キューへ投入する。
 function QueueAudioPcm16Stereo48k(
   WaveOut: HWAVEOUT;
@@ -90,6 +97,29 @@ begin
   end;
 end;
 
+// waveOut に渡した PCM バッファをすべて unprepare して解放する。
+procedure ReleaseAudioBuffers(WaveOut: HWAVEOUT; AudioBuffers: TList<PAudioWaveBuffer>);
+var
+  Buffer: PAudioWaveBuffer;
+begin
+  if AudioBuffers = nil then
+    Exit;
+
+  while AudioBuffers.Count > 0 do
+  begin
+    Buffer := AudioBuffers[AudioBuffers.Count - 1];
+    if Buffer <> nil then
+    begin
+      if WaveOut <> 0 then
+        waveOutUnprepareHeader(WaveOut, @Buffer.Header, SizeOf(Buffer.Header));
+      if Buffer.Data <> nil then
+        FreeMem(Buffer.Data);
+      Dispose(Buffer);
+    end;
+    AudioBuffers.Delete(AudioBuffers.Count - 1);
+  end;
+end;
+
 // waveOut へ投入済みで、まだ完了していない PCM サンプル数を返す。
 function QueuedAudioSampleCount(WaveOut: HWAVEOUT;
   AudioBuffers: TList<PAudioWaveBuffer>): Integer;
@@ -142,8 +172,6 @@ begin
   ErrorMessage := '';
   Result := False;
 
-  StopAudioPlayback(WaveOut, AudioPlaybackActive, AudioBuffers);
-
   if (Context = nil) or (not Context.Info.Audio.Present) or
      (Context.AudioCodecContext = nil) or (Context.AudioStream = nil) or
      (Context.SwrContext = nil) then
@@ -157,6 +185,15 @@ begin
          Context.Info.Audio.OpenError])
     else
       ErrorMessage := 'Audio decoder context is nil.';
+    Exit;
+  end;
+
+  if WaveOut <> 0 then
+  begin
+    ResetAudioPlayback(WaveOut, AudioPlaybackActive, AudioBuffers);
+    SetAudioOutputVolume(WaveOut, 100);
+    AudioPlaybackActive := True;
+    Result := True;
     Exit;
   end;
 
@@ -261,8 +298,21 @@ procedure StopAudioPlayback(
   var AudioPlaybackActive: Boolean;
   AudioBuffers: TList<PAudioWaveBuffer>
 );
-var
-  Buffer: PAudioWaveBuffer;
+begin
+  ResetAudioPlayback(WaveOut, AudioPlaybackActive, AudioBuffers);
+
+  if WaveOut <> 0 then
+  begin
+    waveOutClose(WaveOut);
+    WaveOut := 0;
+  end;
+end;
+
+procedure ResetAudioPlayback(
+  WaveOut: HWAVEOUT;
+  var AudioPlaybackActive: Boolean;
+  AudioBuffers: TList<PAudioWaveBuffer>
+);
 begin
   AudioPlaybackActive := False;
 
@@ -272,25 +322,7 @@ begin
     waveOutReset(WaveOut);
   end;
 
-  if AudioBuffers <> nil then
-  begin
-    while AudioBuffers.Count > 0 do
-    begin
-      Buffer := AudioBuffers[AudioBuffers.Count - 1];
-      if WaveOut <> 0 then
-        waveOutUnprepareHeader(WaveOut, @Buffer.Header, SizeOf(Buffer.Header));
-      if Buffer.Data <> nil then
-        FreeMem(Buffer.Data);
-      Dispose(Buffer);
-      AudioBuffers.Delete(AudioBuffers.Count - 1);
-    end;
-  end;
-
-  if WaveOut <> 0 then
-  begin
-    waveOutClose(WaveOut);
-    WaveOut := 0;
-  end;
+  ReleaseAudioBuffers(WaveOut, AudioBuffers);
 end;
 
 end.

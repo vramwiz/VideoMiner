@@ -14,11 +14,19 @@ uses
 type
   TVideoMinerVideoView = class
   private
+    FLoopFrameCache          : array[0..3] of TBitmap;  // ループ戻り直後に見せる先頭側フレーム列
+    FLoopFrameCacheCount     : Integer;                 // キャッシュ済みループ先頭フレーム数
+    FLoopFrameCacheStartMs   : Integer;                 // キャッシュ対象のループ開始位置 ms
+    FLoopFrameCaptureActive  : Boolean;                 // ループ先頭フレームを学習中か
     FDecodeScratch           : TBitmap;                 // 表示せずに次フレームを確認するための作業用 Bitmap
     FDisplayRotationOffset   : Integer;                 // ユーザー操作で追加する表示回転角度
     FShownFrameCache         : TBitmap;                 // 直近の明示表示フレームを即時再表示するためのキャッシュ
     FShownFrameCachePosition : Integer;                 // キャッシュしている明示表示フレームの位置 ms
     FSurface                 : TVideoMinerVideoSurface; // 実際の動画表示と overlay 描画を持つサーフェス
+    // ループ先頭フレームキャッシュを破棄する
+    procedure ClearLoopFrameCache;
+    // 再生中に表示されたフレームをループ先頭キャッシュへ追加する
+    procedure StoreLoopFrameCache(PositionMs: Integer);
     // 現在の表示フレームを指定位置の即時再表示用に保存する
     procedure CacheShownFrame(PositionMs: Integer);
     // 現在の表示フレームキャッシュを破棄する
@@ -81,7 +89,9 @@ type
     procedure SetOnPlaybackRateClick(Value: TNotifyEvent);
     // 再生/一時停止ボタンのクリック先を設定する
     procedure SetOnPlayPauseClick(Value: TNotifyEvent);
-    // 動画面右クリックのチャプタートグル通知先を設定する
+    // 動画面右クリックの通知先を設定する
+    procedure SetOnSurfaceRightClick(Value: TNotifyEvent);
+    // シークバー右クリックのチャプタートグル通知先を設定する
     procedure SetOnToggleChapterClick(Value: TVideoMinerOverlaySeekEvent);
     // シークバー操作の通知先を設定する
     procedure SetOnSeek(Value: TVideoMinerOverlaySeekEvent);
@@ -120,6 +130,8 @@ type
     procedure BeginLoadingIndicator;
     // 次の明示デコード前に表示フレームキャッシュだけを空にする
     procedure ClearFrameCache;
+    // 次に表示されるループ先頭側フレームを小さくキャッシュし始める
+    procedure BeginLoopFrameCacheCapture(StartMs: Integer);
     // 表示だけを90度ずつ回転し、以降の再生フレームにも反映する
     procedure RotateDisplay90;
     // ボスが来たモード中のヘルプページを前後へ切り替える
@@ -128,6 +140,8 @@ type
     function ShowFrameAt(Decoder: TFFmpegDecoder; PositionMs: Integer;
       out ErrorMessage: string; PresentFrame: Boolean = True;
       FastSeek: Boolean = False): Boolean;
+    // キャッシュ済みループ先頭フレームがあれば即時表示する
+    function TryPresentLoopFrameCache(StartMs: Integer): Boolean;
     // 指定位置のフレームを任意 Bitmap へデコードする
     function DecodeFrameToBitmap(Decoder: TFFmpegDecoder; PositionMs: Integer;
       Bitmap: TBitmap; out ErrorMessage: string; FastSeek: Boolean = False): Boolean;
@@ -180,6 +194,7 @@ type
     property OnNavigatePreviousClick: TNotifyEvent write SetOnNavigatePreviousClick;
     property OnPlaybackRateClick: TNotifyEvent write SetOnPlaybackRateClick;
     property OnPlayPauseClick: TNotifyEvent write SetOnPlayPauseClick;
+    property OnSurfaceRightClick: TNotifyEvent write SetOnSurfaceRightClick;
     property OnToggleChapterClick: TVideoMinerOverlaySeekEvent write SetOnToggleChapterClick;
     property OnSeek: TVideoMinerOverlaySeekEvent write SetOnSeek;
     property OnSeekByWheel: TVideoMinerOverlaySeekEvent write SetOnSeekByWheel;
@@ -276,11 +291,18 @@ begin
 end;
 
 constructor TVideoMinerVideoView.Create(Image: TImage);
+var
+  I: Integer;
 begin
   inherited Create;
 
   FDecodeScratch := TBitmap.Create;
   FDisplayRotationOffset := 0;
+  FLoopFrameCacheCount := 0;
+  FLoopFrameCacheStartMs := -1;
+  FLoopFrameCaptureActive := False;
+  for I := Low(FLoopFrameCache) to High(FLoopFrameCache) do
+    FLoopFrameCache[I] := TBitmap.Create;
   FShownFrameCache := TBitmap.Create;
   FShownFrameCachePosition := -1;
   FSurface := TVideoMinerVideoSurface.Create(Image.Owner);
@@ -296,11 +318,77 @@ begin
 end;
 
 destructor TVideoMinerVideoView.Destroy;
+var
+  I: Integer;
 begin
   FSurface.Free;
   FShownFrameCache.Free;
+  for I := Low(FLoopFrameCache) to High(FLoopFrameCache) do
+    FLoopFrameCache[I].Free;
   FDecodeScratch.Free;
   inherited Destroy;
+end;
+
+procedure TVideoMinerVideoView.ClearLoopFrameCache;
+var
+  I: Integer;
+begin
+  for I := Low(FLoopFrameCache) to High(FLoopFrameCache) do
+    if FLoopFrameCache[I] <> nil then
+      FLoopFrameCache[I].SetSize(0, 0);
+  FLoopFrameCacheCount := 0;
+  FLoopFrameCacheStartMs := -1;
+  FLoopFrameCaptureActive := False;
+end;
+
+procedure TVideoMinerVideoView.BeginLoopFrameCacheCapture(StartMs: Integer);
+begin
+  if StartMs < 0 then
+    Exit;
+
+  if FLoopFrameCacheStartMs <> StartMs then
+    ClearLoopFrameCache;
+
+  FLoopFrameCacheStartMs := StartMs;
+  FLoopFrameCacheCount := 0;
+  FLoopFrameCaptureActive := True;
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format('loop_frame_cache_capture_begin start_ms=%d',
+    [StartMs]));
+{$ENDIF}
+end;
+
+procedure TVideoMinerVideoView.StoreLoopFrameCache(PositionMs: Integer);
+var
+  Index: Integer;
+begin
+  if (not FLoopFrameCaptureActive) or (FSurface = nil) or
+     (FSurface.Bitmap = nil) or (FSurface.Bitmap.Width <= 0) or
+     (FSurface.Bitmap.Height <= 0) then
+    Exit;
+
+  if (FLoopFrameCacheStartMs >= 0) and
+     (PositionMs + 5 < FLoopFrameCacheStartMs) then
+    Exit;
+
+  if FLoopFrameCacheCount > High(FLoopFrameCache) then
+  begin
+    FLoopFrameCaptureActive := False;
+    Exit;
+  end;
+
+  Index := FLoopFrameCacheCount;
+  FLoopFrameCache[Index].Assign(FSurface.Bitmap);
+  Inc(FLoopFrameCacheCount);
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format(
+    'loop_frame_cache_store start_ms=%d position_ms=%d index=%d size=%dx%d',
+    [FLoopFrameCacheStartMs, PositionMs, Index,
+     FLoopFrameCache[Index].Width, FLoopFrameCache[Index].Height]));
+{$ENDIF}
+
+  if FLoopFrameCacheCount > High(FLoopFrameCache) then
+    FLoopFrameCaptureActive := False;
 end;
 
 procedure TVideoMinerVideoView.CacheShownFrame(PositionMs: Integer);
@@ -348,6 +436,7 @@ begin
   if FDecodeScratch <> nil then
     FDecodeScratch.SetSize(0, 0);
   ClearShownFrameCache;
+  ClearLoopFrameCache;
   if FSurface <> nil then
   begin
     FSurface.SourceHasAlpha := False;
@@ -364,6 +453,7 @@ procedure TVideoMinerVideoView.RotateDisplay90;
 begin
   FDisplayRotationOffset := (FDisplayRotationOffset + 90) mod 360;
   ClearShownFrameCache;
+  ClearLoopFrameCache;
 end;
 
 function TVideoMinerVideoView.TryPresentCachedFrame(PositionMs: Integer): Boolean;
@@ -379,6 +469,29 @@ begin
     [PositionMs, FShownFrameCache.Width, FShownFrameCache.Height]));
 {$ENDIF}
   FSurface.Bitmap.Assign(FShownFrameCache);
+  FSurface.PresentImmediate;
+end;
+
+function TVideoMinerVideoView.TryPresentLoopFrameCache(StartMs: Integer): Boolean;
+var
+  HitText: string;
+begin
+  Result := (FSurface <> nil) and (FLoopFrameCacheStartMs = StartMs) and
+    (FLoopFrameCacheCount > 0) and (FLoopFrameCache[0] <> nil) and
+    (FLoopFrameCache[0].Width > 0) and (FLoopFrameCache[0].Height > 0);
+{$IFDEF DEBUG}
+  if Result then
+    HitText := 'hit'
+  else
+    HitText := 'miss';
+  WriteVideoMinerSlowLog(Format(
+    'loop_frame_cache_%s start_ms=%d cached_start_ms=%d count=%d',
+    [HitText, StartMs, FLoopFrameCacheStartMs, FLoopFrameCacheCount]));
+{$ENDIF}
+  if not Result then
+    Exit;
+
+  FSurface.Bitmap.Assign(FLoopFrameCache[0]);
   FSurface.PresentImmediate;
 end;
 
@@ -419,6 +532,12 @@ procedure TVideoMinerVideoView.SetOnPlayPauseClick(Value: TNotifyEvent);
 begin
   if FSurface <> nil then
     FSurface.OnPlayPauseClick := Value;
+end;
+
+procedure TVideoMinerVideoView.SetOnSurfaceRightClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnSurfaceRightClick := Value;
 end;
 
 procedure TVideoMinerVideoView.SetBossMode(Value: Boolean);
@@ -809,6 +928,7 @@ begin
         [PositionMs, FrameSignatureLogText(Signature)]));
 {$ENDIF}
     CacheShownFrame(PositionMs);
+    StoreLoopFrameCache(PositionMs);
   end;
   Result := True;
 end;
@@ -855,7 +975,10 @@ begin
   end;
 
   if ConvertFrame then
+  begin
     Present(FSurface.Bitmap);
+    StoreLoopFrameCache(PositionMs);
+  end;
 
   Result := True;
 end;

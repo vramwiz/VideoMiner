@@ -285,6 +285,11 @@ begin
   begin
     FPlaybackClock := TStopwatch.StartNew;
     FPlaybackClockActive := True;
+    WriteVideoMinerRateLog(Format(
+      'audio_start_summary pos_ms=%d rate=%.3f reused_decoder=%s start_samples=%d queued_output_samples=%d output_start_ms=%.3f queue_ms=%.3f total_ms=%.3f finished=%s',
+      [PositionMs, FPlaybackRate, BoolToStr(OpenMs = 0, True),
+       FStartSamples, FQueuedOutputSamples, OutputStartMs, QueueMs,
+       TotalWatch.Elapsed.TotalMilliseconds, BoolToStr(FFinished, True)]));
 {$IFDEF DEBUG}
     if DebugLogEnabled then
       WriteVideoMinerDebugLog(Format(
@@ -329,7 +334,7 @@ end;
 procedure TVideoMinerAudioPlayback.StopOutput;
 begin
   if FDecoder <> nil then
-    FDecoder.StopAudioPlayback;
+    FDecoder.ResetAudioPlayback;
   FFinished := True;
   FStartSamples := 0;
   FQueuedSamples := 0;
@@ -695,7 +700,7 @@ begin
   if VideoMinerDebugLogEnabled then
     WriteVideoMinerDebugLog(Format(
       'audio_pump playback_ms=%d rate=%.3f raw_queued_before_samples=%d queued_before_ms=%d queued_after_ms=%d pcm_bytes=%d output_pcm_bytes=%d sample_count=%d queued_output_samples=%d finished=%s result=%s err="%s"',
-      [PlaybackPositionMs, RawQueuedSampleCount, QueuedBeforeMs,
+      [PlaybackPositionMs, FPlaybackRate, RawQueuedSampleCount, QueuedBeforeMs,
        Round((Int64(FQueuedOutputSamples) - PlaybackSamplePosition) * 1000 / OUTPUT_SAMPLE_RATE),
        Length(Pcm), Length(OutputPcm), FQueuedSamples, FQueuedOutputSamples,
        BoolToStr(FFinished, True),
