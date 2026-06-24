@@ -116,6 +116,8 @@ type
     destructor Destroy; override;
     // 表示フレームと scratch frame を空にする
     procedure Clear;
+    // 読み込み中インジケータを表示し始める
+    procedure BeginLoadingIndicator;
     // 次の明示デコード前に表示フレームキャッシュだけを空にする
     procedure ClearFrameCache;
     // 表示だけを90度ずつ回転し、以降の再生フレームにも反映する
@@ -155,6 +157,8 @@ type
     procedure SetSeekHoverPreview(Bitmap: TBitmap; PositionMs: Integer; const AnchorPoint: TPoint);
     // シークバー hover プレビューを消す
     procedure ClearSeekHoverPreview;
+    // 読み込み中インジケータを消す
+    procedure EndLoadingIndicator;
     property BossMode: Boolean write SetBossMode;
     property CanNavigateNext: Boolean write SetCanNavigateNext;
     property CanNavigatePrevious: Boolean write SetCanNavigatePrevious;
@@ -376,6 +380,12 @@ begin
 {$ENDIF}
   FSurface.Bitmap.Assign(FShownFrameCache);
   FSurface.PresentImmediate;
+end;
+
+procedure TVideoMinerVideoView.BeginLoadingIndicator;
+begin
+  if FSurface <> nil then
+    FSurface.BeginLoadingIndicator;
 end;
 
 procedure TVideoMinerVideoView.Present(Bitmap: TBitmap);
@@ -623,6 +633,12 @@ procedure TVideoMinerVideoView.ClearSeekHoverPreview;
 begin
   if FSurface <> nil then
     FSurface.ClearSeekHoverPreview;
+end;
+
+procedure TVideoMinerVideoView.EndLoadingIndicator;
+begin
+  if FSurface <> nil then
+    FSurface.EndLoadingIndicator;
 end;
 
 procedure TVideoMinerVideoView.SetSeekWheelFrameStepMs(Value: Integer);

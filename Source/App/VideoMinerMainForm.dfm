@@ -9777,8 +9777,8 @@
     object LabelAppTitle: TLabel
       Left = 0
       Top = 0
-      Width = 582
-      Height = 34
+      Width = 61
+      Height = 15
       Align = alClient
       Caption = 'VideoMiner'
       Font.Charset = DEFAULT_CHARSET
@@ -9789,8 +9789,6 @@
       ParentFont = False
       Layout = tlCenter
       OnMouseDown = TitleBarMouseDown
-      ExplicitWidth = 61
-      ExplicitHeight = 15
     end
     object PanelCloseButton: TPanel
       Left = 674
@@ -9808,8 +9806,8 @@
       object LabelCloseButton: TLabel
         Left = 0
         Top = 0
-        Width = 46
-        Height = 34
+        Width = 8
+        Height = 17
         Align = alClient
         Alignment = taCenter
         Caption = 'X'
@@ -9823,8 +9821,6 @@
         OnClick = CloseButtonClick
         OnMouseEnter = CloseButtonMouseEnter
         OnMouseLeave = CloseButtonMouseLeave
-        ExplicitWidth = 8
-        ExplicitHeight = 17
       end
     end
     object PanelMaximizeButton: TPanel
@@ -9843,8 +9839,8 @@
       object LabelMaximizeButton: TLabel
         Left = 0
         Top = 0
-        Width = 46
-        Height = 34
+        Width = 11
+        Height = 17
         Align = alClient
         Alignment = taCenter
         Caption = #9633
@@ -9858,8 +9854,6 @@
         OnClick = MaximizeButtonClick
         OnMouseEnter = CaptionButtonMouseEnter
         OnMouseLeave = CaptionButtonMouseLeave
-        ExplicitWidth = 11
-        ExplicitHeight = 17
       end
     end
     object PanelMinimizeButton: TPanel
@@ -9878,8 +9872,8 @@
       object LabelMinimizeButton: TLabel
         Left = 0
         Top = 0
-        Width = 46
-        Height = 34
+        Width = 10
+        Height = 20
         Align = alClient
         Alignment = taCenter
         Caption = #8722
@@ -9893,8 +9887,6 @@
         OnClick = MinimizeButtonClick
         OnMouseEnter = CaptionButtonMouseEnter
         OnMouseLeave = CaptionButtonMouseLeave
-        ExplicitWidth = 10
-        ExplicitHeight = 20
       end
     end
   end

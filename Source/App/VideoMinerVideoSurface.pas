@@ -26,6 +26,9 @@ type
     FPaintBuffer            : TBitmap;                           // overlay 表示時のちらつきを抑える描画用バッファ
     FFirstFrameButton       : TVideoMinerOverlayEdgeButton;      // 先頭フレームへ移動する中央ボタン
     FLastFrameButton        : TVideoMinerOverlayEdgeButton;      // 末尾フレームへ移動する中央ボタン
+    FLoadingActive          : Boolean;                           // 動画読み込み中のインジケータを表示するか
+    FLoadingTick            : Integer;                           // 読み込み中インジケータのアニメーション段階
+    FLoadingTimer           : TTimer;                            // 読み込み中インジケータを再描画するタイマー
     FNextFileButton         : TVideoMinerOverlayFileNavButton;   // 次動画へ移動する右端ボタン
     FPanMoved               : Boolean;                           // 押下後にパン移動が発生したか
     FPanning                : Boolean;                           // ズーム中のドラッグ移動を処理中か
@@ -94,6 +97,8 @@ type
     procedure DrawSafeAreaGuide(Canvas: TCanvas; const DestRect: TRect);
     // シークバー hover 位置のフレームプレビューを描く
     procedure DrawSeekHoverPreview(Canvas: TCanvas);
+    // 読み込み中であることを示すテキストを描く
+    procedure DrawLoadingIndicator(Canvas: TCanvas);
     // alpha 確認用の市松模様合成 Bitmap を最新化する
     procedure EnsureAlphaCompositeBitmap;
 {$IFDEF DEBUG}
@@ -190,6 +195,8 @@ type
     procedure SetSourceHasAlpha(Value: Boolean);
     // 音量パーセントを overlay へ渡す
     procedure SetVolumePercent(Value: Integer);
+    // 読み込み中インジケータを 1 段階進める
+    procedure LoadingTimer(Sender: TObject);
     // 単クリックが確定した時点で再生/一時停止を発火する
     procedure SurfaceClickTimer(Sender: TObject);
     // 背景消去を抑止して動画面のちらつきを避ける
@@ -214,6 +221,8 @@ type
     destructor Destroy; override;
     // 表示フレームと overlay 状態を空にする
     procedure Clear;
+    // 読み込み中インジケータを表示し始める
+    procedure BeginLoadingIndicator;
     // ボスが来たモード中のヘルプページを前後へ切り替える
     procedure ChangeBossHelpPage(Delta: Integer);
     // 外部から渡されたホイール操作をこの表示面で処理する
@@ -235,6 +244,8 @@ type
     procedure SetSeekHoverPreview(Bitmap: TBitmap; PositionMs: Integer; const AnchorPoint: TPoint);
     // シークバー hover プレビューを消す
     procedure ClearSeekHoverPreview;
+    // 読み込み中インジケータを消す
+    procedure EndLoadingIndicator;
     property BossMode: Boolean read FBossMode write SetBossMode;
     property Bitmap: TBitmap read FBitmap;
     property CanNavigateNext: Boolean write SetCanNavigateNext;
@@ -292,6 +303,10 @@ const
   ALPHA_CHECK_SIZE      = 16;   // alpha 確認表示の市松模様 1 マス px
   SEEK_PREVIEW_WIDTH    = 160;  // シークバー hover プレビューの標準幅 px
   SEEK_PREVIEW_MARGIN   = 8;    // シークバー hover プレビューの余白 px
+  LOADING_TIMER_MS      = 80;    // 読み込み中インジケータを進める間隔 ms
+  LOADING_SEGMENTS      = 36;    // 欠け丸を構成する線分数
+  LOADING_GAP_SEGMENTS  = 7;     // 欠けとして空ける線分数
+  LOADING_LAP_TICKS     = 24;    // 色を切り替える周回の tick 数
 
 constructor TVideoMinerVideoSurface.Create(AOwner: TComponent);
 begin
@@ -328,6 +343,10 @@ begin
   FSurfaceClickTimer.Enabled := False;
   FSurfaceClickTimer.Interval := GetDoubleClickTime + 20;
   FSurfaceClickTimer.OnTimer := SurfaceClickTimer;
+  FLoadingTimer := TTimer.Create(Self);
+  FLoadingTimer.Enabled := False;
+  FLoadingTimer.Interval := LOADING_TIMER_MS;
+  FLoadingTimer.OnTimer := LoadingTimer;
   FPreviousFileButton.Visible := False;
   FFirstFrameButton.Visible := False;
   FSkipBackwardButton.Visible := False;
@@ -341,6 +360,7 @@ end;
 destructor TVideoMinerVideoSurface.Destroy;
 begin
   CancelPendingSurfaceClick;
+  FLoadingTimer.Free;
   FSurfaceClickTimer.Free;
   FBossGestureDetector.Free;
   FSeekBar.Free;
@@ -356,6 +376,16 @@ begin
   FAlphaCompositeBitmap.Free;
   FBitmap.Free;
   inherited Destroy;
+end;
+
+procedure TVideoMinerVideoSurface.BeginLoadingIndicator;
+begin
+  FLoadingTick := 0;
+  FLoadingActive := True;
+  if FLoadingTimer <> nil then
+    FLoadingTimer.Enabled := True;
+  Invalidate;
+  Repaint;
 end;
 
 procedure TVideoMinerVideoSurface.DblClick;
@@ -1391,6 +1421,7 @@ begin
   if (FBitmap.Width <= 0) or (FBitmap.Height <= 0) then
   begin
     DrawCanvas.FillRect(ClientRect);
+    DrawLoadingIndicator(DrawCanvas);
     if UsePaintBuffer then
       Canvas.Draw(0, 0, FPaintBuffer);
     Exit;
@@ -1456,6 +1487,7 @@ begin
   if FSeekBarVisible and (FSeekBar <> nil) then
     FSeekBar.Paint(DrawCanvas);
   DrawSeekHoverPreview(DrawCanvas);
+  DrawLoadingIndicator(DrawCanvas);
   if UsePaintBuffer then
     Canvas.Draw(0, 0, FPaintBuffer);
 {$IFDEF DEBUG}
@@ -1465,6 +1497,84 @@ begin
      DestRect.Left, DestRect.Top, DestRect.Right, DestRect.Bottom,
      BoolToStr(UsePaintBuffer, True), PaintWatch.Elapsed.TotalMilliseconds]));
 {$ENDIF}
+end;
+
+procedure TVideoMinerVideoSurface.DrawLoadingIndicator(Canvas: TCanvas);
+var
+  DotCount: Integer;
+  Text: string;
+  TextSize: TSize;
+begin
+  if not FLoadingActive then
+    Exit;
+
+  DotCount := FLoadingTick mod 4;
+  Text := 'Now loading' + StringOfChar('.', DotCount);
+  Canvas.Font.Name := 'Segoe UI';
+  Canvas.Font.Size := 12;
+  Canvas.Font.Style := [];
+  Canvas.Font.Color := clWhite;
+  Canvas.Brush.Style := bsClear;
+  SetBkMode(Canvas.Handle, TRANSPARENT);
+  TextSize := Canvas.TextExtent(Text);
+  Canvas.TextOut((ClientWidth - TextSize.cx) div 2,
+    (ClientHeight - TextSize.cy) div 2, Text);
+  Canvas.Brush.Style := bsSolid;
+
+  {
+  円形インジケータ案は、同期ロード中に UI タイマーが止まりやすいため保留する。
+  復活させる場合はロード処理の worker 化と合わせて使う。
+
+  const
+    COLORS: array[0..3] of TColor = ($0024B6FF, $0024E8A7, $00F0D24A, $00D88CFF);
+  var
+    Angle1: Double;
+    Angle2: Double;
+    Center: TPoint;
+    ColorIndex: Integer;
+    I: Integer;
+    Radius: Integer;
+    SegmentIndex: Integer;
+    StartSegment: Integer;
+    X1: Integer;
+    X2: Integer;
+    Y1: Integer;
+    Y2: Integer;
+  begin
+    Radius := Max(18, Min(36, Min(ClientWidth, ClientHeight) div 12));
+    Center := Point(ClientWidth div 2, ClientHeight div 2);
+    StartSegment := FLoadingTick mod LOADING_SEGMENTS;
+    ColorIndex := (FLoadingTick div LOADING_LAP_TICKS) mod Length(COLORS);
+    Canvas.Pen.Style := psSolid;
+    Canvas.Pen.Width := Max(4, Radius div 5);
+    Canvas.Pen.Color := COLORS[ColorIndex];
+    Canvas.Brush.Style := bsClear;
+    for I := LOADING_GAP_SEGMENTS to LOADING_SEGMENTS - 1 do
+    begin
+      SegmentIndex := (StartSegment + I) mod LOADING_SEGMENTS;
+      Angle1 := (SegmentIndex / LOADING_SEGMENTS * 2 * Pi) - Pi / 2;
+      Angle2 := ((SegmentIndex + 0.72) / LOADING_SEGMENTS * 2 * Pi) - Pi / 2;
+      X1 := Center.X + Round(Cos(Angle1) * Radius);
+      Y1 := Center.Y + Round(Sin(Angle1) * Radius);
+      X2 := Center.X + Round(Cos(Angle2) * Radius);
+      Y2 := Center.Y + Round(Sin(Angle2) * Radius);
+      Canvas.MoveTo(X1, Y1);
+      Canvas.LineTo(X2, Y2);
+    end;
+    Canvas.Brush.Style := bsSolid;
+  end;
+  }
+end;
+
+procedure TVideoMinerVideoSurface.EndLoadingIndicator;
+begin
+  if not FLoadingActive then
+    Exit;
+
+  FLoadingActive := False;
+  if FLoadingTimer <> nil then
+    FLoadingTimer.Enabled := False;
+  Invalidate;
 end;
 
 procedure TVideoMinerVideoSurface.Present;
@@ -1759,6 +1869,19 @@ begin
   FPendingSurfaceClick := False;
   if Assigned(FOnPlayPauseClick) then
     FOnPlayPauseClick(Self);
+end;
+
+procedure TVideoMinerVideoSurface.LoadingTimer(Sender: TObject);
+begin
+  if not FLoadingActive then
+  begin
+    if FLoadingTimer <> nil then
+      FLoadingTimer.Enabled := False;
+    Exit;
+  end;
+
+  Inc(FLoadingTick);
+  Invalidate;
 end;
 
 procedure TVideoMinerVideoSurface.SetOnFirstFrameClick(Value: TNotifyEvent);

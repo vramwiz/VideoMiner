@@ -843,60 +843,70 @@ begin
 
   StepWatch := TStopwatch.StartNew;
 {$ENDIF}
-  FMediaLoadController.BeginLoadCleanup(FUpdatingSeek, FSeeking,
-    FSeekGuardRemaining);
+  if FVideoView <> nil then
+    FVideoView.BeginLoadingIndicator;
+  Application.ProcessMessages;
+  try
+    FMediaLoadController.BeginLoadCleanup(FUpdatingSeek, FSeeking,
+      FSeekGuardRemaining);
+    Application.ProcessMessages;
 {$IFDEF DEBUG}
-  CleanupMs := StepWatch.Elapsed.TotalMilliseconds;
+    CleanupMs := StepWatch.Elapsed.TotalMilliseconds;
 
-  StepWatch := TStopwatch.StartNew;
+    StepWatch := TStopwatch.StartNew;
 {$ENDIF}
-  if not OpenVideoMinerMediaFile(FileName, FDecoder, FPreviewDecoder,
-    FMediaList, OpenResult) then
-  begin
+    if not OpenVideoMinerMediaFile(FileName, FDecoder, FPreviewDecoder,
+      FMediaList, OpenResult) then
+    begin
+{$IFDEF DEBUG}
+      OpenMs := StepWatch.Elapsed.TotalMilliseconds;
+{$ENDIF}
+      FMediaLoadController.ApplyOpenFailure(OpenResult.ErrorMessage);
+{$IFDEF DEBUG}
+      WriteVideoMinerSlowLog(Format(
+        'open_failed step="decoder_open" file="%s" drive="%s" autoplay=%s validate_ms=%.3f cleanup_ms=%.3f open_ms=%.3f total_ms=%.3f err="%s"',
+        [ExtractFileName(FileName), ExtractFileDrive(FileName),
+         BoolToStr(AutoPlay, True), ValidateMs, CleanupMs, OpenMs,
+         TotalWatch.Elapsed.TotalMilliseconds, OpenResult.ErrorMessage]));
+{$ENDIF}
+      Exit;
+    end;
 {$IFDEF DEBUG}
     OpenMs := StepWatch.Elapsed.TotalMilliseconds;
 {$ENDIF}
-    FMediaLoadController.ApplyOpenFailure(OpenResult.ErrorMessage);
+
+    FMediaLoadController.ApplyOpenSuccess(OpenResult, FUpdatingSeek);
+    Application.ProcessMessages;
+{$IFDEF DEBUG}
+    StepWatch := TStopwatch.StartNew;
+{$ENDIF}
+    if (not RestoreLoopPosition) or (not TryRestoreLoopPlaybackPosition) then
+      ShowFrameAtMs(0);
+{$IFDEF DEBUG}
+    FirstFrameMs := StepWatch.Elapsed.TotalMilliseconds;
+
+    StepWatch := TStopwatch.StartNew;
+{$ENDIF}
+    if AutoPlay then
+      PlayFromCurrentPosition;
+{$IFDEF DEBUG}
+    AutoPlayMs := StepWatch.Elapsed.TotalMilliseconds;
+{$ENDIF}
+
+    RememberVideoMinerMediaFile(FileName);
+    Result := True;
 {$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
-      'open_failed step="decoder_open" file="%s" drive="%s" autoplay=%s validate_ms=%.3f cleanup_ms=%.3f open_ms=%.3f total_ms=%.3f err="%s"',
-      [ExtractFileName(FileName), ExtractFileDrive(FileName),
-       BoolToStr(AutoPlay, True), ValidateMs, CleanupMs, OpenMs,
-       TotalWatch.Elapsed.TotalMilliseconds, OpenResult.ErrorMessage]));
+      'open_done file="%s" drive="%s" autoplay=%s restore_loop=%s validate_ms=%.3f cleanup_ms=%.3f open_ms=%.3f first_frame_ms=%.3f autoplay_ms=%.3f total_ms=%.3f duration_ms=%d fps=%.3f',
+      [ExtractFileName(FMediaSession.VideoFile), ExtractFileDrive(FMediaSession.VideoFile),
+       BoolToStr(AutoPlay, True), BoolToStr(RestoreLoopPosition, True),
+       ValidateMs, CleanupMs, OpenMs, FirstFrameMs, AutoPlayMs,
+       TotalWatch.Elapsed.TotalMilliseconds, FMediaSession.SeekMaxMs, FMediaSession.VideoInfo.Fps]));
 {$ENDIF}
-    Exit;
+  finally
+    if FVideoView <> nil then
+      FVideoView.EndLoadingIndicator;
   end;
-{$IFDEF DEBUG}
-  OpenMs := StepWatch.Elapsed.TotalMilliseconds;
-{$ENDIF}
-
-  FMediaLoadController.ApplyOpenSuccess(OpenResult, FUpdatingSeek);
-{$IFDEF DEBUG}
-  StepWatch := TStopwatch.StartNew;
-{$ENDIF}
-  if (not RestoreLoopPosition) or (not TryRestoreLoopPlaybackPosition) then
-    ShowFrameAtMs(0);
-{$IFDEF DEBUG}
-  FirstFrameMs := StepWatch.Elapsed.TotalMilliseconds;
-
-  StepWatch := TStopwatch.StartNew;
-{$ENDIF}
-  if AutoPlay then
-    PlayFromCurrentPosition;
-{$IFDEF DEBUG}
-  AutoPlayMs := StepWatch.Elapsed.TotalMilliseconds;
-{$ENDIF}
-
-  RememberVideoMinerMediaFile(FileName);
-  Result := True;
-{$IFDEF DEBUG}
-  WriteVideoMinerSlowLog(Format(
-    'open_done file="%s" drive="%s" autoplay=%s restore_loop=%s validate_ms=%.3f cleanup_ms=%.3f open_ms=%.3f first_frame_ms=%.3f autoplay_ms=%.3f total_ms=%.3f duration_ms=%d fps=%.3f',
-    [ExtractFileName(FMediaSession.VideoFile), ExtractFileDrive(FMediaSession.VideoFile),
-     BoolToStr(AutoPlay, True), BoolToStr(RestoreLoopPosition, True),
-     ValidateMs, CleanupMs, OpenMs, FirstFrameMs, AutoPlayMs,
-     TotalWatch.Elapsed.TotalMilliseconds, FMediaSession.SeekMaxMs, FMediaSession.VideoInfo.Fps]));
-{$ENDIF}
 end;
 
 function TVideoMinerMainForm.OpenAndPlayFile(const FileName: string): Boolean;
