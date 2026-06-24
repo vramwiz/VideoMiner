@@ -37,6 +37,8 @@ type
     FPreviewStep   : Integer;            // hover プレビューの更新回数
     FPreviewTimer  : TTimer;             // hover プレビューを更新するタイマー
     FScrollOffset : Integer;              // タイル一覧の縦スクロール量 px
+    FScrollIndicatorDragging : Boolean;   // 仮想スクロールバーをドラッグ中か
+    FScrollIndicatorDragOffset : Integer; // つまみ上端から掴んだ位置までの距離 px
     FSelectedIndex : Integer;             // キーボード操作で選択中の一覧位置
     FThumbnailFiles  : TArray<string>;    // サムネイル状態が対応するファイル名
     FThumbnailStates : TArray<TVideoMinerThumbnailState>; // サムネイル生成状態
@@ -80,6 +82,12 @@ type
     function ZoomButtonRect(Direction: Integer): TRect;
     // 指定位置にあるズームボタン方向を返す
     function HitZoomButton(const Point: TPoint): Integer;
+    // 仮想スクロールバーのトラックとつまみを返す
+    function ScrollIndicatorRects(out TrackRect, ThumbRect: TRect): Boolean;
+    // 指定位置に仮想スクロールバーがあるか返す
+    function HitScrollIndicator(const Point: TPoint): Boolean;
+    // 仮想スクロールバー上の位置から縦スクロール量を更新する
+    procedure SetScrollOffsetFromIndicatorY(Y, DragOffset: Integer);
     // 現在の一覧状態に合わせてタイル矩形を作る
     procedure LayoutTiles;
     // サムネイル配列を現在のメディア一覧へ合わせる
@@ -123,6 +131,8 @@ type
     procedure DrawFolderHistoryRow(Canvas: TCanvas);
     // 右下のサムネイル拡大縮小ボタンを描く
     procedure DrawZoomButtons(Canvas: TCanvas);
+    // 右端に現在の縦スクロール位置だけを示す
+    procedure DrawScrollIndicator(Canvas: TCanvas);
     // 表示時に現在ファイルが見える位置へスクロールする
     procedure ScrollToCurrent;
     // ホイール入力で一覧を縦スクロールする
@@ -150,6 +160,8 @@ type
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean; override;
     // タイルクリックを選択通知に変換する
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    // 仮想スクロールバーのドラッグを終了する
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     // タイル一覧を描画する
     procedure Paint; override;
     // サイズ変更時にスクロール位置を補正する
@@ -203,6 +215,11 @@ const
   ZOOM_BUTTON_COLOR              = $00383838; // 拡大縮小ボタンの背景色
   ZOOM_BUTTON_HOVER_COLOR        = $00585858; // hover 中の拡大縮小ボタン背景色
   ZOOM_BUTTON_BORDER_COLOR       = $00C8C8C8; // 拡大縮小ボタンの枠色
+  SCROLL_INDICATOR_TRACK_COLOR   = $00262626; // 仮想スクロールバーの背景色
+  SCROLL_INDICATOR_THUMB_COLOR   = $00808080; // 仮想スクロールバーの現在位置色
+  SCROLL_INDICATOR_WIDTH         = 6;         // 仮想スクロールバーの幅 px
+  SCROLL_INDICATOR_HIT_PADDING   = 8;         // 見た目より広く取る操作判定幅 px
+  SCROLL_INDICATOR_MIN_HEIGHT    = 28;        // 仮想スクロールバーつまみの最小高さ px
   TILE_GAP                       = 14;        // タイル間の余白 px
   TILE_MARGIN                    = 22;        // 一覧外周の余白 px
   NAME_BAND_HEIGHT               = 28;        // ファイル名を重ねる帯の高さ px
@@ -742,6 +759,9 @@ end;
 procedure TVideoMinerThumbnailBrowser.Close;
 begin
   StopPreview;
+  FScrollIndicatorDragging := False;
+  FScrollIndicatorDragOffset := 0;
+  MouseCapture := False;
   Visible := False;
   if FThumbnailTimer <> nil then
     FThumbnailTimer.Enabled := False;
@@ -1203,6 +1223,28 @@ begin
   end;
 end;
 
+procedure TVideoMinerThumbnailBrowser.DrawScrollIndicator(Canvas: TCanvas);
+var
+  TrackRect: TRect;
+  ThumbRect: TRect;
+begin
+  if not ScrollIndicatorRects(TrackRect, ThumbRect) then
+    Exit;
+
+  Canvas.Brush.Color := SCROLL_INDICATOR_TRACK_COLOR;
+  Canvas.Pen.Style := psClear;
+  Canvas.RoundRect(TrackRect.Left, TrackRect.Top, TrackRect.Right,
+    TrackRect.Bottom, SCROLL_INDICATOR_WIDTH, SCROLL_INDICATOR_WIDTH);
+
+  if FScrollIndicatorDragging then
+    Canvas.Brush.Color := ZOOM_BUTTON_BORDER_COLOR
+  else
+    Canvas.Brush.Color := SCROLL_INDICATOR_THUMB_COLOR;
+  Canvas.RoundRect(ThumbRect.Left, ThumbRect.Top, ThumbRect.Right,
+    ThumbRect.Bottom, SCROLL_INDICATOR_WIDTH, SCROLL_INDICATOR_WIDTH);
+  Canvas.Pen.Style := psSolid;
+end;
+
 function TVideoMinerThumbnailBrowser.DoMouseWheel(Shift: TShiftState;
   WheelDelta: Integer; MousePos: TPoint): Boolean;
 begin
@@ -1319,6 +1361,89 @@ begin
   end;
 end;
 
+function TVideoMinerThumbnailBrowser.ScrollIndicatorRects(
+  out TrackRect, ThumbRect: TRect): Boolean;
+var
+  MaxOffset: Integer;
+  ThumbHeight: Integer;
+  ThumbTop: Integer;
+  TotalHeight: Integer;
+  TrackBottom: Integer;
+  TrackHeight: Integer;
+  TrackLeft: Integer;
+  TrackTop: Integer;
+begin
+  Result := False;
+  TrackRect := Rect(0, 0, 0, 0);
+  ThumbRect := Rect(0, 0, 0, 0);
+
+  TotalHeight := ContentHeight;
+  MaxOffset := Max(0, TotalHeight - ClientHeight);
+  if MaxOffset <= 0 then
+    Exit;
+
+  TrackLeft := ClientWidth - TILE_MARGIN - (ZOOM_BUTTON_SIZE div 2) -
+    (SCROLL_INDICATOR_WIDTH div 2);
+  TrackTop := FolderHistoryRowHeight + TILE_GAP;
+  TrackBottom := ZoomButtonRect(1).Top - ZOOM_BUTTON_GAP;
+  if TrackBottom <= TrackTop then
+    Exit;
+
+  TrackHeight := TrackBottom - TrackTop;
+  ThumbHeight := Max(SCROLL_INDICATOR_MIN_HEIGHT,
+    MulDiv(ClientHeight, TrackHeight, TotalHeight));
+  ThumbHeight := Min(TrackHeight, ThumbHeight);
+  ThumbTop := TrackTop + MulDiv(FScrollOffset, TrackHeight - ThumbHeight,
+    MaxOffset);
+
+  TrackRect := Rect(TrackLeft, TrackTop, TrackLeft + SCROLL_INDICATOR_WIDTH,
+    TrackBottom);
+  ThumbRect := Rect(TrackLeft, ThumbTop, TrackLeft + SCROLL_INDICATOR_WIDTH,
+    ThumbTop + ThumbHeight);
+  Result := True;
+end;
+
+function TVideoMinerThumbnailBrowser.HitScrollIndicator(
+  const Point: TPoint): Boolean;
+var
+  HitRect: TRect;
+  ThumbRect: TRect;
+  TrackRect: TRect;
+begin
+  Result := False;
+  if not ScrollIndicatorRects(TrackRect, ThumbRect) then
+    Exit;
+
+  HitRect := TrackRect;
+  InflateRect(HitRect, SCROLL_INDICATOR_HIT_PADDING, 0);
+  Result := PtInRect(HitRect, Point);
+end;
+
+procedure TVideoMinerThumbnailBrowser.SetScrollOffsetFromIndicatorY(
+  Y, DragOffset: Integer);
+var
+  MaxOffset: Integer;
+  ThumbRect: TRect;
+  TrackHeight: Integer;
+  TrackRect: TRect;
+  ThumbTop: Integer;
+begin
+  if not ScrollIndicatorRects(TrackRect, ThumbRect) then
+    Exit;
+
+  MaxOffset := Max(0, ContentHeight - ClientHeight);
+  TrackHeight := TrackRect.Height - ThumbRect.Height;
+  if (MaxOffset <= 0) or (TrackHeight <= 0) then
+    Exit;
+
+  ThumbTop := Max(TrackRect.Top, Min(TrackRect.Bottom - ThumbRect.Height,
+    Y - DragOffset));
+  FScrollOffset := MulDiv(ThumbTop - TrackRect.Top, MaxOffset, TrackHeight);
+  ClampScrollOffset;
+  LayoutTiles;
+  Invalidate;
+end;
+
 function TVideoMinerThumbnailBrowser.ZoomButtonRect(Direction: Integer): TRect;
 var
   Bottom: Integer;
@@ -1371,6 +1496,9 @@ end;
 procedure TVideoMinerThumbnailBrowser.CMMouseLeave(var Message: TMessage);
 begin
   inherited;
+  if FScrollIndicatorDragging then
+    Exit;
+
   if (FHoverIndex >= 0) or (FFolderHistoryHoverIndex >= 0) or
      (FZoomButtonHover <> 0) then
   begin
@@ -1398,6 +1526,12 @@ var
   NewZoomButtonHover: Integer;
 begin
   inherited MouseMove(Shift, X, Y);
+  if FScrollIndicatorDragging then
+  begin
+    SetScrollOffsetFromIndicatorY(Y, FScrollIndicatorDragOffset);
+    Exit;
+  end;
+
   NewZoomButtonHover := HitZoomButton(Point(X, Y));
   if NewZoomButtonHover = 0 then
     NewFolderHistoryHoverIndex := HitFolderHistoryTile(Point(X, Y))
@@ -1410,6 +1544,8 @@ begin
 
   if (NewHoverIndex >= 0) or (NewFolderHistoryHoverIndex >= 0) or
      (NewZoomButtonHover <> 0) then
+    Cursor := crHandPoint
+  else if HitScrollIndicator(Point(X, Y)) then
     Cursor := crHandPoint
   else
     Cursor := crDefault;
@@ -1433,7 +1569,10 @@ procedure TVideoMinerThumbnailBrowser.MouseDown(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 var
   FileName: string;
+  HitRect: TRect;
   Index: Integer;
+  ThumbRect: TRect;
+  TrackRect: TRect;
 begin
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbRight then
@@ -1444,6 +1583,31 @@ begin
 
   if Button <> mbLeft then
     Exit;
+
+  if ScrollIndicatorRects(TrackRect, ThumbRect) then
+  begin
+    HitRect := TrackRect;
+    InflateRect(HitRect, SCROLL_INDICATOR_HIT_PADDING, 0);
+    if PtInRect(HitRect, Point(X, Y)) then
+    begin
+      if PtInRect(ThumbRect, Point(X, Y)) then
+        FScrollIndicatorDragOffset := Y - ThumbRect.Top
+      else
+      begin
+        FScrollIndicatorDragOffset := ThumbRect.Height div 2;
+        SetScrollOffsetFromIndicatorY(Y, FScrollIndicatorDragOffset);
+      end;
+      FScrollIndicatorDragging := True;
+      FHoverIndex := -1;
+      FFolderHistoryHoverIndex := -1;
+      FZoomButtonHover := 0;
+      StopPreview;
+      MouseCapture := True;
+      Cursor := crHandPoint;
+      Invalidate;
+      Exit;
+    end;
+  end;
 
   Index := HitZoomButton(Point(X, Y));
   if Index <> 0 then
@@ -1472,6 +1636,22 @@ begin
   FileName := FMediaList.FileAt(Index);
   if (FileName <> '') and Assigned(FOnSelected) then
     FOnSelected(Self, Index, FileName);
+end;
+
+procedure TVideoMinerThumbnailBrowser.MouseUp(Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+  if (Button = mbLeft) and FScrollIndicatorDragging then
+  begin
+    FScrollIndicatorDragging := False;
+    MouseCapture := False;
+    if HitScrollIndicator(Point(X, Y)) then
+      Cursor := crHandPoint
+    else
+      Cursor := crDefault;
+    Invalidate;
+  end;
 end;
 
 procedure TVideoMinerThumbnailBrowser.Open;
@@ -1513,6 +1693,7 @@ begin
     Canvas.Font.Size := 11;
     DrawText(Canvas.Handle, PChar('No videos'), -1, TextRect,
       DT_CENTER or DT_VCENTER or DT_SINGLELINE);
+    DrawScrollIndicator(Canvas);
     DrawZoomButtons(Canvas);
     Exit;
   end;
@@ -1525,6 +1706,7 @@ begin
     DrawTile(Canvas, I, FTileRects[I]);
   end;
   DrawFolderHistoryRow(Canvas);
+  DrawScrollIndicator(Canvas);
   DrawZoomButtons(Canvas);
   WriteThumbnailLog('paint_end');
 end;
