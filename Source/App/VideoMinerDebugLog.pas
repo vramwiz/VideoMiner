@@ -71,7 +71,15 @@ begin
     LogDir := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) +
       'VideoMiner';
 
-  ForceDirectories(LogDir);
+  try
+    ForceDirectories(LogDir);
+  except
+    LogDir := GetEnvironmentVariable('LOCALAPPDATA');
+    if LogDir = '' then
+      LogDir := ExtractFilePath(ParamStr(0));
+    LogDir := IncludeTrailingPathDelimiter(LogDir) + 'VideoMiner';
+    ForceDirectories(LogDir);
+  end;
   Result := IncludeTrailingPathDelimiter(LogDir) +
     'VideoMiner_playback_debug.log';
 end;
@@ -83,20 +91,24 @@ var
   LogFileName: string;
   Line: string;
 begin
-  Line := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
-    ' [VideoMiner] ' + Msg;
-  OutputDebugString(PChar(Line));
-
-  LogFileName := VideoMinerDebugLogFileName;
-  AssignFile(F, LogFileName);
   try
-    if FileExists(LogFileName) then
-      Append(F)
-    else
-      Rewrite(F);
-    Writeln(F, Line);
-  finally
-    CloseFile(F);
+    Line := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
+      ' [VideoMiner] ' + Msg;
+    OutputDebugString(PChar(Line));
+
+    LogFileName := VideoMinerDebugLogFileName;
+    AssignFile(F, LogFileName);
+    try
+      if FileExists(LogFileName) then
+        Append(F)
+      else
+        Rewrite(F);
+      Writeln(F, Line);
+    finally
+      CloseFile(F);
+    end;
+  except
+    // Logging must never prevent playback or startup.
   end;
 end;
 

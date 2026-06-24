@@ -150,12 +150,6 @@ begin
 {$ENDIF}
   if ParamCount > 0 then
     VideoMinerForm.QueueStartupOpenFile(ParamStr(1), True)
-  else if ConsumeStartupExecutableChange(ParamStr(0)) then
-  begin
-{$IFDEF DEBUG}
-    WriteVideoMinerSlowLog('startup remembered_open_skipped exe_changed_or_first_run');
-{$ENDIF}
-  end
   else
     VideoMinerForm.QueueStartupOpenRemembered;
 {$IFDEF DEBUG}

@@ -49,8 +49,6 @@ function LoadEndAction: TVideoMinerEndAction;
 function LoadAudioSettings: TVideoMinerAudioSettings;
 // 前回開いたフォルダとファイルを読み込む
 function LoadLastMedia: TVideoMinerLastMedia;
-// EXE パス変更後の初回起動かを記録付きで返す
-function ConsumeStartupExecutableChange(const CurrentExePath: string): Boolean;
 // フォルダ閲覧履歴を読み込む
 function LoadFolderHistory: TVideoMinerFolderHistory;
 // 指定ファイルに対応する手動チャプター位置を読み込む
@@ -104,7 +102,6 @@ const
   SECTION_SETTINGS       = 'VideoMiner';         // アプリ全体設定の INI セクション
   KEY_DECODER_MODE       = 'VideoDecoderMode';   // デコード方式の INI キー
   KEY_ROTATION_OVERRIDE  = 'VideoRotationOverride'; // 表示回転メタデータ上書きの INI キー
-  KEY_STARTUP_EXE_PATH   = 'StartupExePath';     // 前回起動した EXE パス
   SECTION_WINDOW         = 'MainForm';           // メインフォーム座標の INI セクション
   KEY_WINDOW_LEFT        = 'Left';               // ウィンドウ左位置の INI キー
   KEY_WINDOW_TOP         = 'Top';                // ウィンドウ上位置の INI キー
@@ -153,7 +150,15 @@ begin
     SettingsDir := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) +
       'VideoMiner';
 
-  ForceDirectories(SettingsDir);
+  try
+    ForceDirectories(SettingsDir);
+  except
+    SettingsDir := GetEnvironmentVariable('LOCALAPPDATA');
+    if SettingsDir = '' then
+      SettingsDir := ExtractFilePath(ParamStr(0));
+    SettingsDir := IncludeTrailingPathDelimiter(SettingsDir) + 'VideoMiner';
+    ForceDirectories(SettingsDir);
+  end;
   Result := IncludeTrailingPathDelimiter(SettingsDir) + 'VideoMiner.ini';
 end;
 
@@ -270,20 +275,25 @@ begin
   if SettingsLoaded then
     Exit;
 
-  SettingsLoaded := True;
-  Ini := TMemIniFile.Create(SettingsFileName, TEncoding.UTF8);
   try
-    CurrentVideoDecoderMode := TextToVideoDecoderMode(
-      Ini.ReadString(SECTION_SETTINGS, KEY_DECODER_MODE, 'auto'));
-    CurrentRotationOverride := TextToVideoRotationOverride(
-      Ini.ReadString(SECTION_SETTINGS, KEY_ROTATION_OVERRIDE, 'auto'));
-    WriteVideoMinerSlowLog(Format(
-      'settings_loaded decoder_mode=%s rotation_override=%s',
-      [VideoDecoderModeToText(CurrentVideoDecoderMode),
-       VideoRotationOverrideToText(CurrentRotationOverride)]));
-  finally
-    Ini.Free;
+    Ini := TMemIniFile.Create(SettingsFileName, TEncoding.UTF8);
+    try
+      CurrentVideoDecoderMode := TextToVideoDecoderMode(
+        Ini.ReadString(SECTION_SETTINGS, KEY_DECODER_MODE, 'auto'));
+      CurrentRotationOverride := TextToVideoRotationOverride(
+        Ini.ReadString(SECTION_SETTINGS, KEY_ROTATION_OVERRIDE, 'auto'));
+      WriteVideoMinerSlowLog(Format(
+        'settings_loaded decoder_mode=%s rotation_override=%s',
+        [VideoDecoderModeToText(CurrentVideoDecoderMode),
+         VideoRotationOverrideToText(CurrentRotationOverride)]));
+    finally
+      Ini.Free;
+    end;
+  except
+    CurrentVideoDecoderMode := vdmAuto;
+    CurrentRotationOverride := vroAuto;
   end;
+  SettingsLoaded := True;
 end;
 
 function GetVideoDecoderMode: TVideoDecoderMode;
@@ -395,29 +405,6 @@ begin
     Result.Folder := Ini.ReadString(SECTION_LAST_MEDIA, KEY_LAST_FOLDER, '');
     Result.FileName := Ini.ReadString(SECTION_LAST_MEDIA, KEY_LAST_FILE, '');
     Result.Available := (Result.Folder <> '') or (Result.FileName <> '');
-  finally
-    Ini.Free;
-  end;
-end;
-
-function ConsumeStartupExecutableChange(const CurrentExePath: string): Boolean;
-var
-  Ini: TIniFile;
-  NormalizedCurrentPath: string;
-  PreviousPath: string;
-begin
-  Result := False;
-  NormalizedCurrentPath := ExpandFileName(CurrentExePath);
-  if NormalizedCurrentPath = '' then
-    Exit;
-
-  Ini := TIniFile.Create(SettingsFileName);
-  try
-    PreviousPath := Ini.ReadString(SECTION_SETTINGS, KEY_STARTUP_EXE_PATH, '');
-    Result := (PreviousPath = '') or
-      (not SameText(ExpandFileName(PreviousPath), NormalizedCurrentPath));
-    Ini.WriteString(SECTION_SETTINGS, KEY_STARTUP_EXE_PATH,
-      NormalizedCurrentPath);
   finally
     Ini.Free;
   end;
@@ -789,8 +776,5 @@ begin
     Ini.Free;
   end;
 end;
-
-initialization
-  LoadSettings;
 
 end.
