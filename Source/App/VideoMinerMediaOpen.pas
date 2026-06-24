@@ -24,6 +24,9 @@ type
 // UI 状態を壊す前に、指定ファイルが開く対象として存在するか確認する
 function ValidateVideoMinerMediaFile(const FileName: string;
   out ErrorMessage: string): Boolean;
+// 指定されたファイルまたはフォルダから、実際に開く動画ファイルを返す
+function ResolveVideoMinerMediaOpenTarget(const Path: string;
+  out FileName: string; out ErrorMessage: string): Boolean;
 
 // ファイル選択ダイアログで最初に表示するフォルダを決める
 function VideoMinerOpenDialogInitialDir(const CurrentFileName: string): string;
@@ -70,20 +73,35 @@ begin
 end;
 {$ENDIF}
 
-function ValidateVideoMinerMediaFile(const FileName: string;
-  out ErrorMessage: string): Boolean;
+function ResolveVideoMinerMediaOpenTarget(const Path: string;
+  out FileName: string; out ErrorMessage: string): Boolean;
 var
   Folder: string;
 begin
   Result := False;
   ErrorMessage := '';
+  FileName := '';
 
-  if FileName = '' then
+  if Path = '' then
   begin
-    ErrorMessage := 'File name is empty.';
+    ErrorMessage := 'File or folder name is empty.';
     Exit;
   end;
 
+  if DirectoryExists(Path) then
+  begin
+    FileName := TVideoMinerMediaList.FirstMediaFileInFolder(Path);
+    if FileName = '' then
+    begin
+      ErrorMessage := 'No video file found in folder: ' + Path;
+      Exit;
+    end;
+
+    Result := True;
+    Exit;
+  end;
+
+  FileName := Path;
   Folder := ExtractFilePath(FileName);
   if (Folder <> '') and (not DirectoryExists(Folder)) then
   begin
@@ -98,6 +116,15 @@ begin
   end;
 
   Result := True;
+end;
+
+function ValidateVideoMinerMediaFile(const FileName: string;
+  out ErrorMessage: string): Boolean;
+var
+  TargetFileName: string;
+begin
+  Result := ResolveVideoMinerMediaOpenTarget(FileName, TargetFileName,
+    ErrorMessage);
 end;
 
 function VideoMinerOpenDialogInitialDir(const CurrentFileName: string): string;
@@ -175,6 +202,7 @@ function OpenVideoMinerMediaFile(const FileName: string; Decoder,
   out OpenResult: TVideoMinerMediaOpenResult): Boolean;
 var
   PreviewInfo: TVideoInfo;
+  TargetFileName: string;
 {$IFDEF DEBUG}
   MediaCount: Integer;
   StepWatch: TStopwatch;
@@ -194,7 +222,8 @@ begin
   TotalWatch := TStopwatch.StartNew;
   StepWatch := TStopwatch.StartNew;
 {$ENDIF}
-  if not ValidateVideoMinerMediaFile(FileName, OpenResult.ErrorMessage) then
+  if not ResolveVideoMinerMediaOpenTarget(FileName, TargetFileName,
+    OpenResult.ErrorMessage) then
   begin
 {$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
@@ -210,7 +239,8 @@ begin
   StepWatch := TStopwatch.StartNew;
 {$ENDIF}
 
-  if not Decoder.Open(FileName, OpenResult.Info, OpenResult.ErrorMessage) then
+  if not Decoder.Open(TargetFileName, OpenResult.Info,
+    OpenResult.ErrorMessage) then
   begin
 {$IFDEF DEBUG}
     DecoderOpenMs := StepWatch.Elapsed.TotalMilliseconds;
@@ -233,7 +263,8 @@ begin
   StepWatch := TStopwatch.StartNew;
 {$ENDIF}
 
-  if not PreviewDecoder.Open(FileName, PreviewInfo, OpenResult.ErrorMessage) then
+  if not PreviewDecoder.Open(TargetFileName, PreviewInfo,
+    OpenResult.ErrorMessage) then
   begin
 {$IFDEF DEBUG}
     PreviewOpenMs := StepWatch.Elapsed.TotalMilliseconds;
@@ -259,7 +290,7 @@ begin
 {$ENDIF}
 
   if MediaList <> nil then
-    MediaList.BuildForFile(FileName);
+    MediaList.BuildForFile(TargetFileName);
 {$IFDEF DEBUG}
   MediaListMs := StepWatch.Elapsed.TotalMilliseconds;
   if MediaList <> nil then
@@ -267,7 +298,7 @@ begin
   else
     MediaCount := 0;
 {$ENDIF}
-  OpenResult.FileName := FileName;
+  OpenResult.FileName := TargetFileName;
   Result := True;
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format(

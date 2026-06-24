@@ -896,7 +896,7 @@ begin
     AutoPlayMs := StepWatch.Elapsed.TotalMilliseconds;
 {$ENDIF}
 
-    RememberVideoMinerMediaFile(FileName);
+    RememberVideoMinerMediaFile(OpenResult.FileName);
     Result := True;
 {$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
