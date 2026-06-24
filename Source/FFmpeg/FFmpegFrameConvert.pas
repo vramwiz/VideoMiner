@@ -259,23 +259,17 @@ var
   DstData     : array[0..3] of PByte;   // sws_scale へ渡す出力 plane
   DstLinesize : array[0..3] of Integer; // sws_scale へ渡す出力 stride
   DstFormat   : Integer;                // FFmpeg の出力ピクセル形式
-  TempBuffer  : TBytes;                 // sws_scale の一時出力先
-  TempStride  : Integer;                // 一時出力先の stride
-  Y           : Integer;                // コピー中の行番号
-  DstRow      : PByte;                  // 呼び出し側バッファのコピー先行
 begin
   EnsureFrameAndBuffer(Frame, Buffer);
   if BufferStride = 0 then
     BufferStride := Frame.width * 4;
   DstFormat := AV_PIX_FMT_BGRA;
-  TempStride := Abs(BufferStride);
-  SetLength(TempBuffer, NativeInt(TempStride) * Frame.height);
 
   FillChar(DstData, SizeOf(DstData), 0);
   FillChar(DstLinesize, SizeOf(DstLinesize), 0);
 
-  DstData[0] := @TempBuffer[0];
-  DstLinesize[0] := TempStride;
+  DstData[0] := PByte(Buffer);
+  DstLinesize[0] := BufferStride;
 
   EnsureSwsContext(Frame, DstFormat, ScaleContext, CachedSrcWidth, CachedSrcHeight,
     CachedSrcFormat, CachedDstFormat);
@@ -283,12 +277,6 @@ begin
   if TFFmpegApi.sws_scale(PSwsContext(ScaleContext), @Frame.data[0], @Frame.linesize[0], 0,
     Frame.height, @DstData[0], @DstLinesize[0]) <= 0 then
     raise Exception.Create('sws_scale failed.');
-
-  for Y := 0 to Frame.height - 1 do
-  begin
-    DstRow := PByte(NativeInt(Buffer) + NativeInt(Y) * BufferStride);
-    Move(TempBuffer[Y * TempStride], DstRow^, TempStride);
-  end;
 end;
 
 // AVFrame を呼び出し側が指定した先頭行と符号付き stride の BGR24 表示バッファへ変換する。

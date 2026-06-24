@@ -77,6 +77,8 @@ type
     procedure ScrollToSelected;
     // 選択中タイルを指定量だけ移動する
     procedure MoveSelection(Delta: Integer);
+    // 指定タイルを開く
+    procedure ActivateTile(Index: Integer);
     // 選択中タイルを開く
     procedure ActivateSelectedTile;
     // 選択中のフォルダ履歴を履歴から削除する
@@ -1710,7 +1712,6 @@ end;
 procedure TVideoMinerThumbnailBrowser.MouseDown(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 var
-  FileName: string;
   HitRect: TRect;
   Index: Integer;
   ThumbRect: TRect;
@@ -1775,9 +1776,8 @@ begin
 
   SelectTile(Index, False);
   FFolderHistorySelectedIndex := -1;
-  FileName := FMediaList.FileAt(Index);
-  if (FileName <> '') and Assigned(FOnSelected) then
-    FOnSelected(Self, Index, FileName);
+  if ssDouble in Shift then
+    ActivateTile(Index);
 end;
 
 procedure TVideoMinerThumbnailBrowser.MouseUp(Button: TMouseButton;
@@ -1860,17 +1860,23 @@ begin
   LayoutTiles;
 end;
 
-procedure TVideoMinerThumbnailBrowser.ActivateSelectedTile;
+procedure TVideoMinerThumbnailBrowser.ActivateTile(Index: Integer);
 var
   FileName: string;
 begin
-  if (FMediaList = nil) or (FSelectedIndex < 0) or
-     (FSelectedIndex >= FMediaList.Count) then
+  if (FMediaList = nil) or (Index < 0) or (Index >= FMediaList.Count) then
     Exit;
 
-  FileName := FMediaList.FileAt(FSelectedIndex);
+  SelectTile(Index, False);
+  FFolderHistorySelectedIndex := -1;
+  FileName := FMediaList.FileAt(Index);
   if (FileName <> '') and Assigned(FOnSelected) then
-    FOnSelected(Self, FSelectedIndex, FileName);
+    FOnSelected(Self, Index, FileName);
+end;
+
+procedure TVideoMinerThumbnailBrowser.ActivateSelectedTile;
+begin
+  ActivateTile(FSelectedIndex);
 end;
 
 procedure TVideoMinerThumbnailBrowser.DeleteSelectedFolderHistory;

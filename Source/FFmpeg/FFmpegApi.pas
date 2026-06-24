@@ -323,6 +323,8 @@ const
   AV_SAMPLE_FMT_S16           = 1;                    // signed 16bit PCM サンプル形式
   AV_BUFFERSRC_FLAG_KEEP_REF  = 8;                    // buffersrc へ参照保持で渡す指定
   AUDIO_OUTPUT_SAMPLE_RATE    = 48000;                // VideoMiner の固定音声出力サンプルレート Hz
+  DLL_LOAD_DIR_FLAG           = $00000100;            // 対象DLLのフォルダを依存DLL探索へ使う
+  DLL_DEFAULT_DIRS_FLAG       = $00001000;            // 安全な既定DLL探索パスを使う
   AUDIO_OUTPUT_CHANNELS       = 2;                    // VideoMiner の固定音声出力チャンネル数
 
 type
@@ -437,7 +439,7 @@ var
   ErrorCode : Cardinal; // LoadLibrary失敗時のWindowsエラーコード
 begin
   FullName := DllPath + DllName;
-  Result := LoadLibrary(PChar(FullName));
+  Result := LoadLibraryEx(PChar(FullName), 0, DLL_LOAD_DIR_FLAG or DLL_DEFAULT_DIRS_FLAG);
   if Result = 0 then
   begin
     ErrorCode := GetLastError;
@@ -463,7 +465,6 @@ begin
     Exit;
 
   DllPath := ModuleDirectory;
-  SetDllDirectory(PChar(DllPath));
 
   FAvUtil := LoadDll(DllPath, 'avutil-60.dll');
   FSwResample := LoadDll(DllPath, 'swresample-6.dll');

@@ -167,8 +167,11 @@ begin
     Exit;
   end;
 
-  if Assigned(FOnOpenFile) and FOnOpenFile(FileName, True, True) then
+  if Assigned(FOnOpenFile) then
+  begin
     Close;
+    FOnOpenFile(FileName, True, True);
+  end;
 end;
 
 end.

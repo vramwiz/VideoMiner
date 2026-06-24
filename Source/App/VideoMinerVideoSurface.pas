@@ -468,8 +468,6 @@ end;
 
 function TVideoMinerVideoSurface.PrepareBgrx32Frame(Width, Height: Integer;
   out Buffer: Pointer; out BufferStride: Integer): Boolean;
-var
-  Y: Integer;
 begin
   Buffer := nil;
   BufferStride := 0;
@@ -488,9 +486,6 @@ begin
     BufferStride := NativeInt(FBitmap.ScanLine[1]) - NativeInt(Buffer)
   else
     BufferStride := Width * 4;
-
-  for Y := 0 to Height - 1 do
-    FillChar(FBitmap.ScanLine[Y]^, Width * 4, 0);
 
   FAlphaCompositeDirty := True;
   Result := (Buffer <> nil) and (BufferStride <> 0);
