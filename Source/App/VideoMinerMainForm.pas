@@ -24,6 +24,7 @@ uses
 const
   WM_VM_OPEN_PENDING = WM_APP + 1; // 他プロセスから受けたファイルを安全なタイミングで開く独自メッセージ
   WM_VM_STARTUP_OPEN = WM_APP + 2; // フォーム表示後に起動時ファイルを開く独自メッセージ
+  WM_VM_NAVIGATE = WM_APP + 3; // マウス戻る/進むなどからの前後動画移動を遅延実行する独自メッセージ
 
 type
   TVideoMinerMainForm = class(TForm)
@@ -96,6 +97,10 @@ type
     FStartupOpenTimer                : TTimer;                          // 初回描画後に起動時 open を遅延実行するタイマー
     FTitleIcon                       : TImage;                          // 独自タイトルバー左端のアイコン
     FFrameGuideController            : TVideoMinerFrameGuideController; // hover 用フォーム枠制御
+    FLoadingVideo                    : Boolean;                         // 動画読み込み処理中か
+    FPreviousApplicationOnMessage    : TMessageEvent;                   // 前段のアプリ全体メッセージフック
+    // 子コントロールへ届いたマウス戻る/進む系入力を前後動画移動として扱う
+    procedure ApplicationMessage(var Msg: TMsg; var Handled: Boolean);
     // 独自タイトルバー左端のアプリアイコンを作る
     procedure InitializeTitleIcon;
     // タイトルバーのボタン背景色を切り替える
@@ -173,6 +178,8 @@ type
     procedure FinishPlaybackAtEnd;
     // 別プロセスから渡されたファイル名を受け取る
     procedure WMCopyData(var Message: TWMCopyData); message WM_COPYDATA;
+    // マウスの戻る/進むボタンを前後動画移動として扱う
+    procedure WMXButtonDown(var Message: TMessage); message WM_XBUTTONDOWN;
     // 通常表示時の移動を window controller へ通知する
     procedure WMMove(var Message: TWMMove); message WM_MOVE;
     // 枠なしフォームのリサイズ hit test を window controller へ委譲する
@@ -183,6 +190,8 @@ type
     procedure WMOpenPending(var Message: TMessage); message WM_VM_OPEN_PENDING;
     // 起動時のファイル読み込みをフォーム表示後に実行する
     procedure WMStartupOpen(var Message: TMessage); message WM_VM_STARTUP_OPEN;
+    // 入力フックから予約された前後動画移動を実行する
+    procedure WMNavigate(var Message: TMessage); message WM_VM_NAVIGATE;
     // 通常表示時のサイズ変更を window controller へ通知する
     procedure WMSize(var Message: TWMSize); message WM_SIZE;
     // VCL のフォーカス移動処理より先に Tab を一覧切り替えとして拾う
@@ -219,6 +228,107 @@ const
   MIN_FORM_HEIGHT               = 360;        // 動画表示と下部操作バーを残せる最小フォーム高さ
 
 {$R *.dfm}
+
+procedure TVideoMinerMainForm.ApplicationMessage(var Msg: TMsg;
+  var Handled: Boolean);
+const
+  VK_BROWSER_BACK = $A6;
+  VK_BROWSER_FORWARD = $A7;
+  WM_XBUTTONDBLCLK = $020D;
+var
+  AppCommand: Word;
+  Button: Word;
+  ClassName: array[0..127] of Char;
+  ClassText: string;
+  ShouldLog: Boolean;
+begin
+  if Assigned(FPreviousApplicationOnMessage) then
+    FPreviousApplicationOnMessage(Msg, Handled);
+
+  Button := Word((NativeUInt(Msg.wParam) shr 16) and $FFFF);
+  AppCommand := Word((NativeUInt(Msg.lParam) shr 16) and $FFFF);
+  ShouldLog := False;
+  case Msg.message of
+    WM_XBUTTONDOWN, WM_XBUTTONUP, WM_XBUTTONDBLCLK, WM_APPCOMMAND:
+      ShouldLog := True;
+    WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP:
+      ShouldLog := (Msg.wParam = VK_BROWSER_BACK) or
+        (Msg.wParam = VK_BROWSER_FORWARD);
+  end;
+
+  if ShouldLog and VideoMinerDebugLogEnabled then
+  begin
+    ClassText := '';
+    if (Msg.hwnd <> 0) and (GetClassName(Msg.hwnd, ClassName,
+      Length(ClassName)) > 0) then
+      ClassText := ClassName;
+
+    WriteVideoMinerDebugLog(Format(
+      'input_msg hwnd=$%s class="%s" msg=$%s wparam=$%s lparam=$%s key=%d xbutton=%d appcmd_raw=$%s handled=%s',
+      [IntToHex(NativeInt(Msg.hwnd), 8), ClassText, IntToHex(Msg.message, 4),
+       IntToHex(NativeInt(Msg.wParam), 8), IntToHex(NativeInt(Msg.lParam), 8),
+       Msg.wParam and $FFFF, Button, IntToHex(AppCommand, 4),
+       BoolToStr(Handled, True)]));
+  end;
+
+  if Handled or (FNavigationController = nil) then
+    Exit;
+
+  if Msg.message = WM_XBUTTONDOWN then
+  begin
+    case Button of
+      1:
+        begin
+          Handled := True;
+          if FLoadingVideo then
+            WriteVideoMinerDebugLog('input_xbutton_ignore_loading delta=-1')
+          else
+          begin
+            PostMessage(Handle, WM_VM_NAVIGATE, 1, 0);
+            WriteVideoMinerDebugLog('input_xbutton_queue delta=-1');
+          end;
+        end;
+      2:
+        begin
+          Handled := True;
+          if FLoadingVideo then
+            WriteVideoMinerDebugLog('input_xbutton_ignore_loading delta=1')
+          else
+          begin
+            PostMessage(Handle, WM_VM_NAVIGATE, 2, 0);
+            WriteVideoMinerDebugLog('input_xbutton_queue delta=1');
+          end;
+        end;
+    end;
+  end
+  else if (Msg.message = WM_KEYDOWN) or (Msg.message = WM_SYSKEYDOWN) then
+  begin
+    case Msg.wParam of
+      VK_BROWSER_BACK:
+        begin
+          Handled := True;
+          if FLoadingVideo then
+            WriteVideoMinerDebugLog('input_browser_key_ignore_loading delta=-1')
+          else
+          begin
+            PostMessage(Handle, WM_VM_NAVIGATE, 1, 0);
+            WriteVideoMinerDebugLog('input_browser_key_queue delta=-1');
+          end;
+        end;
+      VK_BROWSER_FORWARD:
+        begin
+          Handled := True;
+          if FLoadingVideo then
+            WriteVideoMinerDebugLog('input_browser_key_ignore_loading delta=1')
+          else
+          begin
+            PostMessage(Handle, WM_VM_NAVIGATE, 2, 0);
+            WriteVideoMinerDebugLog('input_browser_key_queue delta=1');
+          end;
+        end;
+    end;
+  end;
+end;
 
 // フォーム生成時にデコーダを用意する
 procedure TVideoMinerMainForm.FormCreate(Sender: TObject);
@@ -387,6 +497,8 @@ begin
   StepWatch := TStopwatch.StartNew;
 {$ENDIF}
   FInfoController.SetStatusCaption('No video loaded');
+  FPreviousApplicationOnMessage := Application.OnMessage;
+  Application.OnMessage := ApplicationMessage;
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format('form_create drop_agent_status_ms=%.3f total_ms=%.3f',
     [StepWatch.Elapsed.TotalMilliseconds, TotalWatch.Elapsed.TotalMilliseconds]));
@@ -398,6 +510,7 @@ end;
 // フォーム破棄時にデコーダを解放する
 procedure TVideoMinerMainForm.FormDestroy(Sender: TObject);
 begin
+  Application.OnMessage := FPreviousApplicationOnMessage;
   if FChapterController <> nil then
   begin
     FChapterController.SaveManualChapterState;
@@ -823,6 +936,14 @@ var
 {$ENDIF}
 begin
   Result := False;
+  if FLoadingVideo then
+  begin
+    WriteVideoMinerDebugLog('open_skip already_loading file="' +
+      ExtractFileName(FileName) + '"');
+    Exit;
+  end;
+  FLoadingVideo := True;
+  try
 {$IFDEF DEBUG}
   TotalWatch := TStopwatch.StartNew;
 
@@ -909,6 +1030,9 @@ begin
   finally
     if FVideoView <> nil then
       FVideoView.EndLoadingIndicator;
+  end;
+  finally
+    FLoadingVideo := False;
   end;
 end;
 
@@ -1025,6 +1149,12 @@ end;
 // 再生 tick 処理を再生 controller へ委譲する
 procedure TVideoMinerMainForm.TimerPlaybackTimer(Sender: TObject);
 begin
+  if FLoadingVideo then
+  begin
+    WriteVideoMinerDebugLog('playback_timer_skip loading');
+    Exit;
+  end;
+
   try
     FPlaybackController.Tick(FDecoder, FMediaSession.VideoFile, FMediaSession.EndAction, FSeeking,
       FMediaSession.SeekMaxMs, FMediaSession.LoopSegmentStartMs, FMediaSession.LoopSegmentEndMs,
@@ -1307,6 +1437,65 @@ begin
     FNavigationController.HandleKeyUp(Key);
 end;
 
+procedure TVideoMinerMainForm.WMXButtonDown(var Message: TMessage);
+const
+  VIDEO_MINER_XBUTTON_BACK = 1;
+  VIDEO_MINER_XBUTTON_FORWARD = 2;
+var
+  Button: Word;
+begin
+  Message.Result := 0;
+  Button := Word((NativeUInt(Message.WParam) shr 16) and $FFFF);
+  if VideoMinerDebugLogEnabled then
+    WriteVideoMinerDebugLog(Format(
+      'mainform_wm_xbutton_down wparam=$%s lparam=$%s xbutton=%d',
+      [IntToHex(NativeInt(Message.WParam), 8),
+       IntToHex(NativeInt(Message.LParam), 8), Button]));
+
+  if FNavigationController = nil then
+    Exit;
+
+  case Button of
+    VIDEO_MINER_XBUTTON_BACK:
+      begin
+        PostMessage(Handle, WM_VM_NAVIGATE, VIDEO_MINER_XBUTTON_BACK, 0);
+        Message.Result := 1;
+      end;
+    VIDEO_MINER_XBUTTON_FORWARD:
+      begin
+        PostMessage(Handle, WM_VM_NAVIGATE, VIDEO_MINER_XBUTTON_FORWARD, 0);
+        Message.Result := 1;
+      end;
+  end;
+end;
+
+procedure TVideoMinerMainForm.WMNavigate(var Message: TMessage);
+begin
+  if FLoadingVideo then
+  begin
+    WriteVideoMinerDebugLog('navigate_message_ignore_loading');
+    Message.Result := 1;
+    Exit;
+  end;
+
+  if FNavigationController <> nil then
+  begin
+    case Message.WParam of
+      1:
+        begin
+          WriteVideoMinerDebugLog('navigate_message delta=-1');
+          FNavigationController.NavigateBy(-1);
+        end;
+      2:
+        begin
+          WriteVideoMinerDebugLog('navigate_message delta=1');
+          FNavigationController.NavigateBy(1);
+        end;
+    end;
+  end;
+  Message.Result := 1;
+end;
+
 procedure TVideoMinerMainForm.WMOpenPending(var Message: TMessage);
 begin
   if FExternalOpenController <> nil then
@@ -1358,6 +1547,16 @@ var
   FrameAlreadyShown: Boolean;
   FastSeek: Boolean;
 begin
+  if FLoadingVideo then
+  begin
+    if FRestartPlaybackTimer <> nil then
+      FRestartPlaybackTimer.Enabled := False;
+    if FPlaybackController <> nil then
+      FPlaybackController.ClearRestart;
+    WriteVideoMinerDebugLog('restart_playback_skip loading');
+    Exit;
+  end;
+
   if not FPlaybackController.ConsumeRestart(TargetMs, FrameAlreadyShown,
     FastSeek) then
     Exit;

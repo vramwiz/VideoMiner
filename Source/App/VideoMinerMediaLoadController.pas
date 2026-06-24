@@ -170,7 +170,10 @@ begin
   if FPlaybackTimer <> nil then
     FPlaybackTimer.Enabled := False;
   if FPlaybackController <> nil then
+  begin
+    FPlaybackController.StopPlayback;
     FPlaybackController.ClearRestart;
+  end;
   if FAudioPlayback <> nil then
     FAudioPlayback.Stop;
   if FPreviewDecoder <> nil then
