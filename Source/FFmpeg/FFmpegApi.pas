@@ -435,13 +435,9 @@ class function TFFmpegApi.LoadDll(const DllPath, DllName: string): HMODULE;
 var
   FullName  : string;   // ロード対象DLLのフルパス
   ErrorCode : Cardinal; // LoadLibrary失敗時のWindowsエラーコード
-const
-  LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR = $00000100;
-  LOAD_LIBRARY_SEARCH_DEFAULT_DIRS = $00001000;
 begin
   FullName := DllPath + DllName;
-  Result := LoadLibraryEx(PChar(FullName), 0,
-    LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR or LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+  Result := LoadLibrary(PChar(FullName));
   if Result = 0 then
   begin
     ErrorCode := GetLastError;
@@ -467,6 +463,7 @@ begin
     Exit;
 
   DllPath := ModuleDirectory;
+  SetDllDirectory(PChar(DllPath));
 
   FAvUtil := LoadDll(DllPath, 'avutil-60.dll');
   FSwResample := LoadDll(DllPath, 'swresample-6.dll');
