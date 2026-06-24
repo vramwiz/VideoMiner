@@ -16,6 +16,9 @@ function LoadVideoMinerThumbnailCache(const FileName: string;
 procedure SaveVideoMinerThumbnailCache(const FileName: string;
   Bitmap: Vcl.Graphics.TBitmap);
 
+// 保存済みサムネイルキャッシュをすべて削除し、削除件数を返す。
+function ClearVideoMinerThumbnailCache: Integer;
+
 implementation
 
 // PNG 形式のサムネイルディスクキャッシュを使う。
@@ -160,6 +163,39 @@ begin
     SaveBitmapToPng(CacheName, Bitmap);
   except
     // キャッシュ保存失敗は一覧表示の本体機能を止めない。
+  end;
+{$ENDIF}
+end;
+
+function ClearVideoMinerThumbnailCache: Integer;
+{$IFDEF THUMBNAIL_DISK_CACHE_ENABLED}
+var
+  CacheDir: string;
+  CacheName: string;
+  FindData: TSearchRec;
+{$ENDIF}
+begin
+  Result := 0;
+{$IFDEF THUMBNAIL_DISK_CACHE_ENABLED}
+  CacheDir := IncludeTrailingPathDelimiter(CacheRootDir);
+  if System.SysUtils.FindFirst(CacheDir + '*.png', faAnyFile, FindData) <> 0 then
+    Exit;
+
+  try
+    repeat
+      if (FindData.Name = '.') or (FindData.Name = '..') then
+        Continue;
+
+      CacheName := CacheDir + FindData.Name;
+      try
+        TFile.Delete(CacheName);
+        Inc(Result);
+      except
+        // 削除できないキャッシュがあっても、他のキャッシュ削除は続ける。
+      end;
+    until System.SysUtils.FindNext(FindData) <> 0;
+  finally
+    System.SysUtils.FindClose(FindData);
   end;
 {$ENDIF}
 end;

@@ -70,6 +70,8 @@ type
     procedure ActivateSelectedTile;
     // 選択中のフォルダ履歴を履歴から削除する
     procedure DeleteSelectedFolderHistory;
+    // ディスク上のサムネイルキャッシュを削除する
+    procedure ClearThumbnailCache;
     // フォルダ閲覧履歴と選択中フォルダの一覧を再読み込みする
     procedure RefreshFolderHistory;
     // 表示中一覧で現在開いている動画の位置を返す
@@ -335,6 +337,15 @@ begin
   SetLength(FThumbnails, 0);
   SetLength(FThumbnailStates, 0);
   SetLength(FThumbnailFiles, 0);
+end;
+
+procedure TVideoMinerThumbnailBrowser.ClearThumbnailCache;
+begin
+  StopPreview;
+  ClearVideoMinerThumbnailCache;
+  ClearThumbnails;
+  EnsureThumbnailSlots;
+  Invalidate;
 end;
 
 procedure TVideoMinerThumbnailBrowser.EnsureThumbnailSlots;
@@ -1219,6 +1230,14 @@ var
   Cols: Integer;
 begin
   Result := False;
+  if (Key = VK_F5) and (Shift = [ssCtrl]) then
+  begin
+    ClearThumbnailCache;
+    Key := 0;
+    Result := True;
+    Exit;
+  end;
+
   if Shift <> [] then
     Exit;
 
