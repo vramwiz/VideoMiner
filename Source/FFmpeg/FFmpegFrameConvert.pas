@@ -6,7 +6,7 @@
 interface
 
 uses
-  Vcl.Graphics, FFmpegApi;
+  System.SysUtils, Vcl.Graphics, FFmpegApi;
 
 // AVFrame を呼び出し側が指定した先頭行と符号付き stride の BGRX32 表示バッファへ変換する。
 procedure CopyFrameToBgrx32Buffer(
@@ -18,6 +18,21 @@ procedure CopyFrameToBgrx32Buffer(
   var CachedSrcHeight: Integer;
   var CachedSrcFormat: Integer;
   var CachedDstFormat: Integer
+);
+
+// AVFrame を再利用可能な一時バッファを使って BGRX32 表示バッファへ変換する。
+procedure CopyFrameToBgrx32BufferCached(
+  Frame: PAVFrame;
+  Buffer: Pointer;
+  BufferStride: Integer;
+  var ScaleContext: Pointer;
+  var CachedSrcWidth: Integer;
+  var CachedSrcHeight: Integer;
+  var CachedSrcFormat: Integer;
+  var CachedDstFormat: Integer;
+  var TempBuffer: TBytes;
+  var TempStride: Integer;
+  var TempHeight: Integer
 );
 
 // AVFrame を呼び出し側が指定した先頭行と符号付き stride の BGR24 表示バッファへ変換する。
@@ -85,7 +100,7 @@ procedure CopyFrameToBitmapCached(
 implementation
 
 uses
-  System.SysUtils;
+  System.Diagnostics, VideoMinerDebugLog;
 
 // 変換元フレームと出力バッファが有効か確認する。
 procedure EnsureFrameAndBuffer(Frame: PAVFrame; Buffer: Pointer);
@@ -262,7 +277,7 @@ begin
 end;
 
 // AVFrame を呼び出し側が指定した先頭行と符号付き stride の BGRX32 表示バッファへ変換する。
-procedure CopyFrameToBgrx32Buffer(
+procedure CopyFrameToBgrx32BufferInternal(
   Frame: PAVFrame;
   Buffer: Pointer;
   BufferStride: Integer;
@@ -270,25 +285,55 @@ procedure CopyFrameToBgrx32Buffer(
   var CachedSrcWidth: Integer;
   var CachedSrcHeight: Integer;
   var CachedSrcFormat: Integer;
-  var CachedDstFormat: Integer
+  var CachedDstFormat: Integer;
+  var TempBuffer: TBytes;
+  var CachedTempStride: Integer;
+  var CachedTempHeight: Integer
 );
 var
   DstData     : array[0..3] of PByte;   // sws_scale へ渡す出力 plane
   DstLinesize : array[0..3] of Integer; // sws_scale へ渡す出力 stride
   DstFormat   : Integer;                // FFmpeg の出力ピクセル形式
   RowBytes    : Integer;                // 1 行分の表示バイト数
-  TempBuffer  : TBytes;                 // 負 stride 回避用の一時出力先
   TempStride  : Integer;                // 一時出力先の stride
+  TempResized : Boolean;                // 一時バッファを今回リサイズしたか
+{$IFDEF DEBUG}
+  TotalWatch  : TStopwatch;             // BGRX32 変換全体の計測
+  StepWatch   : TStopwatch;             // sws/copy 個別の計測
+  SwsMs       : Double;                 // sws_scale にかかった時間
+  CopyMs      : Double;                 // 負 stride 回避コピーにかかった時間
+{$ENDIF}
 begin
+{$IFDEF DEBUG}
+  TotalWatch := TStopwatch.StartNew;
+  CopyMs := 0;
+{$ENDIF}
   EnsureFrameAndBuffer(Frame, Buffer);
   if BufferStride = 0 then
     BufferStride := Frame.width * 4;
   DstFormat := AV_PIX_FMT_BGRA;
   RowBytes := Frame.width * 4;
   TempStride := RowBytes;
+  TempResized := False;
 
   if BufferStride < 0 then
-    SetLength(TempBuffer, NativeInt(TempStride) * Frame.height);
+  begin
+    if (CachedTempStride <> TempStride) or
+       (CachedTempHeight <> Frame.height) or
+       (Length(TempBuffer) < NativeInt(TempStride) * Frame.height) then
+    begin
+      SetLength(TempBuffer, NativeInt(TempStride) * Frame.height);
+      CachedTempStride := TempStride;
+      CachedTempHeight := Frame.height;
+      TempResized := True;
+    end;
+  end
+  else if Length(TempBuffer) > 0 then
+  begin
+    SetLength(TempBuffer, 0);
+    CachedTempStride := 0;
+    CachedTempHeight := 0;
+  end;
 
   FillChar(DstData, SizeOf(DstData), 0);
   FillChar(DstLinesize, SizeOf(DstLinesize), 0);
@@ -307,13 +352,78 @@ begin
   EnsureSwsContext(Frame, DstFormat, ScaleContext, CachedSrcWidth, CachedSrcHeight,
     CachedSrcFormat, CachedDstFormat);
 
+{$IFDEF DEBUG}
+  StepWatch := TStopwatch.StartNew;
+{$ENDIF}
   if TFFmpegApi.sws_scale(PSwsContext(ScaleContext), @Frame.data[0], @Frame.linesize[0], 0,
     Frame.height, @DstData[0], @DstLinesize[0]) <= 0 then
     raise Exception.Create('sws_scale failed.');
+{$IFDEF DEBUG}
+  SwsMs := StepWatch.Elapsed.TotalMilliseconds;
+{$ENDIF}
 
   if Length(TempBuffer) > 0 then
+  begin
+{$IFDEF DEBUG}
+    StepWatch := TStopwatch.StartNew;
+{$ENDIF}
     CopyPackedRowsToSignedStride(TempBuffer, TempStride, Buffer, BufferStride,
       RowBytes, Frame.height);
+{$IFDEF DEBUG}
+    CopyMs := StepWatch.Elapsed.TotalMilliseconds;
+{$ENDIF}
+  end;
+
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format(
+    'bgrx32_convert frame=%dx%d fmt=%d dst_stride=%d temp=%s temp_resized=%s sws_ms=%.3f copy_ms=%.3f total_ms=%.3f',
+    [Frame.width, Frame.height, Frame.format, BufferStride,
+     BoolToStr(Length(TempBuffer) > 0, True), BoolToStr(TempResized, True),
+     SwsMs, CopyMs, TotalWatch.Elapsed.TotalMilliseconds]));
+{$ENDIF}
+end;
+
+// AVFrame を呼び出し側が指定した先頭行と符号付き stride の BGRX32 表示バッファへ変換する。
+procedure CopyFrameToBgrx32Buffer(
+  Frame: PAVFrame;
+  Buffer: Pointer;
+  BufferStride: Integer;
+  var ScaleContext: Pointer;
+  var CachedSrcWidth: Integer;
+  var CachedSrcHeight: Integer;
+  var CachedSrcFormat: Integer;
+  var CachedDstFormat: Integer
+);
+var
+  TempBuffer : TBytes;  // 互換入口用の一時バッファ
+  TempStride : Integer; // 互換入口用の一時 stride
+  TempHeight : Integer; // 互換入口用の一時高さ
+begin
+  TempStride := 0;
+  TempHeight := 0;
+  CopyFrameToBgrx32BufferInternal(Frame, Buffer, BufferStride, ScaleContext,
+    CachedSrcWidth, CachedSrcHeight, CachedSrcFormat, CachedDstFormat,
+    TempBuffer, TempStride, TempHeight);
+end;
+
+// AVFrame を再利用可能な一時バッファを使って BGRX32 表示バッファへ変換する。
+procedure CopyFrameToBgrx32BufferCached(
+  Frame: PAVFrame;
+  Buffer: Pointer;
+  BufferStride: Integer;
+  var ScaleContext: Pointer;
+  var CachedSrcWidth: Integer;
+  var CachedSrcHeight: Integer;
+  var CachedSrcFormat: Integer;
+  var CachedDstFormat: Integer;
+  var TempBuffer: TBytes;
+  var TempStride: Integer;
+  var TempHeight: Integer
+);
+begin
+  CopyFrameToBgrx32BufferInternal(Frame, Buffer, BufferStride, ScaleContext,
+    CachedSrcWidth, CachedSrcHeight, CachedSrcFormat, CachedDstFormat,
+    TempBuffer, TempStride, TempHeight);
 end;
 
 // AVFrame を呼び出し側が指定した先頭行と符号付き stride の BGR24 表示バッファへ変換する。

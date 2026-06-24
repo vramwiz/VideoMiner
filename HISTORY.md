@@ -2,6 +2,21 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-25 QSV 表示経路の内訳計測と一時バッファ再利用
+- QSV/software の BGRX32 表示経路へ Debug 計測を追加した。
+  - `qsv_transfer`: QSV HW frame を CPU frame へ転送した場合の時間。
+  - `next_bgrx32_detail` / `seek_bgrx32_detail`: フレーム転送と BGRX32 変換の時間。
+  - `bgrx32_convert`: `sws_scale`、負 stride 回避コピー、変換全体時間、temp buffer resize の有無。
+- `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` の QSV 計測では、実フレーム形式は `AV_PIX_FMT_QSV` ではなく `NV12(fmt=23)` で、`av_hwframe_transfer_data` は発生していなかった。
+  - QSV の主負担は GPU->CPU 転送ではなく、NV12 -> BGRA の `sws_scale` と負 stride 回避用の一時バッファ確保だった。
+- 負 stride 回避用の BGRX32 一時バッファを毎フレーム確保せず、`TFFmpegDecoderContext` に保持して再利用するようにした。
+  - 4K30 QSV: `decode_ms` p50 は約 26.3ms から約 19.4ms、p90 は約 30.9ms から約 23.7ms へ改善。
+  - 4K30 QSV: `next_convert_ms` p50 は約 23.3ms から約 15.5ms、`bgrx32_convert total_ms` p50 は約 21.5ms から約 14.9ms へ改善。
+  - 4K30 QSV: drop は最大 1 から 0 へ改善。
+  - 4K30 software: `next_convert_ms` p50 は約 14.4ms から約 7.0ms、`bgrx32_convert total_ms` p50 は約 12.8ms から約 6.4ms へ改善。
+- `C:\Users\vramw\Videos\test_out_r.mp4` でも再確認し、縦動画の負 stride 経路は初回だけ `temp_resized=True`、以降は `False` で再利用され、クラッシュせず終了した。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+
 ## 2026-06-25 4K30 高負荷テスト動画での GPU/CPU 比較
 - `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` を作成し、Debug 版で `VideoDecoderMode=qsv` と `software` を強制して比較した。
   - H.264 High / yuv420p / 3840x2160 / 30fps / 8 秒 / 240 frames / 約 40Mbps。

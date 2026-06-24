@@ -21,7 +21,8 @@ function DecodeNextFrameToBgrx32Optional(
 implementation
 
 uses
-  System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo;
+  System.Diagnostics, System.SysUtils, FFmpegApi, FFmpegFrameConvert,
+  FFmpegQsvDecode, FFmpegStreamInfo, VideoMinerDebugLog;
 
 
 // 次の動画フレームを読み、必要なら BGRX32 バッファへ変換する。
@@ -43,6 +44,12 @@ var
   Ret: Integer;
   DidTransfer: Boolean;
   TransferErrorMessage: string;
+{$IFDEF DEBUG}
+  TransferWatch: TStopwatch;
+  ConvertWatch: TStopwatch;
+  TransferMs: Double;
+  ConvertMs: Double;
+{$ENDIF}
 
   function FinishFrame(const SourceName: string): Boolean;
   begin
@@ -51,15 +58,34 @@ var
     begin
       ConvertSourceFrame := Frame;
       DidTransfer := False;
+{$IFDEF DEBUG}
+      TransferMs := 0;
+      ConvertMs := 0;
+      TransferWatch := TStopwatch.StartNew;
+{$ENDIF}
       if not TransferFrameToCpuIfNeeded(Frame, PAVFrame(Context.TransferFrame),
         ConvertSourceFrame, DidTransfer, TransferErrorMessage) then
       begin
         ErrorMessage := 'Failed to transfer video frame: ' + TransferErrorMessage;
         Exit;
       end;
-      CopyFrameToBgrx32Buffer(ConvertSourceFrame, Buffer, BufferStride,
+{$IFDEF DEBUG}
+      TransferMs := TransferWatch.Elapsed.TotalMilliseconds;
+      ConvertWatch := TStopwatch.StartNew;
+{$ENDIF}
+      CopyFrameToBgrx32BufferCached(ConvertSourceFrame, Buffer, BufferStride,
         Context.DirectSwsContext, Context.DirectSwsSrcWidth, Context.DirectSwsSrcHeight,
-        Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat);
+        Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat,
+        Context.Bgrx32TempBuffer, Context.Bgrx32TempStride,
+        Context.Bgrx32TempHeight);
+{$IFDEF DEBUG}
+      ConvertMs := ConvertWatch.Elapsed.TotalMilliseconds;
+      WriteVideoMinerSlowLog(Format(
+        'next_bgrx32_detail source=%s frame=%dx%d fmt=%d linesize0=%d transferred=%s transfer_ms=%.3f convert_ms=%.3f buffer_stride=%d',
+        [SourceName, ConvertSourceFrame.width, ConvertSourceFrame.height,
+         ConvertSourceFrame.format, ConvertSourceFrame.linesize[0],
+         BoolToStr(DidTransfer, True), TransferMs, ConvertMs, BufferStride]));
+{$ENDIF}
     end;
 
     PositionMs := StreamTimestampToMs(Stream, Frame.pts);

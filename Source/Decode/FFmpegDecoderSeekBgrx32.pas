@@ -29,8 +29,8 @@ function DecodeFrameToBgrx32Fast(
 implementation
 
 uses
-  System.SysUtils, FFmpegApi, FFmpegFrameConvert, FFmpegQsvDecode,
-  FFmpegStreamInfo, VideoMinerDebugLog;
+  System.Diagnostics, System.SysUtils, FFmpegApi, FFmpegFrameConvert,
+  FFmpegQsvDecode, FFmpegStreamInfo, VideoMinerDebugLog;
 
 // フレームの表示時刻を、取得できる範囲で最も信頼できる値として返す。
 function DisplayFrameTimestamp(Frame: PAVFrame): Int64;
@@ -81,6 +81,12 @@ var
   SeekFlags: Integer;
   DidTransfer: Boolean;
   TransferErrorMessage: string;
+{$IFDEF DEBUG}
+  TransferWatch: TStopwatch;
+  ConvertWatch: TStopwatch;
+  TransferMs: Double;
+  ConvertMs: Double;
+{$ENDIF}
 begin
   ErrorMessage := '';
   Result := False;
@@ -146,6 +152,9 @@ begin
           begin
             ConvertSourceFrame := Frame;
             DidTransfer := False;
+{$IFDEF DEBUG}
+            TransferWatch := TStopwatch.StartNew;
+{$ENDIF}
             if not TransferFrameToCpuIfNeeded(Frame, PAVFrame(Context.TransferFrame),
               ConvertSourceFrame, DidTransfer, TransferErrorMessage) then
             begin
@@ -156,18 +165,34 @@ begin
               Exit;
             end;
 {$IFDEF DEBUG}
+            TransferMs := TransferWatch.Elapsed.TotalMilliseconds;
+{$ENDIF}
+{$IFDEF DEBUG}
             WriteVideoMinerSlowLog(Format(
-              'seek_bgrx32_copy requested_ms=%d target_ts=%d frame_ts=%d frame_ms=%d fast=%s frame=%dx%d fmt=%d linesize0=%d data0=%p buffer=%p stride=%d transferred=%s',
+              'seek_bgrx32_copy requested_ms=%d target_ts=%d frame_ts=%d frame_ms=%d fast=%s frame=%dx%d fmt=%d linesize0=%d data0=%p buffer=%p stride=%d transferred=%s transfer_ms=%.3f',
               [PositionMs, TargetTs, FrameTs, StreamTimestampToMs(Stream,
                FrameTs), BoolToStr(FastSeek, True),
                ConvertSourceFrame.width, ConvertSourceFrame.height,
                ConvertSourceFrame.format, ConvertSourceFrame.linesize[0],
                ConvertSourceFrame.data[0], Buffer, BufferStride,
-               BoolToStr(DidTransfer, True)]));
+               BoolToStr(DidTransfer, True), TransferMs]));
 {$ENDIF}
-            CopyFrameToBgrx32Buffer(ConvertSourceFrame, Buffer, BufferStride,
+{$IFDEF DEBUG}
+            ConvertWatch := TStopwatch.StartNew;
+{$ENDIF}
+            CopyFrameToBgrx32BufferCached(ConvertSourceFrame, Buffer, BufferStride,
               Context.DirectSwsContext, Context.DirectSwsSrcWidth, Context.DirectSwsSrcHeight,
-              Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat);
+              Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat,
+              Context.Bgrx32TempBuffer, Context.Bgrx32TempStride,
+              Context.Bgrx32TempHeight);
+{$IFDEF DEBUG}
+            ConvertMs := ConvertWatch.Elapsed.TotalMilliseconds;
+            WriteVideoMinerSlowLog(Format(
+              'seek_bgrx32_detail requested_ms=%d frame_ms=%d transferred=%s transfer_ms=%.3f convert_ms=%.3f buffer_stride=%d',
+              [PositionMs, StreamTimestampToMs(Stream, FrameTs),
+               BoolToStr(DidTransfer, True), TransferMs, ConvertMs,
+               BufferStride]));
+{$ENDIF}
             if DidTransfer and (Context.TransferFrame <> nil) then
               TFFmpegApi.av_frame_unref(PAVFrame(Context.TransferFrame));
             TFFmpegApi.av_frame_unref(Frame);

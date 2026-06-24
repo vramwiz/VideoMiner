@@ -6,6 +6,7 @@
 interface
 
 uses
+  System.SysUtils,
   FFmpegDecoderTypes;
 
 type
@@ -31,6 +32,9 @@ type
     DirectSwsSrcHeight      : Integer;    // DirectSwsContext を作った元フレーム高さ
     DirectSwsSrcFormat      : Integer;    // DirectSwsContext を作った元ピクセル形式
     DirectSwsDstFormat      : Integer;    // DirectSwsContext を作った出力ピクセル形式
+    Bgrx32TempBuffer        : TBytes;     // 負 stride 回避で再利用する BGRX32 一時バッファ
+    Bgrx32TempStride        : Integer;    // BGRX32 一時バッファの stride
+    Bgrx32TempHeight        : Integer;    // BGRX32 一時バッファの高さ
     VideoDecoderName        : string;     // 実際に開いた動画デコーダ名
     VideoUsesQsv            : Boolean;    // 動画デコードに QSV を使っているか
     Info                    : TVideoInfo; // UI 層へ返す動画/音声情報

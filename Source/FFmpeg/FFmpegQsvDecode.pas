@@ -27,6 +27,9 @@ function TransferFrameToCpuIfNeeded(SourceFrame, TransferFrame: PAVFrame;
 
 implementation
 
+uses
+  System.Diagnostics, System.SysUtils, VideoMinerDebugLog;
+
 // codec id から対応する QSV decoder 名を返す。
 function QsvDecoderNameForCodecId(CodecId: Integer): AnsiString;
 begin
@@ -68,6 +71,9 @@ function TransferFrameToCpuIfNeeded(SourceFrame, TransferFrame: PAVFrame;
   out CpuFrame: PAVFrame; out DidTransfer: Boolean; out ErrorMessage: string): Boolean;
 var
   Ret : Integer; // FFmpeg API の戻り値
+{$IFDEF DEBUG}
+  Watch : TStopwatch; // HW frame 転送時間の計測
+{$ENDIF}
 begin
   CpuFrame := SourceFrame;
   DidTransfer := False;
@@ -88,6 +94,9 @@ begin
   end;
 
   TFFmpegApi.av_frame_unref(TransferFrame);
+{$IFDEF DEBUG}
+  Watch := TStopwatch.StartNew;
+{$ENDIF}
   Ret := TFFmpegApi.av_hwframe_transfer_data(TransferFrame, SourceFrame, 0);
   if Ret < 0 then
   begin
@@ -98,6 +107,13 @@ begin
 
   CpuFrame := TransferFrame;
   DidTransfer := True;
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format(
+    'qsv_transfer frame=%dx%d src_fmt=%d dst_fmt=%d src_linesize0=%d dst_linesize0=%d transfer_ms=%.3f',
+    [SourceFrame.width, SourceFrame.height, SourceFrame.format,
+     TransferFrame.format, SourceFrame.linesize[0], TransferFrame.linesize[0],
+     Watch.Elapsed.TotalMilliseconds]));
+{$ENDIF}
 end;
 
 end.
