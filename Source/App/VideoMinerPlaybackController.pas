@@ -53,11 +53,16 @@ type
     FVideoView                : TVideoMinerVideoView;     // 表示更新と scratch frame 表示を行う動画ビュー
     FPlaybackTimer            : TTimer;                   // 再生 tick を発火する timer
     FPreviewDecoder           : TFFmpegDecoder;           // seek preview 用に使うデコーダ
+    FTimerPeriodActive        : Boolean;                  // 再生中に高分解能 timer を要求しているか
+    procedure BeginPlaybackTimerPeriod;
+    procedure EndPlaybackTimerPeriod;
+    procedure SetPlaybackTimerEnabled(Value: Boolean);
   public
     // timer、音声再生、動画ビュー、preview decoder を受け取る
     constructor Create(PlaybackTimer, RestartTimer: TTimer;
       AudioPlayback: TVideoMinerAudioPlayback; VideoView: TVideoMinerVideoView;
       PreviewDecoder: TFFmpegDecoder);
+    destructor Destroy; override;
     // 再生中、または seek 後の再開待ちかを返す
     function ActiveOrPending: Boolean;
     // seek 後の再開予約を破棄する
@@ -192,7 +197,8 @@ type
 implementation
 
 uses
-  System.Math, System.SysUtils, VideoMinerDebugLog, VideoMinerPlaybackTiming;
+  System.Math, System.SysUtils, Winapi.MMSystem, VideoMinerDebugLog,
+  VideoMinerPlaybackTiming;
 
 const
   SLOW_PREVIEW_LOG_MS           = 120;  // preview frame 表示を slow log に出す閾値 ms
@@ -203,6 +209,7 @@ const
   RATE_SLOW_LOG_MS              = 50;   // 倍速 tick ログを即時出力する処理時間 ms
   PREVIEW_NEXT_MAX_STEP_MS      = 80;   // preview decoder の順方向読みで代替する最大移動幅 ms
   PREVIEW_POSITION_TOLERANCE_MS = 3;    // preview decoder 位置と表示位置を同一視する許容誤差 ms
+  VIDEO_AHEAD_SKIP_TOLERANCE_MS = 5;    // 音声より少し先の映像を進めず待つ許容差 ms
 
 constructor TVideoMinerPlaybackController.Create(PlaybackTimer,
   RestartTimer: TTimer; AudioPlayback: TVideoMinerAudioPlayback;
@@ -225,6 +232,50 @@ begin
   FRestartPositionMs := -1;
   FPreviewShownPositionMs := -1;
   FPreviewShownGeneration := -1;
+  FTimerPeriodActive := False;
+end;
+
+destructor TVideoMinerPlaybackController.Destroy;
+begin
+  SetPlaybackTimerEnabled(False);
+  inherited;
+end;
+
+procedure TVideoMinerPlaybackController.BeginPlaybackTimerPeriod;
+begin
+  if FTimerPeriodActive then
+    Exit;
+
+  if timeBeginPeriod(1) = TIMERR_NOERROR then
+  begin
+    FTimerPeriodActive := True;
+    WriteVideoMinerRateLog('playback_timer_period_begin ms=1');
+  end
+  else
+    WriteVideoMinerRateLog('playback_timer_period_begin_failed ms=1');
+end;
+
+procedure TVideoMinerPlaybackController.EndPlaybackTimerPeriod;
+begin
+  if not FTimerPeriodActive then
+    Exit;
+
+  timeEndPeriod(1);
+  FTimerPeriodActive := False;
+  WriteVideoMinerRateLog('playback_timer_period_end ms=1');
+end;
+
+procedure TVideoMinerPlaybackController.SetPlaybackTimerEnabled(
+  Value: Boolean);
+begin
+  if Value then
+    BeginPlaybackTimerPeriod;
+
+  if FPlaybackTimer <> nil then
+    FPlaybackTimer.Enabled := Value;
+
+  if not Value then
+    EndPlaybackTimerPeriod;
 end;
 
 function TVideoMinerPlaybackController.ActiveOrPending: Boolean;
@@ -319,8 +370,7 @@ begin
   if Decoded then
     Exit;
 
-  if FPlaybackTimer <> nil then
-    FPlaybackTimer.Enabled := False;
+  SetPlaybackTimerEnabled(False);
   if FVideoView <> nil then
     FVideoView.PlaybackActive := False;
   if FAudioPlayback <> nil then
@@ -590,8 +640,7 @@ begin
 
   if not HasVideo then
   begin
-    if FPlaybackTimer <> nil then
-      FPlaybackTimer.Enabled := False;
+    SetPlaybackTimerEnabled(False);
     if FVideoView <> nil then
       FVideoView.PlaybackActive := False;
     Exit;
@@ -1197,9 +1246,9 @@ begin
     FRateClockActive := True;
   end;
 
-  FPlaybackTimer.Interval := VideoMinerPlaybackTimerIntervalMs(
-    VideoInfo.Fps, FPlaybackRate);
-  FPlaybackTimer.Enabled := True;
+  FPlaybackTimer.Interval := Max(1, VideoMinerPlaybackTimerIntervalMs(
+    VideoInfo.Fps, FPlaybackRate) div 2);
+  SetPlaybackTimerEnabled(True);
   FVideoView.PlaybackActive := True;
   WriteVideoMinerRateLog(Format(
     'start_playback_summary file="%s" target_ms=%d frame_already_shown=%s video_reopen=%s video_prepare_ms=%.3f video_seek_ms=%.3f audio_start_ms=%.3f total_ms=%.3f',
@@ -1382,6 +1431,26 @@ begin
   end;
   if DebugLogEnabled or SlowLogEnabled or RateLogEnabled then
     PumpMs := StepWatch.Elapsed.TotalMilliseconds;
+
+  if (AudioPositionMs >= 0) and (CurrentVideoPositionMs >= 0) and
+     (CurrentVideoPositionMs > AudioPositionMs + VIDEO_AHEAD_SKIP_TOLERANCE_MS) then
+  begin
+    UpdatingSeek := True;
+    try
+      SeekPositionMs := SeekPositionForTick(CurrentVideoPositionMs,
+        AudioPositionMs, SeekMaxMs);
+    finally
+      UpdatingSeek := False;
+    end;
+    if Assigned(UpdatePlaybackProgress) then
+      UpdatePlaybackProgress(SeekPositionMs);
+    if DebugLogEnabled then
+      WriteVideoMinerDebugLog(Format(
+        'playback_tick_wait_audio file="%s" audio_ms=%d video_ms=%d ahead_ms=%d pump_ms=%.3f timer_interval=%d',
+        [ExtractFileName(VideoFile), AudioPositionMs, CurrentVideoPositionMs,
+         CurrentVideoPositionMs - AudioPositionMs, PumpMs, FPlaybackTimer.Interval]));
+    Exit;
+  end;
 
   PositionMs := -1;
   DropCount := 0;
@@ -1611,8 +1680,7 @@ procedure TVideoMinerPlaybackController.StopForSeek;
 begin
   if FAudioPlayback <> nil then
     FAudioPlayback.SilenceOutput;
-  if FPlaybackTimer <> nil then
-    FPlaybackTimer.Enabled := False;
+  SetPlaybackTimerEnabled(False);
   FRateClockActive := False;
   ClearRestart;
   if FAudioPlayback <> nil then
@@ -1621,8 +1689,7 @@ end;
 
 procedure TVideoMinerPlaybackController.StopAtEnd;
 begin
-  if FPlaybackTimer <> nil then
-    FPlaybackTimer.Enabled := False;
+  SetPlaybackTimerEnabled(False);
   FRateClockActive := False;
   ClearRestart;
   if FAudioPlayback <> nil then
@@ -1633,8 +1700,7 @@ end;
 
 procedure TVideoMinerPlaybackController.StopPlayback;
 begin
-  if FPlaybackTimer <> nil then
-    FPlaybackTimer.Enabled := False;
+  SetPlaybackTimerEnabled(False);
   if FVideoView <> nil then
     FVideoView.PlaybackActive := False;
   FRateClockActive := False;

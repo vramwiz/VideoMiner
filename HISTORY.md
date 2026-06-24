@@ -2,6 +2,44 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-24 Smart App Control / Inno Setup 対策
+- ZIP 展開版の起動は問題ないため、アプリ本体より Inno Setup 版インストーラの評価が原因である可能性が高いと判断した。
+- Smart App Control で疑われやすい挙動を減らすため、FFmpeg DLL 読み込み処理を見直した。
+  - `SetDllDirectory` でプロセス全体の DLL 探索パスを変更する処理を廃止した。
+  - FFmpeg DLL は実行ファイルフォルダ内のフルパスを `LoadLibraryEx` + `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR` / `LOAD_LIBRARY_SEARCH_DEFAULT_DIRS` で明示ロードするようにした。
+- Inno Setup スクリプトを Smart App Control の切り分け用に低刺激化した。
+  - インストール先を `Program Files` からユーザー領域の `{localappdata}\Programs\VideoMiner` に変更し、`PrivilegesRequired=lowest` を指定した。
+  - HKCR の動画ファイル関連付け登録を外した。
+  - インストール後の自動起動を外した。
+  - スタートメニュー項目名の文字化けを ASCII 表記に修正した。
+- ZIP 版で問題がないため、サムネイルディスクキャッシュの新規保存は通常通り有効のままとした。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+- `Release Win64` ビルド成功。既存の Release 固有ヒント警告は残るが、エラーは 0。
+- Inno Setup 6.7.0 で `Setup\Output\VideoMiner_Setup.exe` の生成成功。
+
+## 2026-06-24 アップデート直後の初回起動フリーズ対策
+- アップデート直後またはインストール先変更直後の初回起動だけ、前回動画の自動復元をスキップするようにした。
+- 背景:
+  - ZIP 展開版は問題なく、Inno Setup 版のアップデート直後 1 回目だけ固まり、2 回目以降は正常という症状。
+  - 未署名 EXE/DLL の初回検査やインストール直後のファイルスキャンと、前回動画の自動ロードが重なると UI が固まって見える可能性が高い。
+- `VideoMiner.ini` の `[VideoMiner] StartupExePath` に起動 EXE パスを保存し、初回またはパス変更時は自動復元を行わず、次回以降は従来通り前回動画を復元する。
+
+## 2026-06-24 動画再生が少し遅く感じる問題の調査と対策
+- 最後に再生した `\\taketani\bbb\Balloon\test4ff182g.mp4` を Debug 版で開き、`VIDEOMINER_DEBUG_LOG=1` / `VIDEOMINER_SLOW_LOG=1` / `VIDEOMINER_RATE_LOG=1` で再生ログを取得した。
+- 実際のデコードは `h264_qsv` で、Intel QSV が使われていた。
+- 修正前ログ:
+  - `TimerPlayback.Interval=33` に対して実発火間隔は平均約 47.2ms。
+  - デコード自体は中央値約 8.4ms で 30fps の 33ms 枠内。
+  - 205 tick 中 82 tick でフレーム drop が発生し、表示更新が粗くなっていた。
+- 原因はデコード速度ではなく、VCL `TTimer` の発火が 30fps 再生には粗く、映像 tick が音声時計に対して遅れやすいこと。
+- 対策:
+  - 再生中だけ `timeBeginPeriod(1)` を要求し、停止時に `timeEndPeriod(1)` で戻すようにした。
+  - 再生 timer interval をフレーム時間の半分にし、音声位置より映像が少し先行している場合はその tick のデコードを待つようにした。
+- 修正後ログ:
+  - 表示 tick 間隔は平均約 33.7ms。
+  - デコード中央値は約 6.9ms。
+  - フレーム drop は合計 3 回まで減少。
+
 ## 2026-06-24 フォルダ履歴タイルの過去フォルダ代表サムネイル修正
 - サムネイル一覧 1 行目のフォルダ履歴で、現在開いているフォルダ以外の履歴タイルに代表サムネイルが表示されない問題を修正した。
 - 原因は `DrawFolderHistoryTile` が現在フォルダ以外では `RepresentativeList := nil` にしており、過去フォルダの代表ファイル一覧を作らないまま描画していたこと。

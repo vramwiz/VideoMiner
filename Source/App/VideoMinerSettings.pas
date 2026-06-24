@@ -49,6 +49,8 @@ function LoadEndAction: TVideoMinerEndAction;
 function LoadAudioSettings: TVideoMinerAudioSettings;
 // 前回開いたフォルダとファイルを読み込む
 function LoadLastMedia: TVideoMinerLastMedia;
+// EXE パス変更後の初回起動かを記録付きで返す
+function ConsumeStartupExecutableChange(const CurrentExePath: string): Boolean;
 // フォルダ閲覧履歴を読み込む
 function LoadFolderHistory: TVideoMinerFolderHistory;
 // 指定ファイルに対応する手動チャプター位置を読み込む
@@ -102,6 +104,7 @@ const
   SECTION_SETTINGS       = 'VideoMiner';         // アプリ全体設定の INI セクション
   KEY_DECODER_MODE       = 'VideoDecoderMode';   // デコード方式の INI キー
   KEY_ROTATION_OVERRIDE  = 'VideoRotationOverride'; // 表示回転メタデータ上書きの INI キー
+  KEY_STARTUP_EXE_PATH   = 'StartupExePath';     // 前回起動した EXE パス
   SECTION_WINDOW         = 'MainForm';           // メインフォーム座標の INI セクション
   KEY_WINDOW_LEFT        = 'Left';               // ウィンドウ左位置の INI キー
   KEY_WINDOW_TOP         = 'Top';                // ウィンドウ上位置の INI キー
@@ -392,6 +395,29 @@ begin
     Result.Folder := Ini.ReadString(SECTION_LAST_MEDIA, KEY_LAST_FOLDER, '');
     Result.FileName := Ini.ReadString(SECTION_LAST_MEDIA, KEY_LAST_FILE, '');
     Result.Available := (Result.Folder <> '') or (Result.FileName <> '');
+  finally
+    Ini.Free;
+  end;
+end;
+
+function ConsumeStartupExecutableChange(const CurrentExePath: string): Boolean;
+var
+  Ini: TIniFile;
+  NormalizedCurrentPath: string;
+  PreviousPath: string;
+begin
+  Result := False;
+  NormalizedCurrentPath := ExpandFileName(CurrentExePath);
+  if NormalizedCurrentPath = '' then
+    Exit;
+
+  Ini := TIniFile.Create(SettingsFileName);
+  try
+    PreviousPath := Ini.ReadString(SECTION_SETTINGS, KEY_STARTUP_EXE_PATH, '');
+    Result := (PreviousPath = '') or
+      (not SameText(ExpandFileName(PreviousPath), NormalizedCurrentPath));
+    Ini.WriteString(SECTION_SETTINGS, KEY_STARTUP_EXE_PATH,
+      NormalizedCurrentPath);
   finally
     Ini.Free;
   end;
