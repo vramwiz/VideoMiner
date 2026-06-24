@@ -206,7 +206,7 @@ const
   TILE_GAP                       = 14;        // タイル間の余白 px
   TILE_MARGIN                    = 22;        // 一覧外周の余白 px
   NAME_BAND_HEIGHT               = 28;        // ファイル名を重ねる帯の高さ px
-  FOLDER_HISTORY_THUMB_COUNT     = 4;         // フォルダ履歴に並べる代表サムネイル数
+  FOLDER_HISTORY_THUMB_COUNT     = 3;         // フォルダ履歴に並べる代表サムネイル数
   THUMBNAIL_TIMER_INTERVAL       = 80;        // サムネイルを 1 枚ずつ生成する間隔 ms
   THUMBNAIL_MAX_WIDTH            = 320;       // 生成サムネイルの最大幅 px
   THUMBNAIL_MAX_HEIGHT           = 180;       // 生成サムネイルの最大高さ px
@@ -993,14 +993,11 @@ var
   RepresentativeList: TVideoMinerMediaList;
   RepCount: Integer;
   RepIndexes: array[0..FOLDER_HISTORY_THUMB_COUNT - 1] of Integer;
-  SmallCount: Integer;
-  SmallGap: Integer;
-  SmallHeight: Integer;
-  SmallStartLeft: Integer;
-  SmallTop: Integer;
-  SmallWidth: Integer;
   TextRect: TRect;
+  ThumbGap: Integer;
+  ThumbLeft: Integer;
   ThumbRect: TRect;
+  ThumbWidth: Integer;
 
   function StableFolderHash(const Value: string): Cardinal;
   var
@@ -1101,23 +1098,21 @@ begin
     for I := 0 to RepresentativeList.Count - 1 do
       AddRepresentativeIndex((MainIndex + I) mod RepresentativeList.Count);
 
-    SmallGap := 4;
-    SmallWidth := Max(24, PreviewRect.Width div 4);
-    SmallHeight := Max(18, PreviewRect.Height div 3);
-    SmallCount := Max(0, RepCount - 1);
-    SmallStartLeft := PreviewRect.Left + (PreviewRect.Width -
-      (SmallWidth * SmallCount + SmallGap * Max(0, SmallCount - 1))) div 2;
-    SmallTop := PreviewRect.Bottom - SmallHeight - SmallGap;
-    for I := 0 to RepCount - 1 do
+    if RepCount > 0 then
     begin
-      if I = 0 then
-        ThumbRect := PreviewRect
-      else
-        ThumbRect := Rect(SmallStartLeft + (I - 1) * (SmallWidth + SmallGap),
-          SmallTop, SmallStartLeft + (I - 1) * (SmallWidth + SmallGap) +
-          SmallWidth, SmallTop + SmallHeight);
-      DrawFolderHistoryThumbnail(Canvas,
-        RepresentativeList.FileAt(RepIndexes[I]), ThumbRect, IsCurrentFolder);
+      ThumbGap := 4;
+      ThumbWidth := Max(1, (PreviewRect.Width -
+        ThumbGap * Max(0, RepCount - 1)) div RepCount);
+      ThumbLeft := PreviewRect.Left + (PreviewRect.Width -
+        (ThumbWidth * RepCount + ThumbGap * Max(0, RepCount - 1))) div 2;
+      for I := 0 to RepCount - 1 do
+      begin
+        ThumbRect := Rect(ThumbLeft + I * (ThumbWidth + ThumbGap),
+          PreviewRect.Top, ThumbLeft + I * (ThumbWidth + ThumbGap) +
+          ThumbWidth, PreviewRect.Bottom);
+        DrawFolderHistoryThumbnail(Canvas,
+          RepresentativeList.FileAt(RepIndexes[I]), ThumbRect, IsCurrentFolder);
+      end;
     end;
   end;
   // 描画中に過去履歴フォルダを走査すると、ネットワーク履歴で UI が固まる。

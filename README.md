@@ -177,7 +177,63 @@ VideoMiner は [GNU General Public License version 3](LICENSE) に従って配�
 - [FFmpeg](https://ffmpeg.org/)
 - [FFmpeg License and Legal Considerations](https://ffmpeg.org/legal.html)
 
+## 開発向け補足
+
+### プロジェクト構成
+
+- `VideoMiner.dpr` / `VideoMiner.dproj`: Delphi プロジェクト本体。
+- `Source\App`: フォーム、動画表示、オーバーレイ、設定、音声再生ラッパ、メディア一覧、各 controller など VideoMiner 固有の処理。
+- `Source\Decode`: FFmpeg を使った動画/音声デコード、シーク、音声 PCM 読み取り、フレーム取得。
+- `Source\FFmpeg`: FFmpeg API 宣言、フレーム変換、QSV 関連、ストリーム情報取得などの低レベル処理。
+- `Source\Lib`: ドラッグ&ドロップ、ショートカット、透明リサイズエッジ、タイマー、フォルダ監視などの補助処理。
+- `ffmpeg-8.1.1-full_build-shared`: 実行時に使う FFmpeg DLL 群。
+- `Win64`: Debug / Release のビルド出力先。
+
+### 主な責務
+
+- `VideoMinerMainForm.pas` は、フォーム生成/破棄、VCL イベント入口、Windows message 入口、controller 接続、再生/シークの最小限の橋渡しに留めます。
+- 表示状態、操作の意味づけ、再生、シーク、一覧、overlay、チャプター、外部 open、ファイル再読み込みなどは機能単位の controller / session へ分離します。
+- 大きな機能追加前後には、MainForm へ処理が戻りすぎていないか確認します。
+
+### ビルド
+
+Debug Win64 ビルド例:
+
+```powershell
+$env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
+& 'C:\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe' `
+  'D:\DelphiProg\test\VideoMiner\VideoMiner.dproj' `
+  /t:Build /p:Config=Debug /p:Platform=Win64
+```
+
+### 文字コード
+
+管理対象の `.pas` / `.dfm` / `.dpr` / `.dproj` / `.inc` / `.rc` / `.md` / `.txt` / `.ps1` / `.bat` / `.cmd` は UTF-8 BOM 付き、改行 CRLF で保存します。
+
+編集前後に以下で確認します。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\EnsureUtf8Bom.ps1 -Check
+```
+
+変換が必要な場合は以下を実行します。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\EnsureUtf8Bom.ps1
+```
+
+### コメント記述ルール
+
+- コメントは、処理を読めば分かることではなく、目的、責務、注意点、状態の意味を補うために書きます。
+- 古い仕様や現在の実装と食い違うコメントは、見つけた時点で更新します。
+- 不要なコメントや重複したコメントを増やしすぎないようにします。
+- `var` ブロック内にローカル関数やローカル手続きを内包しません。必要な補助処理は同じ `implementation` 内の独立した関数/手続きとして切り出します。
+- ユニット先頭には、そのユニットの目的や担当範囲を `//` コメントで記述します。
+- フィールドや定数のコメントは右側に 1 行で置き、同じブロック内では `:`、`=`、`//` の位置を揃えます。
+- コメントと対象の宣言/実装の間には空行を入れません。
+- `property`、`procedure`、`function` 宣言は、横幅 112 文字以内に収まる場合は折り返しません。
+
 ## 開発メモ
 
-- 現在の設計方針や作業再開時の要点は [note.md](note.md) に記載しています。
+- 作業再開時に見る課題は [note.md](note.md) に記載しています。
 - 日付ごとの実装履歴と調査記録は [HISTORY.md](HISTORY.md) に記載しています。
