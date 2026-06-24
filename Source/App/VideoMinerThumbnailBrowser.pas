@@ -6,10 +6,11 @@
 interface
 
 uses
-  Winapi.Windows, Winapi.Messages, System.Classes, System.Math, System.SysUtils, System.Types,
-  Vcl.Controls, Vcl.ExtCtrls, Vcl.Graphics, FFmpegDecoder, FFmpegDecoderTypes,
-  VideoMinerBitmapRotation, VideoMinerDebugLog, VideoMinerMediaList,
-  VideoMinerSettings, VideoMinerThumbnailCache, VideoMinerWindowChrome;
+  Winapi.Windows, Winapi.Messages, System.Classes, System.Generics.Collections,
+  System.Math, System.SysUtils, System.Types, Vcl.Controls, Vcl.ExtCtrls,
+  Vcl.Graphics, FFmpegDecoder, FFmpegDecoderTypes, VideoMinerBitmapRotation,
+  VideoMinerDebugLog, VideoMinerMediaList, VideoMinerSettings,
+  VideoMinerThumbnailCache, VideoMinerWindowChrome;
 
 type
   TVideoMinerThumbnailSelectedEvent = procedure(Sender: TObject;
@@ -23,6 +24,7 @@ type
     FCurrentIndex            : Integer;                    // 現在再生中として強調する一覧位置
     FFolderHistory           : TVideoMinerFolderHistory;   // 保存済みフォルダ閲覧履歴
     FFolderHistoryHoverIndex : Integer;                    // マウスが重なっているフォルダ履歴位置
+    FFolderHistoryMediaLists : TObjectDictionary<string, TVideoMinerMediaList>; // 履歴フォルダの代表サムネイル用一覧
     FFolderHistorySelectedIndex : Integer;                 // キーボード操作対象のフォルダ履歴位置
     FHoverIndex              : Integer;                    // マウスが重なっているタイル位置
     FMediaList               : TVideoMinerMediaList;       // 表示対象になる同一フォルダ内の動画一覧
@@ -57,6 +59,12 @@ type
     function FolderHistoryRowHeight: Integer;
     // 指定位置のフォルダ履歴タイル矩形を返す
     function FolderHistoryTileRect(Index: Integer): TRect;
+    // 現在の幅で表示するフォルダ履歴タイル数を返す
+    function VisibleFolderHistoryCount: Integer;
+    // 現在の列数とタイル幅から、サムネイルグリッドの左端を返す
+    function GridLeftStart: Integer;
+    // 履歴フォルダの代表サムネイル用メディア一覧を返す
+    function FolderHistoryMediaList(const Folder: string): TVideoMinerMediaList;
     // スクロール量を有効範囲へ収める
     procedure ClampScrollOffset;
     // 指定位置にあるフォルダ履歴 index を返す
@@ -280,6 +288,8 @@ begin
   FPreviewTimer.Enabled := False;
   FPreviewTimer.Interval := PREVIEW_START_DELAY_MS;
   FPreviewTimer.OnTimer := PreviewTimer;
+  FFolderHistoryMediaLists := TObjectDictionary<string, TVideoMinerMediaList>.Create(
+    [doOwnsValues]);
 end;
 
 destructor TVideoMinerThumbnailBrowser.Destroy;
@@ -287,6 +297,7 @@ begin
   StopPreview;
   ClearThumbnails;
   FOwnedMediaList.Free;
+  FFolderHistoryMediaLists.Free;
   inherited Destroy;
 end;
 
@@ -338,9 +349,54 @@ function TVideoMinerThumbnailBrowser.FolderHistoryTileRect(Index: Integer): TRec
 var
   Left: Integer;
 begin
-  Left := TILE_MARGIN + 8 + Index * (FTileWidth + TILE_GAP);
+  Left := GridLeftStart + Index * (FTileWidth + TILE_GAP);
   Result := Rect(Left, TILE_MARGIN + 8, Left + FTileWidth,
     TILE_MARGIN + FTileHeight - 8);
+end;
+
+function TVideoMinerThumbnailBrowser.VisibleFolderHistoryCount: Integer;
+begin
+  Result := Min(Length(FFolderHistory), ColumnCount);
+end;
+
+function TVideoMinerThumbnailBrowser.GridLeftStart: Integer;
+var
+  Cols: Integer;
+  TotalWidth: Integer;
+begin
+  Cols := ColumnCount;
+  TotalWidth := Cols * FTileWidth + Max(0, Cols - 1) * TILE_GAP;
+  Result := Max(TILE_MARGIN, (ClientWidth - TotalWidth) div 2);
+end;
+
+function TVideoMinerThumbnailBrowser.FolderHistoryMediaList(
+  const Folder: string): TVideoMinerMediaList;
+var
+  FileName: string;
+  Key: string;
+  MediaList: TVideoMinerMediaList;
+begin
+  Result := nil;
+  if Folder = '' then
+    Exit;
+
+  Key := IncludeTrailingPathDelimiter(Folder);
+  if FFolderHistoryMediaLists.TryGetValue(Key, Result) then
+    Exit;
+
+  FileName := TVideoMinerMediaList.FirstMediaFileInFolder(Key);
+  if FileName = '' then
+    Exit;
+
+  MediaList := TVideoMinerMediaList.Create;
+  try
+    MediaList.BuildForFile(FileName);
+    FFolderHistoryMediaLists.Add(Key, MediaList);
+    Result := MediaList;
+  except
+    MediaList.Free;
+    raise;
+  end;
 end;
 
 procedure TVideoMinerThumbnailBrowser.ClampScrollOffset;
@@ -1195,7 +1251,7 @@ begin
   if IsCurrentFolder then
     RepresentativeList := FMediaList
   else
-    RepresentativeList := nil;
+    RepresentativeList := FolderHistoryMediaList(FolderPath);
 
   if RepresentativeList <> nil then
   begin
@@ -1226,8 +1282,7 @@ begin
       end;
     end;
   end;
-  // 描画中に過去履歴フォルダを走査すると、ネットワーク履歴で UI が固まる。
-  // 過去フォルダの一覧は選択された時点の ShowFolderHistory でだけ読み込む。
+  // 過去フォルダは一度だけ代表ファイル一覧を作り、以降はキャッシュから描く。
 
   FolderName := ExtractFileName(FolderPath);
   if FolderName = '' then
@@ -1274,11 +1329,9 @@ begin
     Exit;
   end;
 
-  for I := 0 to High(FFolderHistory) do
+  for I := 0 to VisibleFolderHistoryCount - 1 do
   begin
     TileRect := FolderHistoryTileRect(I);
-    if TileRect.Left >= BandRect.Right then
-      Break;
     DrawFolderHistoryTile(Canvas, I, TileRect);
   end;
 end;
@@ -1399,7 +1452,7 @@ var
   I: Integer;
 begin
   Result := -1;
-  for I := 0 to High(FFolderHistory) do
+  for I := 0 to VisibleFolderHistoryCount - 1 do
   begin
     if PtInRect(FolderHistoryTileRect(I), Point) then
     begin
@@ -1556,7 +1609,6 @@ var
   I: Integer;
   LeftStart: Integer;
   Row: Integer;
-  TotalWidth: Integer;
 begin
   if FMediaList = nil then
     Count := 0
@@ -1568,8 +1620,7 @@ begin
     Exit;
 
   Cols := ColumnCount;
-  TotalWidth := Cols * FTileWidth + Max(0, Cols - 1) * TILE_GAP;
-  LeftStart := Max(TILE_MARGIN, (ClientWidth - TotalWidth) div 2);
+  LeftStart := GridLeftStart;
 
   for I := 0 to Count - 1 do
   begin
@@ -1833,6 +1884,7 @@ begin
 
   Folder := FFolderHistory[DeleteIndex];
   DeleteFolderHistory(Folder);
+  FFolderHistoryMediaLists.Remove(IncludeTrailingPathDelimiter(Folder));
   FFolderHistory := LoadFolderHistory;
 
   if Length(FFolderHistory) <= 0 then
@@ -1874,6 +1926,7 @@ begin
     end;
   end;
 
+  FFolderHistoryMediaLists.Clear;
   FFolderHistorySelectedIndex := NewSelectedIndex;
   if FFolderHistoryHoverIndex >= Length(FFolderHistory) then
     FFolderHistoryHoverIndex := -1;
