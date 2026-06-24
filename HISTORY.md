@@ -2,6 +2,26 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-25 4K30 高負荷テスト動画での GPU/CPU 比較
+- `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` を作成し、Debug 版で `VideoDecoderMode=qsv` と `software` を強制して比較した。
+  - H.264 High / yuv420p / 3840x2160 / 30fps / 8 秒 / 240 frames / 約 40Mbps。
+- QSV 強制:
+  - `decoder_open_detail decoder="h264_qsv"`。
+  - 初回 `open_done total_ms=1321.258`、`first_frame_ms=320.855`、`start_playback total_ms=545.724`。
+  - 再生中 `decode_ms` は p50 約 24.9ms / p90 約 28.9ms / p99 約 35.4ms。
+  - `tick_total_ms` は p50 約 26.2ms / p90 約 30.4ms、drop は最大 1。
+  - ループ戻りは `video_seek_ms=0.000`、`start_playback total_ms=5.412`。
+- software 強制:
+  - `decoder_open_detail decoder="software"`。
+  - 初回 `open_done total_ms=442.789`、`first_frame_ms=124.086`、`start_playback total_ms=205.829`。
+  - 再生中 `decode_ms` は p50 約 45.7ms / p90 約 63.1ms / p99 約 85.8ms。
+  - `tick_total_ms` は p50 約 56.3ms / p90 約 535.9ms、drop は p50 で 1、最大 2。
+  - ループ戻りは `video_seek_ms=0.000`、`start_playback total_ms=6.342`。
+- 結論:
+  - 4K30 の高ビットレート H.264 では、QSV は初期化が重いが再生中の decode/tick が 30fps にほぼ収まる。
+  - software は初回表示まで速いが、定常再生では decode が 33ms を超えやすく、音声同期待ち・drop・lag が主な負担になる。
+  - `paint_ms` は QSV/software とも p50 約 0.9ms で、今回も主因ではない。
+
 ## 2026-06-25 縦動画読み込みクラッシュの修正
 - `C:\Users\vramw\Videos\test_out_r.mp4` を Debug 版で開くと、初回フレームの BGRX32 変換中に `swscale-9.dll` でアクセス違反が発生することを確認した。
   - 対象動画は H.264 1080x1920、約 30fps、約 5.1 秒。
