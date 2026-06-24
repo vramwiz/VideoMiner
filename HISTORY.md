@@ -2,6 +2,23 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-25 デコード経路の段階的改善と計測
+- テスト動画 `C:\Users\vramw\Videos\videominer_loop_debug_60fps.mp4` で、修正ごとに Debug ログ計測を行った。
+- Step 1: `auto` デコード判定を調整した。
+  - 720p/1080p の H.264 では QSV の初期化・転送固定費が勝ちやすいため software を優先するようにした。
+  - 4K H.264、1080p 以上の HEVC/AV1、1440p 以上の VP9 は QSV 候補に残した。
+  - 対象動画では `auto` が `h264_qsv` ではなく `software` を選ぶようになった。
+  - QSV baseline 比で `open_done total_ms` は約 1436ms から約 496ms へ改善した。
+- Step 2: 初期ロード時に preview decoder を開かないようにした。
+  - seek preview 用 decoder は必要になった時点で既存の `SeekToMs` 経路が遅延 open する。
+  - `media_open_done total_ms` は約 39.8ms から約 26.8ms へ改善した。
+- Step 3: main decoder で直前に表示したフレームを再生開始へ引き継ぐようにした。
+  - preview decoder が未 open の場合は、初回フレーム表示を main decoder で直接行う fallback を追加した。
+  - main decoder で表示済みの位置から再生開始する場合だけ、再生開始時の非表示 seek を省略する。
+  - ループ戻り時の `video_seek_ms` は約 28ms から 0ms、`start_playback total_ms` は約 32.9ms から約 5.5ms へ改善した。
+- 再生中の `paint_ms` は p50 約 0.65-0.75ms 程度で、今回の動画では TBitmap/GDI 描画が主因ではないと判断した。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+
 ## 2026-06-25 サムネイル選択と再生開始表示の調整
 - サムネイル一覧の通常動画タイルは、シングルクリックで選択状態にし、ダブルクリックで動画へ切り替える操作へ変更した。
 - キーボードの `Enter` は従来通り、選択中タイルを開く操作として維持した。

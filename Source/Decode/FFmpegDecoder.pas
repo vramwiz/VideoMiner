@@ -133,6 +133,35 @@ begin
     (Pos('ya', LowerName) = 1);
 end;
 
+function ShouldTryQsvDecoder(DecoderMode: TVideoDecoderMode;
+  CodecPar: PAVCodecParameters): Boolean;
+var
+  PixelCount: Int64;
+begin
+  Result := False;
+  if CodecPar = nil then
+    Exit;
+
+  case DecoderMode of
+    vdmQsv:
+      Exit(True);
+    vdmSoftware:
+      Exit(False);
+  end;
+
+  PixelCount := Int64(CodecPar.width) * Int64(CodecPar.height);
+  case CodecPar.codec_id of
+    AV_CODEC_ID_H264:
+      Result := PixelCount >= Int64(3840) * Int64(2160);
+    AV_CODEC_ID_HEVC, AV_CODEC_ID_AV1:
+      Result := PixelCount >= Int64(1920) * Int64(1080);
+    AV_CODEC_ID_VP9:
+      Result := PixelCount >= Int64(2560) * Int64(1440);
+  else
+    Result := False;
+  end;
+end;
+
 // デコーダインスタンスを初期化する
 constructor TFFmpegDecoder.Create;
 begin
@@ -409,7 +438,15 @@ begin
       OpenedWithQsv := False;
       VideoDecoderName := 'software';
       QsvDecoderName := QsvDecoderNameForCodecId(CodecPar.codec_id);
-      if (DecoderMode <> vdmSoftware) and (QsvDecoderName <> '') then
+{$IFDEF DEBUG}
+      WriteVideoMinerSlowLog(Format(
+        'decoder_qsv_choice file="%s" mode=%s codec_id=%d video=%dx%d qsv_decoder="%s" try_qsv=%s',
+        [ExtractFileName(FileName), VideoDecoderModeToText(DecoderMode),
+         CodecPar.codec_id, CodecPar.width, CodecPar.height,
+         string(QsvDecoderName),
+         BoolToStr(ShouldTryQsvDecoder(DecoderMode, CodecPar), True)]));
+{$ENDIF}
+      if ShouldTryQsvDecoder(DecoderMode, CodecPar) and (QsvDecoderName <> '') then
       begin
         Codec := TFFmpegApi.avcodec_find_decoder_by_name(PAnsiChar(QsvDecoderName));
         if Assigned(Codec) and CreateQsvDevice(QsvDeviceContext, QsvErrorMessage) then

@@ -75,6 +75,7 @@ type
     FMediaSession                    : TVideoMinerMediaSession;         // 現在動画と再生位置の状態
     FVideoView                       : TVideoMinerVideoView;            // 動画表示と overlay 入力の窓口
     FUpdatingSeek                    : Boolean;                         // コードからシーク位置を更新中か
+    FMainDecoderPreparedFrameMs      : Integer;                         // main decoder で直前表示した再生準備済みフレーム位置
     FSeeking                         : Boolean;                         // シーク処理中か
     FSeekGuardTargetMs               : Integer;                         // シーク直後に再生 tick を守る対象位置 ms
     FSeekGuardRemaining              : Integer;                         // シーク guard を残す tick 数
@@ -352,6 +353,7 @@ begin
   Constraints.MinWidth := MIN_FORM_WIDTH;
   Constraints.MinHeight := MIN_FORM_HEIGHT;
   InitializeTitleIcon;
+  FMainDecoderPreparedFrameMs := -1;
   FMediaSession := TVideoMinerMediaSession.Create;
   FMediaSession.EndAction := LoadEndAction;
 {$IFDEF DEBUG}
@@ -618,6 +620,7 @@ var
   ShownPositionMs: Integer;
 begin
   Result := False;
+  FMainDecoderPreparedFrameMs := -1;
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format(
     'main_show_frame_at_begin requested_ms=%d current_ms=%d seek_ms=%d',
@@ -638,13 +641,27 @@ begin
   if not FPlaybackController.ShowFrameNearMs(PositionMs, FMediaSession.SeekMaxMs,
     ShownPositionMs, ErrorMessage) then
   begin
+    if (FVideoView <> nil) and FVideoView.ShowFrameAt(FDecoder, PositionMs,
+      ErrorMessage, True, False) then
+    begin
+      ShownPositionMs := PositionMs;
+      FMainDecoderPreparedFrameMs := PositionMs;
 {$IFDEF DEBUG}
-    WriteVideoMinerSlowLog(Format(
-      'main_show_frame_at_failed requested_ms=%d err="%s"',
-      [PositionMs, ErrorMessage]));
+      WriteVideoMinerSlowLog(Format(
+        'main_show_frame_at_fallback_main requested_ms=%d shown_ms=%d',
+        [PositionMs, ShownPositionMs]));
 {$ENDIF}
-    FInfoController.SetStatusCaption('Failed to decode frame: ' + ErrorMessage);
-    Exit;
+    end
+    else
+    begin
+{$IFDEF DEBUG}
+      WriteVideoMinerSlowLog(Format(
+        'main_show_frame_at_failed requested_ms=%d err="%s"',
+        [PositionMs, ErrorMessage]));
+{$ENDIF}
+      FInfoController.SetStatusCaption('Failed to decode frame: ' + ErrorMessage);
+      Exit;
+    end;
   end;
 
   FMediaSession.CurrentVideoPositionMs := ShownPositionMs;
@@ -1360,10 +1377,15 @@ end;
 
 procedure TVideoMinerMainForm.StartPlaybackAtMs(PositionMs: Integer;
   FrameAlreadyShown: Boolean);
+var
+  SkipVideoSeek: Boolean;
 begin
+  SkipVideoSeek := FrameAlreadyShown and
+    (FMainDecoderPreparedFrameMs = PositionMs);
+  FMainDecoderPreparedFrameMs := -1;
   FPlaybackController.StartPlaybackAtMs(FDecoder, FMediaSession.VideoFile, FMediaSession.VideoInfo,
     FMediaSession.EndAction, FChapterController.Manager, FMediaSession.SeekMaxMs, PositionMs, LastFrameSeekPositionMs,
-    FrameAlreadyShown, False, FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs,
+    FrameAlreadyShown, False, SkipVideoSeek, FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs,
     FMediaSession.LoopSegmentStartMs, FMediaSession.LoopSegmentEndMs, FSeekGuardTargetMs,
     FSeekGuardRemaining, FInfoController.SetStatusCaption);
 end;
@@ -1569,7 +1591,7 @@ begin
       [TargetMs]));
   FPlaybackController.StartPlaybackAtMs(FDecoder, FMediaSession.VideoFile, FMediaSession.VideoInfo,
     FMediaSession.EndAction, FChapterController.Manager, FMediaSession.SeekMaxMs, TargetMs, LastFrameSeekPositionMs,
-    FrameAlreadyShown, FastSeek, FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs,
+    FrameAlreadyShown, FastSeek, False, FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs,
     FMediaSession.LoopSegmentStartMs, FMediaSession.LoopSegmentEndMs, FSeekGuardTargetMs,
     FSeekGuardRemaining, FInfoController.SetStatusCaption);
 end;

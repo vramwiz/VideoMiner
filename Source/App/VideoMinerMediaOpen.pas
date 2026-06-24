@@ -201,7 +201,6 @@ function OpenVideoMinerMediaFile(const FileName: string; Decoder,
   PreviewDecoder: TFFmpegDecoder; MediaList: TVideoMinerMediaList;
   out OpenResult: TVideoMinerMediaOpenResult): Boolean;
 var
-  PreviewInfo: TVideoInfo;
   TargetFileName: string;
 {$IFDEF DEBUG}
   MediaCount: Integer;
@@ -263,27 +262,8 @@ begin
   StepWatch := TStopwatch.StartNew;
 {$ENDIF}
 
-  if not PreviewDecoder.Open(TargetFileName, PreviewInfo,
-    OpenResult.ErrorMessage) then
-  begin
-{$IFDEF DEBUG}
-    PreviewOpenMs := StepWatch.Elapsed.TotalMilliseconds;
-{$ENDIF}
-    Decoder.Close;
-    OpenResult.ErrorMessage := 'Failed to open preview decoder: ' +
-      OpenResult.ErrorMessage;
-    if MediaList <> nil then
-      MediaList.Clear;
-{$IFDEF DEBUG}
-    WriteVideoMinerSlowLog(Format(
-      'media_open_failed step="preview_open" file="%s" drive="%s" path_kind=%s validate_ms=%.3f decoder_open_ms=%.3f preview_open_ms=%.3f total_ms=%.3f err="%s"',
-      [ExtractFileName(FileName), ExtractFileDrive(FileName),
-       VideoMinerPathKindText(FileName), ValidateMs, DecoderOpenMs,
-       PreviewOpenMs, TotalWatch.Elapsed.TotalMilliseconds,
-       OpenResult.ErrorMessage]));
-{$ENDIF}
-    Exit;
-  end;
+  if PreviewDecoder <> nil then
+    PreviewDecoder.Close;
 {$IFDEF DEBUG}
   PreviewOpenMs := StepWatch.Elapsed.TotalMilliseconds;
   StepWatch := TStopwatch.StartNew;

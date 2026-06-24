@@ -146,14 +146,14 @@ type
     // デコーダと音声再生を指定位置から開始する
     function StartAtMs(Decoder: TFFmpegDecoder; const VideoFile: string;
       const VideoInfo: TVideoInfo; SeekMaxMs, PositionMs: Integer;
-      FrameAlreadyShown: Boolean; FastSeek: Boolean; out TargetMs: Integer;
-      out ErrorMessage: string): Boolean;
+      FrameAlreadyShown: Boolean; FastSeek: Boolean; SkipVideoSeek: Boolean;
+      out TargetMs: Integer; out ErrorMessage: string): Boolean;
     // 再生開始時の位置、音声、ループ区間、seek guard、表示状態をまとめて更新する
     procedure StartPlaybackAtMs(Decoder: TFFmpegDecoder; const VideoFile: string;
       const VideoInfo: TVideoInfo; EndAction: TVideoMinerEndAction;
       ChapterManager: TVideoMinerChapterManager; SeekMaxMs, PositionMs,
       LastFrameSeekPositionMs: Integer; FrameAlreadyShown: Boolean;
-      FastSeek: Boolean;
+      FastSeek: Boolean; SkipVideoSeek: Boolean;
       var CurrentVideoPositionMs, SeekPositionMs, LoopSegmentStartMs,
       LoopSegmentEndMs, SeekGuardTargetMs, SeekGuardRemaining: Integer;
       SetStatus: TVideoMinerPlaybackStatusProc);
@@ -1091,7 +1091,7 @@ end;
 function TVideoMinerPlaybackController.StartAtMs(Decoder: TFFmpegDecoder;
   const VideoFile: string; const VideoInfo: TVideoInfo; SeekMaxMs,
   PositionMs: Integer; FrameAlreadyShown: Boolean; FastSeek: Boolean;
-  out TargetMs: Integer; out ErrorMessage: string): Boolean;
+  SkipVideoSeek: Boolean; out TargetMs: Integer; out ErrorMessage: string): Boolean;
 var
   OpenInfo: TVideoInfo;
   ReuseErrorMessage: string;
@@ -1135,82 +1135,86 @@ begin
 
   VideoPrepareMs := 0;
   VideoReopened := False;
+  VideoSeekMs := 0;
 
-  StepWatch := TStopwatch.StartNew;
-  if not FVideoView.ShowFrameAt(Decoder, TargetMs, ReuseErrorMessage,
-    not FrameAlreadyShown, FastSeek) then
+  if not SkipVideoSeek then
   begin
-    VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
-    WriteVideoMinerRateLog(Format(
-      'start_playback_reuse_failed_summary file="%s" target_ms=%d frame_already_shown=%s fast_seek=%s video_seek_ms=%.3f total_ms=%.3f err="%s"',
-      [ExtractFileName(VideoFile), TargetMs, BoolToStr(FrameAlreadyShown, True),
-       BoolToStr(FastSeek, True), VideoSeekMs,
-       TotalWatch.Elapsed.TotalMilliseconds, ReuseErrorMessage]));
+    StepWatch := TStopwatch.StartNew;
+    if not FVideoView.ShowFrameAt(Decoder, TargetMs, ReuseErrorMessage,
+      not FrameAlreadyShown, FastSeek) then
+    begin
+      VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
+      WriteVideoMinerRateLog(Format(
+        'start_playback_reuse_failed_summary file="%s" target_ms=%d frame_already_shown=%s fast_seek=%s video_seek_ms=%.3f total_ms=%.3f err="%s"',
+        [ExtractFileName(VideoFile), TargetMs, BoolToStr(FrameAlreadyShown, True),
+         BoolToStr(FastSeek, True), VideoSeekMs,
+         TotalWatch.Elapsed.TotalMilliseconds, ReuseErrorMessage]));
 {$IFDEF DEBUG}
-    if DebugLogEnabled then
-      WriteVideoMinerDebugLog(Format(
+      if DebugLogEnabled then
+        WriteVideoMinerDebugLog(Format(
+          'start_playback_reuse_failed file="%s" target_ms=%d video_seek_ms=%.3f total_ms=%.3f err="%s"',
+          [ExtractFileName(VideoFile), TargetMs, VideoSeekMs,
+           TotalWatch.Elapsed.TotalMilliseconds, ReuseErrorMessage]));
+{$ENDIF}
+{$IFDEF DEBUG}
+      WriteVideoMinerSlowLog(Format(
         'start_playback_reuse_failed file="%s" target_ms=%d video_seek_ms=%.3f total_ms=%.3f err="%s"',
         [ExtractFileName(VideoFile), TargetMs, VideoSeekMs,
          TotalWatch.Elapsed.TotalMilliseconds, ReuseErrorMessage]));
 {$ENDIF}
-{$IFDEF DEBUG}
-    WriteVideoMinerSlowLog(Format(
-      'start_playback_reuse_failed file="%s" target_ms=%d video_seek_ms=%.3f total_ms=%.3f err="%s"',
-      [ExtractFileName(VideoFile), TargetMs, VideoSeekMs,
-       TotalWatch.Elapsed.TotalMilliseconds, ReuseErrorMessage]));
-{$ENDIF}
 
-    StepWatch := TStopwatch.StartNew;
-    Decoder.Close;
-    if not Decoder.Open(VideoFile, OpenInfo, ErrorMessage) then
-    begin
-      VideoPrepareMs := StepWatch.Elapsed.TotalMilliseconds;
+      StepWatch := TStopwatch.StartNew;
+      Decoder.Close;
+      if not Decoder.Open(VideoFile, OpenInfo, ErrorMessage) then
+      begin
+        VideoPrepareMs := StepWatch.Elapsed.TotalMilliseconds;
 {$IFDEF DEBUG}
-      if DebugLogEnabled then
-        WriteVideoMinerDebugLog(Format(
+        if DebugLogEnabled then
+          WriteVideoMinerDebugLog(Format(
+            'start_playback_failed step="video_open_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f total_ms=%.3f err="%s"',
+            [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs,
+             TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+{$ENDIF}
+{$IFDEF DEBUG}
+        WriteVideoMinerSlowLog(Format(
           'start_playback_failed step="video_open_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f total_ms=%.3f err="%s"',
           [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs,
            TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
 {$ENDIF}
-{$IFDEF DEBUG}
-      WriteVideoMinerSlowLog(Format(
-        'start_playback_failed step="video_open_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f total_ms=%.3f err="%s"',
-        [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs,
-         TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
-{$ENDIF}
-      if FVideoView <> nil then
-        FVideoView.PlaybackActive := False;
-      ErrorMessage := 'Failed to reopen video decoder: ' + ErrorMessage;
-      Exit;
-    end;
-    VideoPrepareMs := StepWatch.Elapsed.TotalMilliseconds;
-    VideoReopened := True;
+        if FVideoView <> nil then
+          FVideoView.PlaybackActive := False;
+        ErrorMessage := 'Failed to reopen video decoder: ' + ErrorMessage;
+        Exit;
+      end;
+      VideoPrepareMs := StepWatch.Elapsed.TotalMilliseconds;
+      VideoReopened := True;
 
-    StepWatch := TStopwatch.StartNew;
-    if not FVideoView.ShowFrameAt(Decoder, TargetMs, ErrorMessage,
-      not FrameAlreadyShown, FastSeek) then
-    begin
-      VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
+      StepWatch := TStopwatch.StartNew;
+      if not FVideoView.ShowFrameAt(Decoder, TargetMs, ErrorMessage,
+        not FrameAlreadyShown, FastSeek) then
+      begin
+        VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
 {$IFDEF DEBUG}
-      if DebugLogEnabled then
-        WriteVideoMinerDebugLog(Format(
+        if DebugLogEnabled then
+          WriteVideoMinerDebugLog(Format(
+            'start_playback_failed step="video_seek_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f total_ms=%.3f err="%s"',
+            [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs, VideoSeekMs,
+             TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+{$ENDIF}
+{$IFDEF DEBUG}
+        WriteVideoMinerSlowLog(Format(
           'start_playback_failed step="video_seek_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f total_ms=%.3f err="%s"',
           [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs, VideoSeekMs,
            TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
 {$ENDIF}
-{$IFDEF DEBUG}
-      WriteVideoMinerSlowLog(Format(
-        'start_playback_failed step="video_seek_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f total_ms=%.3f err="%s"',
-        [ExtractFileName(VideoFile), TargetMs, VideoPrepareMs, VideoSeekMs,
-         TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
-{$ENDIF}
-      if FVideoView <> nil then
-        FVideoView.PlaybackActive := False;
-      ErrorMessage := 'Failed to seek video decoder: ' + ErrorMessage;
-      Exit;
+        if FVideoView <> nil then
+          FVideoView.PlaybackActive := False;
+        ErrorMessage := 'Failed to seek video decoder: ' + ErrorMessage;
+        Exit;
+      end;
     end;
+    VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
   end;
-  VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
 
   FAudioPlayback.PlaybackRate := FPlaybackRate;
   FRateClockActive := False;
@@ -1288,19 +1292,37 @@ procedure TVideoMinerPlaybackController.StartPlaybackAtMs(
   Decoder: TFFmpegDecoder; const VideoFile: string; const VideoInfo: TVideoInfo;
   EndAction: TVideoMinerEndAction; ChapterManager: TVideoMinerChapterManager;
   SeekMaxMs, PositionMs, LastFrameSeekPositionMs: Integer;
-  FrameAlreadyShown: Boolean; FastSeek: Boolean;
+  FrameAlreadyShown: Boolean; FastSeek: Boolean; SkipVideoSeek: Boolean;
   var CurrentVideoPositionMs, SeekPositionMs,
   LoopSegmentStartMs, LoopSegmentEndMs, SeekGuardTargetMs,
   SeekGuardRemaining: Integer; SetStatus: TVideoMinerPlaybackStatusProc);
 var
   ErrorMessage: string;
+  EffectiveFrameAlreadyShown: Boolean;
+  FrameToleranceMs: Integer;
+  RequestedTargetMs: Integer;
   TargetMs: Integer;
 begin
   if VideoFile = '' then
     Exit;
 
+  RequestedTargetMs := PositionMs;
+  if RequestedTargetMs < 0 then
+    RequestedTargetMs := 0
+  else if RequestedTargetMs > SeekMaxMs then
+    RequestedTargetMs := SeekMaxMs;
+
+  EffectiveFrameAlreadyShown := FrameAlreadyShown;
+  if not EffectiveFrameAlreadyShown then
+  begin
+    FrameToleranceMs := VideoMinerFrameDurationMs(VideoInfo.Fps);
+    EffectiveFrameAlreadyShown := (CurrentVideoPositionMs >= 0) and
+      (Abs(CurrentVideoPositionMs - RequestedTargetMs) <= FrameToleranceMs);
+  end;
+
   if not StartAtMs(Decoder, VideoFile, VideoInfo, SeekMaxMs, PositionMs,
-    FrameAlreadyShown, FastSeek, TargetMs, ErrorMessage) then
+    EffectiveFrameAlreadyShown, FastSeek, SkipVideoSeek and EffectiveFrameAlreadyShown,
+    TargetMs, ErrorMessage) then
   begin
     if (ErrorMessage <> '') and Assigned(SetStatus) then
       SetStatus(ErrorMessage);
