@@ -1413,6 +1413,16 @@ begin
   UsePaintBuffer := FOverlayVisible or FSeekBarVisible or FSeekPreviewVisible or
     ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible) or
     ((FNextFileButton <> nil) and FNextFileButton.Visible);
+  if Nv12TextureD3DFramePresented and (not UsePaintBuffer) and
+     (not FSafeAreaVisible) and (not FSourceHasAlpha) and (not FLoadingActive) then
+  begin
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format(
+      'paint_skip_d3d_frame client_w=%d client_h=%d paint_ms=%.3f',
+      [ClientWidth, ClientHeight, PaintWatch.Elapsed.TotalMilliseconds]));
+{$ENDIF}
+    Exit;
+  end;
   if UsePaintBuffer then
   begin
     if (FPaintBuffer.Width <> ClientWidth) or

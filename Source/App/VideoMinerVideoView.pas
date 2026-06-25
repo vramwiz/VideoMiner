@@ -9,7 +9,7 @@ uses
   System.Classes, System.SysUtils, System.Types, Vcl.Controls, Vcl.ExtCtrls,
   Vcl.Graphics, FFmpegDecoder, VideoMinerBitmapRotation, VideoMinerFrameCheck,
   VideoMinerDebugLog, VideoMinerOverlay, VideoMinerSettings,
-  VideoMinerVideoSurface;
+  VideoMinerVideoSurface, FFmpegD3D11TextureProbe;
 
 type
   TVideoMinerVideoView = class
@@ -957,9 +957,21 @@ begin
      (not PrepareFrameBuffer(Decoder, Buffer, BufferStride, ErrorMessage)) then
     Exit;
 
+  ClearNv12TextureD3DFramePresented;
   if not Decoder.DecodeNextFrameToBgrx32Optional(Buffer, BufferStride,
     ConvertFrame, PositionMs, ErrorMessage) then
     Exit;
+
+  if ConvertFrame and Nv12TextureD3DFramePresented then
+  begin
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format(
+      'decode_next_d3d_presented position_ms=%d source_rotation=%d display_rotation_offset=%d',
+      [PositionMs, Decoder.Info.RotationDegrees, FDisplayRotationOffset]));
+{$ENDIF}
+    Result := True;
+    Exit;
+  end;
 
   if ConvertFrame then
   begin

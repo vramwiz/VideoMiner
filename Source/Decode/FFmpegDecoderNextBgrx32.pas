@@ -44,6 +44,7 @@ var
   Ret: Integer;
   DidTransfer: Boolean;
   TransferErrorMessage: string;
+  D3DPresented: Boolean;
 {$IFDEF DEBUG}
   TransferWatch: TStopwatch;
   ConvertWatch: TStopwatch;
@@ -74,18 +75,21 @@ var
       ConvertWatch := TStopwatch.StartNew;
 {$ENDIF}
       ProbeNv12TextureUpload(ConvertSourceFrame);
-      CopyFrameToBgrx32BufferCached(ConvertSourceFrame, Buffer, BufferStride,
-        Context.DirectSwsContext, Context.DirectSwsSrcWidth, Context.DirectSwsSrcHeight,
-        Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat,
-        Context.Bgrx32TempBuffer, Context.Bgrx32TempStride,
-        Context.Bgrx32TempHeight);
+      D3DPresented := PresentNv12TextureFrame(ConvertSourceFrame);
+      if not D3DPresented then
+        CopyFrameToBgrx32BufferCached(ConvertSourceFrame, Buffer, BufferStride,
+          Context.DirectSwsContext, Context.DirectSwsSrcWidth, Context.DirectSwsSrcHeight,
+          Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat,
+          Context.Bgrx32TempBuffer, Context.Bgrx32TempStride,
+          Context.Bgrx32TempHeight);
 {$IFDEF DEBUG}
       ConvertMs := ConvertWatch.Elapsed.TotalMilliseconds;
       WriteVideoMinerSlowLog(Format(
-        'next_bgrx32_detail source=%s frame=%dx%d fmt=%d linesize0=%d transferred=%s transfer_ms=%.3f convert_ms=%.3f buffer_stride=%d',
+        'next_bgrx32_detail source=%s frame=%dx%d fmt=%d linesize0=%d transferred=%s d3d_presented=%s transfer_ms=%.3f convert_ms=%.3f buffer_stride=%d',
         [SourceName, ConvertSourceFrame.width, ConvertSourceFrame.height,
          ConvertSourceFrame.format, ConvertSourceFrame.linesize[0],
-         BoolToStr(DidTransfer, True), TransferMs, ConvertMs, BufferStride]));
+         BoolToStr(DidTransfer, True), BoolToStr(D3DPresented, True),
+         TransferMs, ConvertMs, BufferStride]));
 {$ENDIF}
     end;
 

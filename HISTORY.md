@@ -49,6 +49,22 @@
   - 次段階は `TVideoMinerVideoSurface` に D3D11 表示経路を別管理で追加し、D3D 有効時は動画フレーム本体を GDI で描かない形にして比較する。
 - `Debug Win64` ビルド成功。警告 0 / エラー 0。
 
+## 2026-06-25 D3D11 direct display experiment
+- `VIDEOMINER_D3D11_DISPLAY=1` の Debug 実行時だけ、再生中の NV12 frame を D3D11 swap chain へ直接表示し、CPU BGRX32 変換をスキップする実験経路を追加した。
+  - `TVideoMinerVideoSurface.PrepareBgrx32Frame` で渡した HWND / client size を使い、decoder 側で `PresentNv12TextureFrame` を呼ぶ。
+  - D3D 表示が成功したフレームでは `CopyFrameToBgrx32BufferCached` を呼ばず、`TVideoMinerVideoView.DecodeNextFrame` 側でも GDI の回転・Present・ループキャッシュ保存をスキップする。
+  - seek、サムネイル、scratch frame、明示フレーム表示は安全側で従来の BGRX32 経路のまま残した。
+- `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` を Debug Win64 / `VideoDecoderMode=qsv` で約 8 秒再生して比較した。
+  - CPU BGRX32 経路: `next_bgrx32_detail convert_ms` p50 約 15.41ms / p90 約 18.36ms、`bgrx32_convert total_ms` p50 約 14.88ms、`playback_tick total_ms` p50 約 20.47ms / p90 約 24.21ms。
+  - D3D11 実表示経路: `next_bgrx32_detail convert_ms` p50 約 2.74ms / p90 約 3.95ms、`d3d11_display_present total_ms` p50 約 2.06ms / p90 約 2.78ms、`playback_tick total_ms` p50 約 7.91ms / p90 約 11.53ms。
+  - D3D11 実表示の内訳は `upload_ms` p50 約 1.68ms、`draw_ms` p50 約 0.06ms、`present_ms` p50 約 0.37ms。
+  - D3D11 実表示では再生中 197 frame が `d3d_presented=True` になり、通常の `bgrx32_convert` は初期表示側の 1 回だけだった。
+  - 両経路とも drop は 0。
+- 判断:
+  - 4K30 QSV 再生では D3D11 実表示による CPU 変換スキップの効果が大きいため、採用方針で進める。
+  - 現段階は実験経路で、表示 target 全体への shader 描画のみ。次は中央 fit / letterbox、回転、overlay、ズーム、シークプレビュー、フレームコピーとの整合を詰める。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+
 ## 2026-06-25 QSV 表示経路の内訳計測と一時バッファ再利用
 - QSV/software の BGRX32 表示経路へ Debug 計測を追加した。
   - `qsv_transfer`: QSV HW frame を CPU frame へ転送した場合の時間。

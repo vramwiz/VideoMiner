@@ -29,8 +29,9 @@
    - D3D11 texture upload + shader draw の probe では現行 CPU BGRX32 変換より十分軽かったため、3D texture 表示経路を採用方針で進める。
    - `UpdateSubresource + shader draw + Present` の probe でも現行 CPU BGRX32 変換より十分軽かった。
    - 実表示 HWND に計測用 Present を混ぜると VCL/GDI 描画と競合して大きくちらつくため、この方式は不採用。
-   - 次は `TVideoMinerVideoSurface` に D3D11 表示経路を別管理で追加し、D3D 有効時はフレーム本体を GDI で二重描画しない形にする。
-   - D3D 表示は overlay、ズーム、回転、シークプレビュー、フレームコピー機能への影響が大きいため、まずは回転なし、ズームなし、中央 fit の再生表示だけで比較する。
+   - `VIDEOMINER_D3D11_DISPLAY=1` の実験経路で、再生中だけ NV12 を D3D11 swap chain へ直接表示し、CPU BGRX32 変換をスキップできるようにした。
+   - 4K30 QSV では `next_convert` p50 が約 15.4ms から約 2.7ms、`playback_tick` p50 が約 20.5ms から約 7.9ms へ改善したため採用方針。
+   - 次は D3D 表示の品質と統合を詰める。中央 fit / letterbox、回転、overlay、ズーム、シークプレビュー、フレームコピー機能との整合を順に見る。
 
 ## 後続課題
 
