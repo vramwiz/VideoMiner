@@ -13,12 +13,16 @@ procedure WriteVideoMinerDebugLog(const Msg: string);
 procedure WriteVideoMinerSlowLog(const Msg: string);
 // 倍速再生の調査ログが有効な場合だけ 1 行出力する
 procedure WriteVideoMinerRateLog(const Msg: string);
+// D3D 表示経路の軽量調査ログが有効な場合だけ 1 行出力する
+procedure WriteVideoMinerD3DLog(const Msg: string);
 // 詳細調査用ログが有効か返す
 function VideoMinerDebugLogEnabled: Boolean;
 // slow log が有効か返す
 function VideoMinerSlowLogEnabled: Boolean;
 // 倍速再生ログが有効か返す
 function VideoMinerRateLogEnabled: Boolean;
+// D3D 表示経路の軽量調査ログが有効か返す
+function VideoMinerD3DLogEnabled: Boolean;
 // VideoMiner の調査ログファイル名を返す
 function VideoMinerDebugLogFileName: string;
 
@@ -31,6 +35,7 @@ const
   DEBUG_LOG_ENABLED = False; // 毎 tick 系の詳細ログを出すか
   SLOW_LOG_ENABLED  = False; // 遅い処理だけを slow log として出すか
   RATE_LOG_ENABLED  = True;  // 倍速再生の切り分けログを出すか
+  D3D_LOG_ENABLED   = True;  // D3D 表示経路の切り分けログを出すか
 
 function VideoMinerDebugLogEnabled: Boolean;
 begin
@@ -56,6 +61,12 @@ function VideoMinerRateLogEnabled: Boolean;
 begin
   Result := RATE_LOG_ENABLED or SameText(GetEnvironmentVariable(
     'VIDEOMINER_RATE_LOG'), '1') or VideoMinerDebugLogEnabled;
+end;
+
+function VideoMinerD3DLogEnabled: Boolean;
+begin
+  Result := D3D_LOG_ENABLED or SameText(GetEnvironmentVariable(
+    'VIDEOMINER_D3D_LOG'), '1') or VideoMinerDebugLogEnabled;
 end;
 
 // マイドキュメント配下の VideoMiner フォルダへ再生調査ログを集約する
@@ -117,7 +128,7 @@ var
   LogFileName: string;
 begin
   if not (VideoMinerDebugLogEnabled or VideoMinerSlowLogEnabled or
-     VideoMinerRateLogEnabled) then
+     VideoMinerRateLogEnabled or VideoMinerD3DLogEnabled) then
     Exit;
 
   LogFileName := VideoMinerDebugLogFileName;
@@ -141,6 +152,12 @@ end;
 procedure WriteVideoMinerRateLog(const Msg: string);
 begin
   if VideoMinerRateLogEnabled then
+    WriteVideoMinerLogLine(Msg);
+end;
+
+procedure WriteVideoMinerD3DLog(const Msg: string);
+begin
+  if VideoMinerD3DLogEnabled then
     WriteVideoMinerLogLine(Msg);
 end;
 

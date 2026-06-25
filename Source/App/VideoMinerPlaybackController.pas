@@ -536,6 +536,8 @@ begin
   case FinishResult(EndAction, CanNavigateNext) of
     perLoop:
       begin
+        if FVideoView <> nil then
+          FVideoView.PlaybackActive := True;
         LoopFrameCacheShown := (FVideoView <> nil) and
           FVideoView.TryPresentLoopFrameCache(LoopStartMs);
         WriteVideoMinerRateLog(Format(

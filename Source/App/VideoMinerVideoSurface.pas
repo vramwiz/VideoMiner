@@ -29,6 +29,12 @@ type
     FLoadingActive          : Boolean;                           // 動画読み込み中のインジケータを表示するか
     FLoadingTick            : Integer;                           // 読み込み中インジケータのアニメーション段階
     FLoadingTimer           : TTimer;                            // 読み込み中インジケータを再描画するタイマー
+    FLastD3DStateLogText    : string;                            // 直近に出した D3D 表示判定ログ
+    FLastD3DStateLogTick    : UInt64;                            // 直近に D3D 表示判定ログを出した時刻
+    FForceCompactSeekBarPaint : Boolean;                         // ループ再開中の一時 GDI 表示でも D3D 風に描くか
+    FLastSeekBarPaintLogText: string;                            // 直近に出した GDI seek bar 描画ログ
+    FLastSeekBarPaintLogTick: UInt64;                            // 直近に GDI seek bar 描画ログを出した時刻
+    FLastD3DFramePresentedTick: UInt64;                           // 直近に D3D frame を表示した時刻
     FNextFileButton         : TVideoMinerOverlayFileNavButton;   // 次動画へ移動する右端ボタン
     FPanMoved               : Boolean;                           // 押下後にパン移動が発生したか
     FPanning                : Boolean;                           // ズーム中のドラッグ移動を処理中か
@@ -119,6 +125,14 @@ type
     function SeekBarLayoutRect: TRect;
     // D3D 表示中に backbuffer 上へ描く簡易シークバー状態を更新する
     procedure UpdateD3DSeekBarOverlayState;
+    // D3D11 直接表示を止めている最初の理由を返す
+    function D3DFramePresentationBlockReason: string;
+    // D3D11 直接表示の現在状態を状態変化時または低頻度でログへ出す
+    procedure LogD3DFramePresentationState(const Context: string; Force: Boolean = False);
+    // GDI seek bar を描いた時の見た目と状態を状態変化時または低頻度でログへ出す
+    procedure LogSeekBarPaintState(CompactStyle, D3DFrameCurrent: Boolean);
+    // 直近に D3D frame を表示していて backbuffer を維持できる可能性があるか返す
+    function D3DFrameRecentlyPresented: Boolean;
     // クライアント座標を現在のズーム状態の画像座標へ変換する
     function ImagePointFromClient(const Point: TPoint; out ImageX, ImageY: Double): Boolean;
     // overlay 部品をまとめて再描画対象にする
@@ -235,6 +249,8 @@ type
     procedure ChangeBossHelpPage(Delta: Integer);
     // 外部から渡されたホイール操作をこの表示面で処理する
     function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean;
+    // 停止状態から再生へ入る直前に、停止中 overlay の残りを閉じる
+    procedure HidePlaybackStartOverlays;
     // 現在表示中フレームの四隅が暗いか返す
     function CurrentFrameCornersMostlyDark: Boolean;
     // 現在表示中フレームの簡易署名を返す
@@ -243,6 +259,8 @@ type
     function CanUseD3DFramePresentation: Boolean;
     // D3D11 直接表示直前に target window と overlay 座標を同期する
     function PrepareD3DFramePresentation: Boolean;
+    // D3D11 直接表示で実際に frame が出たことを記録する
+    procedure MarkD3DFramePresented;
     // ズーム操作後に現在位置の CPU frame 再表示が必要なら True を返して消費する
     function ConsumeZoomFrameRefreshNeeded: Boolean;
     // FBitmap を BGRX32 の direct デコード先として使える状態にする
@@ -252,6 +270,8 @@ type
     procedure Present;
     // すぐに現在フレームを表示する
     procedure PresentImmediate;
+    // 再生継続中の CPU fallback としてすぐに現在フレームを表示する
+    procedure PresentImmediateAsPlaybackFallback;
     // 下側シークバーの現在位置を更新する
     procedure SetSeekProgress(PositionMs, MaxMs: Integer);
     // シークバー hover 位置の小型プレビューを表示する
@@ -516,20 +536,120 @@ begin
   Result := BuildFrameSignature(FBitmap, Signature);
 end;
 
+function TVideoMinerVideoSurface.D3DFramePresentationBlockReason: string;
+begin
+  Result := '';
+  if FSourceHasAlpha then
+    Result := 'source_has_alpha'
+  else if FOverlayVisible then
+    Result := 'center_overlay_visible'
+  else if FSeekBarVisible and (not FPlaybackActive) then
+    Result := 'seek_bar_visible_while_paused'
+  else if FSeekPreviewVisible then
+    Result := 'seek_preview_visible'
+  else if FSafeAreaVisible then
+    Result := 'safe_area_visible'
+  else if FLoadingActive then
+    Result := 'loading_active'
+  else if FZoomScale > MIN_ZOOM then
+    Result := 'zoom_active'
+  else if (FPreviousFileButton <> nil) and FPreviousFileButton.Visible then
+    Result := 'previous_file_button_visible'
+  else if (FNextFileButton <> nil) and FNextFileButton.Visible then
+    Result := 'next_file_button_visible';
+end;
+
+procedure TVideoMinerVideoSurface.LogD3DFramePresentationState(
+  const Context: string; Force: Boolean);
+var
+  D3DReady: Boolean;
+  NowTick: UInt64;
+  Reason: string;
+  Text: string;
+begin
+  Reason := D3DFramePresentationBlockReason;
+  D3DReady := Reason = '';
+  if D3DReady and ((ClientWidth <= 0) or (ClientHeight <= 0)) then
+  begin
+    D3DReady := False;
+    Reason := 'empty_client';
+  end;
+  if D3DReady and (not HandleAllocated) then
+  begin
+    D3DReady := False;
+    Reason := 'handle_not_allocated';
+  end;
+  if Reason = '' then
+    Reason := 'ready';
+
+  Text := Format(
+    'd3d_surface_state context=%s ready=%s reason=%s playback=%s seek_bar=%s ' +
+    'seek_preview=%s overlay=%s safe_area=%s loading=%s zoom=%.3f alpha=%s ' +
+    'prev_nav=%s next_nav=%s client=%dx%d',
+    [Context, BoolToStr(D3DReady, True), Reason, BoolToStr(FPlaybackActive, True),
+     BoolToStr(FSeekBarVisible, True), BoolToStr(FSeekPreviewVisible, True),
+     BoolToStr(FOverlayVisible, True), BoolToStr(FSafeAreaVisible, True),
+     BoolToStr(FLoadingActive, True), FZoomScale, BoolToStr(FSourceHasAlpha, True),
+     BoolToStr((FPreviousFileButton <> nil) and FPreviousFileButton.Visible, True),
+     BoolToStr((FNextFileButton <> nil) and FNextFileButton.Visible, True),
+     ClientWidth, ClientHeight]);
+
+  NowTick := GetTickCount64;
+  if Force or (Text <> FLastD3DStateLogText) or
+     (NowTick - FLastD3DStateLogTick >= 1000) then
+  begin
+    FLastD3DStateLogText := Text;
+    FLastD3DStateLogTick := NowTick;
+    WriteVideoMinerD3DLog(Text);
+  end;
+end;
+
+procedure TVideoMinerVideoSurface.LogSeekBarPaintState(CompactStyle,
+  D3DFrameCurrent: Boolean);
+var
+  NowTick: UInt64;
+  Reason: string;
+  Text: string;
+begin
+  Reason := D3DFramePresentationBlockReason;
+  if Reason = '' then
+    Reason := 'ready';
+
+  Text := Format(
+    'seekbar_gdi_paint compact=%s playback=%s force_compact=%s visible=%s ' +
+    'dragging=%s hover_ms=%d seek_preview=%s overlay=%s d3d_frame_current=%s reason=%s',
+    [BoolToStr(CompactStyle, True), BoolToStr(FPlaybackActive, True),
+     BoolToStr(FForceCompactSeekBarPaint, True), BoolToStr(FSeekBarVisible, True),
+     BoolToStr((FSeekBar <> nil) and FSeekBar.Dragging, True),
+     FSeekBarHoverPositionMs, BoolToStr(FSeekPreviewVisible, True),
+     BoolToStr(FOverlayVisible, True), BoolToStr(D3DFrameCurrent, True), Reason]);
+
+  NowTick := GetTickCount64;
+  if (Text <> FLastSeekBarPaintLogText) or
+     (NowTick - FLastSeekBarPaintLogTick >= 250) then
+  begin
+    FLastSeekBarPaintLogText := Text;
+    FLastSeekBarPaintLogTick := NowTick;
+    WriteVideoMinerD3DLog(Text);
+  end;
+end;
+
 function TVideoMinerVideoSurface.CanUseD3DFramePresentation: Boolean;
 begin
-  Result := (not FSourceHasAlpha) and (not FOverlayVisible) and
-    ((not FSeekBarVisible) or FPlaybackActive) and (not FSeekPreviewVisible) and
-    (not FSafeAreaVisible) and (not FLoadingActive) and
-    (FZoomScale <= MIN_ZOOM) and
-    ((FPreviousFileButton = nil) or (not FPreviousFileButton.Visible)) and
-    ((FNextFileButton = nil) or (not FNextFileButton.Visible));
+  Result := D3DFramePresentationBlockReason = '';
+end;
+
+function TVideoMinerVideoSurface.D3DFrameRecentlyPresented: Boolean;
+begin
+  Result := (FLastD3DFramePresentedTick > 0) and
+    (GetTickCount64 - FLastD3DFramePresentedTick <= 1000);
 end;
 
 function TVideoMinerVideoSurface.PrepareD3DFramePresentation: Boolean;
 begin
   Result := CanUseD3DFramePresentation and (ClientWidth > 0) and
     (ClientHeight > 0) and HandleAllocated;
+  LogD3DFramePresentationState('prepare', not Result);
   if not Result then
   begin
     SetNv12TextureD3DSeekBarOverlay(Default(TD3D11SeekBarOverlayState));
@@ -1045,6 +1165,7 @@ begin
     Exit;
 
   FOverlayVisible := Value;
+  LogD3DFramePresentationState('overlay_visible', True);
   if FFirstFrameButton <> nil then
     FFirstFrameButton.Visible := Value;
   if FSkipBackwardButton <> nil then
@@ -1087,6 +1208,7 @@ begin
     Exit;
 
   FSeekBarVisible := Value;
+  LogD3DFramePresentationState('seek_bar_visible', True);
   if FSeekBar <> nil then
     FSeekBar.Visible := Value;
   if not Value then
@@ -1236,7 +1358,7 @@ begin
     Exit;
   end;
 
-  SetOverlayVisible(HitAnyOverlayButton(MousePoint));
+  SetOverlayVisible((not FPlaybackActive) and HitAnyOverlayButton(MousePoint));
   SetSeekBarVisible(HitSeekBar(MousePoint) or
     ((FSeekBar <> nil) and FSeekBar.Dragging));
 
@@ -1498,6 +1620,7 @@ var
   DrawCanvas: TCanvas;
   DestRect: TRect;
   D3DFrameCurrent: Boolean;
+  SeekBarCompactStyle: Boolean;
   UsePaintBuffer: Boolean;
 begin
 {$IFDEF DEBUG}
@@ -1512,7 +1635,9 @@ begin
     Exit;
   end;
 
-  D3DFrameCurrent := Nv12TextureD3DFramePresented and (not FSourceHasAlpha);
+  D3DFrameCurrent := (Nv12TextureD3DFramePresented or
+    (FPlaybackActive and FSeekBarVisible and D3DFrameRecentlyPresented)) and
+    (not FSourceHasAlpha);
   UsePaintBuffer := FOverlayVisible or FSeekBarVisible or FSeekPreviewVisible or
     ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible) or
     ((FNextFileButton <> nil) and FNextFileButton.Visible);
@@ -1520,8 +1645,10 @@ begin
   begin
 {$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
-      'paint_skip_d3d_frame client_w=%d client_h=%d surface_ready=%s paint_ms=%.3f',
+      'paint_skip_d3d_frame client_w=%d client_h=%d surface_ready=%s d3d_current=%s d3d_recent=%s paint_ms=%.3f',
       [ClientWidth, ClientHeight, BoolToStr(CanUseD3DFramePresentation, True),
+       BoolToStr(Nv12TextureD3DFramePresented, True),
+       BoolToStr(D3DFrameRecentlyPresented, True),
        PaintWatch.Elapsed.TotalMilliseconds]));
 {$ENDIF}
     Exit;
@@ -1577,7 +1704,11 @@ begin
   if FNextFileButton <> nil then
     FNextFileButton.UpdateLayout(ClientRect);
   if FSeekBar <> nil then
+  begin
+    SeekBarCompactStyle := FPlaybackActive or FForceCompactSeekBarPaint;
+    FSeekBar.CompactPlaybackStyle := SeekBarCompactStyle;
     FSeekBar.UpdateLayout(SeekBarLayoutRect);
+  end;
 
   if (FPreviousFileButton <> nil) and FPreviousFileButton.Visible then
     FPreviousFileButton.Paint(DrawCanvas);
@@ -1604,7 +1735,12 @@ begin
   if (FNextFileButton <> nil) and FNextFileButton.Visible then
     FNextFileButton.Paint(DrawCanvas);
   if FSeekBarVisible and (FSeekBar <> nil) then
+  begin
+    SeekBarCompactStyle := FPlaybackActive or FForceCompactSeekBarPaint;
+    FSeekBar.CompactPlaybackStyle := SeekBarCompactStyle;
+    LogSeekBarPaintState(SeekBarCompactStyle, D3DFrameCurrent);
     FSeekBar.Paint(DrawCanvas);
+  end;
   DrawSeekHoverPreview(DrawCanvas);
   DrawLoadingIndicator(DrawCanvas);
   if UsePaintBuffer then
@@ -1699,6 +1835,7 @@ end;
 procedure TVideoMinerVideoSurface.Present;
 begin
   ClearNv12TextureD3DFramePresented;
+  FLastD3DFramePresentedTick := 0;
   FAlphaCompositeDirty := True;
   Invalidate;
 end;
@@ -1706,6 +1843,7 @@ end;
 procedure TVideoMinerVideoSurface.PresentImmediate;
 begin
   ClearNv12TextureD3DFramePresented;
+  FLastD3DFramePresentedTick := 0;
   FAlphaCompositeDirty := True;
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format(
@@ -1714,6 +1852,36 @@ begin
      BoolToStr(Visible, True), Handle]));
 {$ENDIF}
   Repaint;
+end;
+
+procedure TVideoMinerVideoSurface.MarkD3DFramePresented;
+begin
+  FLastD3DFramePresentedTick := GetTickCount64;
+end;
+
+procedure TVideoMinerVideoSurface.PresentImmediateAsPlaybackFallback;
+var
+  D3DFrameRecentlyPresented: Boolean;
+begin
+  D3DFrameRecentlyPresented := Self.D3DFrameRecentlyPresented;
+  if (Nv12TextureD3DFramePresented or D3DFrameRecentlyPresented) and
+     (not FSourceHasAlpha) and FPlaybackActive and FSeekBarVisible then
+  begin
+    UpdateD3DSeekBarOverlayState;
+    WriteVideoMinerD3DLog(Format(
+      'surface_present_immediate_playback_fallback_keep_d3d seek_bar=%s playback=%s d3d_current=%s d3d_recent=%s client=%dx%d',
+      [BoolToStr(FSeekBarVisible, True), BoolToStr(FPlaybackActive, True),
+       BoolToStr(Nv12TextureD3DFramePresented, True),
+       BoolToStr(D3DFrameRecentlyPresented, True), ClientWidth, ClientHeight]));
+    Exit;
+  end;
+
+  FForceCompactSeekBarPaint := True;
+  try
+    PresentImmediate;
+  finally
+    FForceCompactSeekBarPaint := False;
+  end;
 end;
 
 procedure TVideoMinerVideoSurface.SetSourceHasAlpha(Value: Boolean);
@@ -1730,12 +1898,25 @@ begin
 end;
 procedure TVideoMinerVideoSurface.SetPlaybackActive(Value: Boolean);
 begin
+  if FPlaybackActive = Value then
+    Exit;
+
   FPlaybackActive := Value;
+  LogD3DFramePresentationState('playback_active', True);
+  UpdateD3DSeekBarOverlayState;
   if (FPlayPauseButton <> nil) and (FPlayPauseButton.IsPlaying <> Value) then
   begin
     FPlayPauseButton.IsPlaying := Value;
     Invalidate;
   end;
+end;
+
+procedure TVideoMinerVideoSurface.HidePlaybackStartOverlays;
+begin
+  ClearSeekHoverPreview;
+  SetOverlayVisible(False);
+  SetSeekBarVisible(False);
+  UpdateD3DSeekBarOverlayState;
 end;
 
 procedure TVideoMinerVideoSurface.SetSeekProgress(PositionMs, MaxMs: Integer);
@@ -1767,6 +1948,7 @@ begin
   FSeekPreviewPositionMs := PositionMs;
   FSeekPreviewAnchor := AnchorPoint;
   FSeekPreviewVisible := True;
+  LogD3DFramePresentationState('seek_preview_show', True);
   Invalidate;
 end;
 
@@ -1776,6 +1958,7 @@ begin
     Exit;
 
   FSeekPreviewVisible := False;
+  LogD3DFramePresentationState('seek_preview_clear', True);
   if FSeekPreviewBitmap <> nil then
     FSeekPreviewBitmap.SetSize(0, 0);
   Invalidate;
@@ -1787,6 +1970,7 @@ begin
     Exit;
 
   FSafeAreaVisible := Value;
+  LogD3DFramePresentationState('safe_area_visible', True);
   Invalidate;
 end;
 procedure TVideoMinerVideoSurface.SetSeekWheelFrameStepMs(Value: Integer);

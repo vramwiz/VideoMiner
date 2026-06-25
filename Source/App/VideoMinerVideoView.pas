@@ -7,8 +7,8 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Types, Vcl.Controls, Vcl.ExtCtrls,
-  Vcl.Graphics, FFmpegDecoder, VideoMinerBitmapRotation, VideoMinerFrameCheck,
-  VideoMinerDebugLog, VideoMinerOverlay, VideoMinerSettings,
+  Winapi.Windows, Vcl.Graphics, FFmpegDecoder, VideoMinerBitmapRotation,
+  VideoMinerFrameCheck, VideoMinerDebugLog, VideoMinerOverlay, VideoMinerSettings,
   VideoMinerVideoSurface, FFmpegD3D11TextureProbe;
 
 type
@@ -20,6 +20,8 @@ type
     FLoopFrameCaptureActive  : Boolean;                 // ループ先頭フレームを学習中か
     FDecodeScratch           : TBitmap;                 // 表示せずに次フレームを確認するための作業用 Bitmap
     FDisplayRotationOffset   : Integer;                 // ユーザー操作で追加する表示回転角度
+    FLastD3DDecodeLogText    : string;                  // 直近に出した D3D デコード判定ログ
+    FLastD3DDecodeLogTick    : UInt64;                  // 直近に D3D デコード判定ログを出した時刻
     FShownFrameCache         : TBitmap;                 // 直近の明示表示フレームを即時再表示するためのキャッシュ
     FShownFrameCachePosition : Integer;                 // キャッシュしている明示表示フレームの位置 ms
     FSurface                 : TVideoMinerVideoSurface; // 実際の動画表示と overlay 描画を持つサーフェス
@@ -33,6 +35,8 @@ type
     procedure ClearShownFrameCache;
     // metadata 回転とユーザー操作の追加回転を合成した角度を返す
     function DisplayRotationDegrees(SourceDegrees: Integer): Integer;
+    // D3D11 表示がデコード側で使えるかを状態変化時または低頻度でログへ出す
+    procedure LogD3DDecodeState(ConvertFrame, D3DAllowed: Boolean; EffectiveRotation: Integer);
     // フォーム側で親子関係やフォーカス対象として扱うサーフェスを返す
     function GetSurfaceControl: TWinControl;
     // 現在表示中の動画フレーム Bitmap を返す
@@ -130,6 +134,8 @@ type
     procedure BeginLoadingIndicator;
     // 次の明示デコード前に表示フレームキャッシュだけを空にする
     procedure ClearFrameCache;
+    // 停止状態から再生へ入る直前に、停止中 overlay の残りを閉じる
+    procedure HidePlaybackStartOverlays;
     // 次に表示されるループ先頭側フレームを小さくキャッシュし始める
     procedure BeginLoopFrameCacheCapture(StartMs: Integer;
       CaptureCurrentFrame: Boolean = False);
@@ -168,6 +174,8 @@ type
     procedure Present(Bitmap: TBitmap);
     // サーフェスの現在 Bitmap を即時表示する
     procedure PresentImmediate(Bitmap: TBitmap);
+    // 再生継続中の CPU fallback としてサーフェスの現在 Bitmap を即時表示する
+    procedure PresentImmediateAsPlaybackFallback(Bitmap: TBitmap);
     // overlay のシーク進捗を更新する
     procedure SetSeekProgress(PositionMs, MaxMs: Integer);
     // シークバー hover 位置の小型プレビューを表示する
@@ -353,6 +361,17 @@ begin
   if FLoopFrameCacheStartMs <> StartMs then
     ClearLoopFrameCache;
 
+  if (FLoopFrameCacheStartMs = StartMs) and (FLoopFrameCacheCount > 0) then
+  begin
+    FLoopFrameCaptureActive := False;
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format(
+      'loop_frame_cache_capture_reuse start_ms=%d count=%d',
+      [StartMs, FLoopFrameCacheCount]));
+{$ENDIF}
+    Exit;
+  end;
+
   FLoopFrameCacheStartMs := StartMs;
   FLoopFrameCacheCount := 0;
   FLoopFrameCaptureActive := True;
@@ -432,6 +451,43 @@ begin
     Inc(Result, 360);
 end;
 
+procedure TVideoMinerVideoView.LogD3DDecodeState(ConvertFrame,
+  D3DAllowed: Boolean; EffectiveRotation: Integer);
+var
+  NowTick: UInt64;
+  Reason: string;
+  Text: string;
+begin
+  if not ConvertFrame then
+    Reason := 'convert_frame_false'
+  else if EffectiveRotation <> 0 then
+    Reason := 'rotation_not_zero'
+  else if FLoopFrameCaptureActive then
+    Reason := 'loop_frame_capture_active'
+  else if not FSurface.CanUseD3DFramePresentation then
+    Reason := 'surface_not_ready'
+  else if not D3DAllowed then
+    Reason := 'not_allowed'
+  else
+    Reason := 'ready';
+
+  Text := Format(
+    'd3d_decode_state allowed=%s reason=%s convert_frame=%s effective_rotation=%d ' +
+    'loop_cache_capture=%s surface_ready=%s',
+    [BoolToStr(D3DAllowed, True), Reason, BoolToStr(ConvertFrame, True),
+     EffectiveRotation, BoolToStr(FLoopFrameCaptureActive, True),
+     BoolToStr(FSurface.CanUseD3DFramePresentation, True)]);
+
+  NowTick := GetTickCount64;
+  if (Text <> FLastD3DDecodeLogText) or
+     (NowTick - FLastD3DDecodeLogTick >= 1000) then
+  begin
+    FLastD3DDecodeLogText := Text;
+    FLastD3DDecodeLogTick := NowTick;
+    WriteVideoMinerD3DLog(Text);
+  end;
+end;
+
 procedure TVideoMinerVideoView.ChangeBossHelpPage(Delta: Integer);
 begin
   if FSurface <> nil then
@@ -499,7 +555,7 @@ begin
     Exit;
 
   FSurface.Bitmap.Assign(FLoopFrameCache[0]);
-  FSurface.PresentImmediate;
+  FSurface.PresentImmediateAsPlaybackFallback;
 end;
 
 procedure TVideoMinerVideoView.BeginLoadingIndicator;
@@ -518,6 +574,12 @@ procedure TVideoMinerVideoView.PresentImmediate(Bitmap: TBitmap);
 begin
   if FSurface <> nil then
     FSurface.PresentImmediate;
+end;
+
+procedure TVideoMinerVideoView.PresentImmediateAsPlaybackFallback(Bitmap: TBitmap);
+begin
+  if FSurface <> nil then
+    FSurface.PresentImmediateAsPlaybackFallback;
 end;
 
 function FrameSignatureLogText(const Signature: TVideoMinerFrameSignature): string;
@@ -761,6 +823,12 @@ begin
     FSurface.ClearSeekHoverPreview;
 end;
 
+procedure TVideoMinerVideoView.HidePlaybackStartOverlays;
+begin
+  if FSurface <> nil then
+    FSurface.HidePlaybackStartOverlays;
+end;
+
 procedure TVideoMinerVideoView.EndLoadingIndicator;
 begin
   if FSurface <> nil then
@@ -969,6 +1037,7 @@ begin
   D3DAllowed := ConvertFrame and (EffectiveRotation = 0) and
     (not FLoopFrameCaptureActive) and FSurface.PrepareD3DFramePresentation;
   SetNv12TextureD3DDisplayAllowed(D3DAllowed);
+  LogD3DDecodeState(ConvertFrame, D3DAllowed, EffectiveRotation);
 {$IFDEF DEBUG}
   if ConvertFrame then
     WriteVideoMinerSlowLog(Format(
@@ -983,6 +1052,7 @@ begin
 
   if ConvertFrame and Nv12TextureD3DFramePresented then
   begin
+    FSurface.MarkD3DFramePresented;
 {$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
       'decode_next_d3d_presented position_ms=%d source_rotation=%d display_rotation_offset=%d',

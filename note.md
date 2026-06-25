@@ -59,7 +59,14 @@
        - 共有スクリーンショットでは `frame 0`、hover preview 小窓、`Vol / 1.0x / Check / Loop` 付きのフル操作 UI が表示されていた。
        - この状態は `FPlaybackActive=False` または `FSeekPreviewVisible=True` のため、現行設計では `CanUseD3DFramePresentation=False` になり CPU BGRX32 + GDI 経路へ退避する。
        - つまり「D3D が常に無効」とは限らず、「停止中 / hover preview 中 / フル overlay 表示中は旧 UI」が現状仕様。
-       - ただしユーザー体験としては紛らわしいため、次は旧表示に見える条件をログまたは画面上で切り分けられるようにする。
+       - 2026-06-25: Release でも出る軽量ログ `d3d_surface_state` / `d3d_decode_state` / `d3d11_display_present_lite` を追加した。
+       - 2026-06-25: 通常 open は自動再生するが、起動時の前回ファイル復元は `AutoPlay=False` のため、初回停止表示では旧 UI になることを確認した。
+       - 2026-06-25: 再生開始時に停止中の hover preview と中央 overlay を閉じ、D3D seek bar state を更新する対策を入れた。
+       - 2026-06-25: 旧 GDI seek bar から新 D3D seek bar へ同じ場所で切り替わる違和感を避けるため、ユーザー操作で停止状態から再生へ入る直前だけ旧 seek bar も一度閉じるようにした。
+       - 2026-06-25: ループや内部再開では seek bar を消さないよう、上記の掃除処理は `SetPlaybackActive(True)` ではなく `PlayFromCurrentPosition` 直前に限定した。
+       - 2026-06-25: ループ先頭フレームキャッシュの `PresentImmediate` は CPU/GDI paint を通るため、再生中でも一瞬だけ旧フル seek bar が出ることがあった。再生中の CPU/GDI fallback では `CompactPlaybackStyle` で D3D 風の簡易 seek bar を描くようにした。
+       - 2026-06-25: 終端 loop では EOS 検出で一度 `PlaybackActive=False` になってから loop cache を表示していたため、cache 表示前に `PlaybackActive=True` を戻し、D3D seek bar overlay state も再同期するようにした。
+       - 次はユーザー環境で「前回ファイル復元後に再生開始してから hover」で `overlay=True` が出るか確認する。
      - 次はテキスト、ボタン、音量 UI、hover 状態などを D3D 側へどこまで持っていくか決める。
    - D3D overlay 化のデバッグ方法:
      - テストファイルは `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4`。
@@ -72,8 +79,9 @@
      - ログ比較用の保存先は `D:\Users\take6\VideoMiner\VideoMiner_playback_debug_*.log`。
      - ちらついたら、GDI/VCL が同じ HWND へ描いていないか、`Paint` が seek bar を描いていないか、D3D `Present` と GDI overlay が混在していないかを最初に疑う。
    - 次に進めること:
-     - `CanUseD3DFramePresentation` が False になる理由を Debug/Release どちらでも確認できるように、低頻度の状態ログか画面内デバッグ表示を追加する。
-     - 再生中にシークバー hover した時だけ新 D3D seek bar を出す現状仕様を、UI 上も分かるようにするか、停止中 seek bar も D3D 側へ寄せるか決める。
+     - ユーザー環境の `マイドキュメント\VideoMiner\VideoMiner_playback_debug.log` で `d3d_surface_state`、`d3d_decode_state`、`d3d11_display_present_lite` を確認する。
+     - `d3d11_display_present_lite overlay=True` が出ない場合は、同じ近辺の `reason=` を見て、停止中仕様なのか、hover preview / rotation / overlay / loading / zoom / nav 表示で退避しているのかを切り分ける。
+     - 起動時復元直後の停止状態でも新 UI に見せたい場合は、停止中 seek bar も D3D 側へ寄せるか、停止中用の見た目を D3D seek bar に合わせるか決める。
      - 停止中 seek bar を D3D 化する場合は、D3D 表示済み frame がない状態で backbuffer を更新する必要があるため、現在 CPU bitmap / preview / D3D frame の所有関係を整理してから着手する。
      - hover preview 小窓まで D3D 化するには、preview bitmap を D3D texture 化して sprite 合成する段階が必要。これは seek bar 本体より後回しでよい。
    - 次は D3D 表示の統合を詰める。overlay、ズーム、シークプレビュー、フレームコピー機能との整合を順に見る。

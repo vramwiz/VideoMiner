@@ -1127,6 +1127,9 @@ begin
   if FMediaSession.VideoFile = '' then
     Exit;
 
+  if FVideoView <> nil then
+    FVideoView.HidePlaybackStartOverlays;
+
   FrameShown := FMediaSession.CurrentVideoPositionMs = FMediaSession.SeekPositionMs;
   if FMediaSession.SeekPositionMs >= FMediaSession.SeekMaxMs then
   begin

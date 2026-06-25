@@ -5,7 +5,7 @@
         <FrameworkType>VCL</FrameworkType>
         <MainSource>VideoMiner.dpr</MainSource>
         <Base>True</Base>
-        <Config Condition="'$(Config)'==''">Release</Config>
+        <Config Condition="'$(Config)'==''">Debug</Config>
         <Platform Condition="'$(Platform)'==''">Win64</Platform>
         <TargetedPlatforms>2</TargetedPlatforms>
         <AppType>Application</AppType>
@@ -161,6 +161,7 @@
         <DCCReference Include="Source\Lib\ShortcutAction\ShortcutAction.pas"/>
         <DCCReference Include="Source\FFmpeg\FFmpegApi.pas"/>
         <DCCReference Include="Source\FFmpeg\FFmpegAudioTempo.pas"/>
+        <DCCReference Include="Source\FFmpeg\FFmpegD3D11TextureProbe.pas"/>
         <DCCReference Include="Source\FFmpeg\FFmpegFrameConvert.pas"/>
         <DCCReference Include="Source\FFmpeg\FFmpegQsvDecode.pas"/>
         <DCCReference Include="Source\FFmpeg\FFmpegStreamInfo.pas"/>

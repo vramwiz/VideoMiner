@@ -164,6 +164,7 @@ type
     FCheckButtonHovered         : Boolean;                     // Check ボタン上にマウスがあるか
     FCheckButtonPressed         : Boolean;                     // Check ボタンを押下中か
     FCheckEnabled               : Boolean;                     // Check モード中か
+    FCompactPlaybackStyle       : Boolean;                     // 再生中 CPU fallback 時に D3D 風の簡易表示で描くか
     FDeleteChapterButtonHovered : Boolean;                     // 削除ボタン上にマウスがあるか
     FDeleteChapterButtonPressed : Boolean;                     // 削除ボタンを押下中か
     FEndActionButtonHovered     : Boolean;                     // 終端動作ボタン上にマウスがあるか
@@ -260,6 +261,8 @@ type
     function WheelPosition(WheelDelta, StepMs: Integer): Integer;
     property CheckEnabled: Boolean read FCheckEnabled write SetCheckEnabled;
     property Chapters: TVideoMinerOverlayChapters read FChapters write SetChapters;
+    property CompactPlaybackStyle: Boolean read FCompactPlaybackStyle
+      write FCompactPlaybackStyle;
     property Dragging: Boolean read FDragging;
     property EndActionText: string read FEndActionText write SetEndActionText;
     property FullScreen: Boolean read FFullScreen write SetFullScreen;
@@ -2076,6 +2079,53 @@ begin
   PositionRatio := Max(0.0, Min(1.0, PositionRatio));
   KnobCenterX := Track.Left + Round(Track.Width * PositionRatio);
   TrackCenterY := Track.Top + Track.Height div 2;
+
+  if FCompactPlaybackStyle then
+  begin
+    DrawAlphaPanel(Canvas, Rect(0, 0, Bounds.Width, Bounds.Height), 18, 92);
+    DrawAlphaRoundRect(Canvas, Rect(Track.Left - 1, Track.Top - 3,
+      Track.Right + 1, Track.Bottom + 3), Track.Height + 3, 62, clBlack);
+    DrawAlphaRoundRect(Canvas, Track, Track.Height, 82);
+
+    FilledRect := Track;
+    FilledRect.Right := Max(FilledRect.Left + Track.Height, KnobCenterX);
+    DrawAlphaRoundRect(Canvas, FilledRect, Track.Height, 230, SEEK_ACCENT_COLOR);
+    if FilledRect.Right > FilledRect.Left then
+      DrawAlphaRoundRect(Canvas, Rect(FilledRect.Left, FilledRect.Top,
+        FilledRect.Right, Min(FilledRect.Bottom, FilledRect.Top + 2)),
+        1, 132, $00FFD68F);
+    DrawChapterMarkers(Canvas, Track);
+
+    ShadowRadius := 20;
+    KnobRadius := 11;
+    if FDragging then
+    begin
+      ShadowRadius := 24;
+      KnobRadius := 13;
+    end;
+    DrawAlphaEllipse(Canvas, Rect(KnobCenterX - ShadowRadius,
+      TrackCenterY - ShadowRadius, KnobCenterX + ShadowRadius,
+      TrackCenterY + ShadowRadius), 46, SEEK_ACCENT_COLOR);
+    DrawAlphaEllipse(Canvas, Rect(KnobCenterX - KnobRadius,
+      TrackCenterY - KnobRadius, KnobCenterX + KnobRadius,
+      TrackCenterY + KnobRadius), 245, SEEK_ACCENT_COLOR);
+    DrawAlphaEllipse(Canvas, Rect(KnobCenterX - 6,
+      TrackCenterY - 6, KnobCenterX + 6, TrackCenterY + 6),
+      255, $00FFD18A);
+
+    Text := Format('%s / %s', [FormatTimeMs(DisplayPositionMs),
+      FormatTimeMs(FMaxMs)]);
+    Canvas.Font.Name := 'Segoe UI';
+    Canvas.Font.Size := 10;
+    Canvas.Font.Style := [];
+    Canvas.Font.Color := clWhite;
+    SetBkMode(Canvas.Handle, TRANSPARENT);
+    TextSize := Canvas.TextExtent(Text);
+    TextTop := Bounds.Height - 38 + (17 - TextSize.cy) div 2;
+    Canvas.TextOut(Bounds.Left + (Track.Left + Track.Right - TextSize.cx) div 2,
+      Bounds.Top + TextTop, Text);
+    Exit;
+  end;
 
   DrawAlphaRoundRect(Canvas, Track, Track.Height, 85);
 

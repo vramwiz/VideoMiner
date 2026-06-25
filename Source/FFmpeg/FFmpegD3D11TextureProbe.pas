@@ -115,6 +115,9 @@ var
   GlobalD3DDisplayAllowed: Boolean;
   GlobalD3DFramePresented: Boolean;
   GlobalD3DSeekBarOverlay: TD3D11SeekBarOverlayState;
+  LastD3DPresentLogTick: UInt64;
+  LastD3DPresentOverlayVisible: Boolean;
+  LastD3DPresentDragging: Boolean;
 
 function TextureProbeEnabled: Boolean;
 begin
@@ -1362,15 +1365,31 @@ begin
 
   GlobalD3DFramePresented := True;
   Result := True;
-  WriteVideoMinerSlowLog(Format(
-    'd3d11_display_present frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d y_stride=%d uv_stride=%d range=%d space=%d recreated=%s overlay=%s dragging=%s upload_ms=%.3f clear_ms=%.3f draw_ms=%.3f overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
-    [Frame.width, Frame.height, FTargetWidth, FTargetHeight,
-     ViewLeft, ViewTop, ViewLeft + ViewWidth, ViewTop + ViewHeight,
-     Frame.linesize[0], Frame.linesize[1], Frame.color_range,
-     Frame.colorspace, BoolToStr(Recreated, True),
-     BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
-     BoolToStr(GlobalD3DSeekBarOverlay.Dragging, True), UploadMs, ClearMs,
-     DrawMs, OverlayMs, PresentMs, TotalWatch.Elapsed.TotalMilliseconds]));
+  if VideoMinerSlowLogEnabled then
+    WriteVideoMinerSlowLog(Format(
+      'd3d11_display_present frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d y_stride=%d uv_stride=%d range=%d space=%d recreated=%s overlay=%s dragging=%s upload_ms=%.3f clear_ms=%.3f draw_ms=%.3f overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
+      [Frame.width, Frame.height, FTargetWidth, FTargetHeight,
+       ViewLeft, ViewTop, ViewLeft + ViewWidth, ViewTop + ViewHeight,
+       Frame.linesize[0], Frame.linesize[1], Frame.color_range,
+       Frame.colorspace, BoolToStr(Recreated, True),
+       BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
+       BoolToStr(GlobalD3DSeekBarOverlay.Dragging, True), UploadMs, ClearMs,
+       DrawMs, OverlayMs, PresentMs, TotalWatch.Elapsed.TotalMilliseconds]))
+  else if Recreated or
+          (LastD3DPresentOverlayVisible <> GlobalD3DSeekBarOverlay.Visible) or
+          (LastD3DPresentDragging <> GlobalD3DSeekBarOverlay.Dragging) or
+          (GetTickCount64 - LastD3DPresentLogTick >= 1000) then
+  begin
+    LastD3DPresentLogTick := GetTickCount64;
+    LastD3DPresentOverlayVisible := GlobalD3DSeekBarOverlay.Visible;
+    LastD3DPresentDragging := GlobalD3DSeekBarOverlay.Dragging;
+    WriteVideoMinerD3DLog(Format(
+      'd3d11_display_present_lite frame=%dx%d target=%dx%d overlay=%s dragging=%s recreated=%s total_ms=%.3f',
+      [Frame.width, Frame.height, FTargetWidth, FTargetHeight,
+       BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
+       BoolToStr(GlobalD3DSeekBarOverlay.Dragging, True),
+       BoolToStr(Recreated, True), TotalWatch.Elapsed.TotalMilliseconds]));
+  end;
 end;
 
 procedure TNv12TextureProbe.Probe(Frame: PAVFrame);

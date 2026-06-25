@@ -2,6 +2,46 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-25 起動時前回ファイル復元後の D3D seek bar 対策
+- 原因:
+  - 通常のファイル open は `OpenAndPlayFile -> LoadVideoFile(..., True)` で自動再生する。
+  - 起動時の前回ファイル復元だけは `OpenRememberedFile -> LoadVideoFile(..., False)` で、自動再生せず停止状態の 0 フレーム目を CPU/GDI で表示する。
+  - 現行の新 D3D seek bar は再生中の D3D backbuffer に合成する方式なので、起動直後の停止状態で下部バーを出すと旧 VCL/GDI UI になる。
+  - さらに停止中の hover preview や中央 overlay が残ると、再生開始直後も `seek_preview_visible` / `center_overlay_visible` で D3D へ入りにくい。
+- 対策:
+  - 停止中 overlay を閉じる処理を `HidePlaybackStartOverlays` として分離し、ユーザー操作の `PlayFromCurrentPosition` 直前だけで呼ぶようにした。
+  - 前回ファイル復元を勝手に自動再生する挙動には変えず、ユーザーが再生開始した後に D3D seek bar へ移れるようにした。
+  - 停止中の旧 GDI seek bar が表示されたまま再生開始すると、同じ位置で新 D3D seek bar へ切り替わって違和感が出るため、再生開始時は旧 seek bar も一度閉じるようにした。再生中に改めてシークバー領域へ hover した時に D3D seek bar を出す。
+  - `SetPlaybackActive(True)` に直接置くと、ループや内部再開のような再生継続でも seek bar が一度消える可能性があるため、再生状態フラグの変更だけでは overlay を閉じないようにした。
+  - ループ先頭フレームキャッシュは `TryPresentLoopFrameCache -> PresentImmediate` で CPU/GDI 描画を通るため、再生中でも一瞬だけ旧フル seek bar が描かれることがあった。
+  - `TVideoMinerOverlaySeekBar.CompactPlaybackStyle` を追加し、再生中の CPU/GDI fallback では D3D seek bar に近い簡易表示だけを描くようにした。
+  - これにより、ループ直後や内部的な CPU frame 即時表示でも、旧 `Vol / 1.0x / Check / Loop` 付きのフル UI へ見た目が戻りにくくした。
+  - 追加確認で、終端到達の loop 経路では EOS 検出時に一度 `PlaybackActive=False` になり、その後の loop cache 表示時だけ停止中扱いで旧 UI が描かれることが分かった。
+  - `FinishAtEnd` の loop 再開では cache 表示前に `PlaybackActive=True` へ戻し、`SetPlaybackActive` で D3D seek bar overlay state も再同期するようにした。
+  - `PresentImmediateAsPlaybackFallback` を追加し、loop cache の CPU/GDI 即時表示は一時的に compact seek bar 描画を強制するようにした。
+  - さらに loop cache 表示直後の通常 `Paint` が 1 frame だけ GDI compact seek bar を描いていたため、直近 D3D frame の表示時刻を surface 側で保持するようにした。
+  - D3D 表示から 1 秒以内で、再生中かつ seek bar 表示中なら、FFmpeg 側の `Nv12TextureD3DFramePresented` が EOS 判定で一時的に落ちていても `Paint` は GDI 描画せず `paint_skip_d3d_frame` で backbuffer を維持する。
+  - ユーザー確認で、loop 時に旧/compact GDI seek bar へ切り替わる違和感が解消した。
+- 確認:
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、エラー 0。既存の hint 警告は残る。
+
+## 2026-06-25 D3D11 seek bar が出ない環境の切り分けログ
+- ユーザー環境で新しい D3D seek bar が出ず、旧 VCL/GDI の下部 UI に見える状態を切り分けるため、Release でも出る軽量 D3D ログを追加した。
+  - `WriteVideoMinerD3DLog` / `VideoMinerD3DLogEnabled` を追加した。既定で有効だが、出す側で状態変化または約 1 秒ごとに間引く。
+  - `TVideoMinerVideoSurface.D3DFramePresentationBlockReason` を追加し、D3D 直接表示を止める理由を `source_has_alpha`、`center_overlay_visible`、`seek_bar_visible_while_paused`、`seek_preview_visible`、`safe_area_visible`、`loading_active`、`zoom_active`、左右ナビ表示などへ分けた。
+  - `d3d_surface_state` で、再生状態、seek bar、hover preview、中央 overlay、safe area、loading、zoom、alpha、左右ナビ、client size を出すようにした。
+  - `d3d_decode_state` で、デコード側の D3D 許可理由を `ready`、`rotation_not_zero`、`loop_frame_capture_active`、`surface_not_ready` などへ分けた。
+  - `d3d11_display_present_lite` を追加し、Release でも D3D present の有無、overlay 表示、dragging、swap chain 再作成、total time を低頻度で確認できるようにした。
+- 期待する見方:
+  - 新 D3D seek bar が出ている時は、再生中 hover で `d3d_surface_state ... reason=ready`、`d3d_decode_state allowed=True reason=ready`、`d3d11_display_present_lite ... overlay=True` が出る。
+  - 旧 UI に戻る時は、`seek_bar_visible_while_paused`、`seek_preview_visible`、`center_overlay_visible`、`rotation_not_zero` など、退避理由がログに残る。
+- 確認:
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、エラー 0。既存の hint 警告は残る。
+
 ## 2026-06-25 D3D11 seek bar overlay
 - D3D11 実表示を既定で有効にした。
   - これまでは Debug 実行時に `VIDEOMINER_D3D11_DISPLAY=1` が必要だったが、通常起動でも D3D11 実表示経路を試すようにした。
