@@ -64,6 +64,7 @@ type
     FOnVolumeChange         : TVideoMinerOverlayVolumeEvent;     // 音量変更の通知先
     FOverlayVisible         : Boolean;                           // 中央 overlay ボタン群を表示中か
     FPlaybackActive         : Boolean;                           // 現在再生中か
+    FSeekBarHoverPositionMs : Integer;                           // D3D overlay 用の hover/drag 位置 ms
     FPlayPauseButton        : TVideoMinerOverlayPlayPauseButton; // 再生/一時停止の中央ボタン
     FPreviousFileButton     : TVideoMinerOverlayFileNavButton;   // 前動画へ移動する左端ボタン
     FPreviewRect            : TRect;                             // 動画フレームが実際に描画される領域
@@ -340,6 +341,7 @@ begin
   FSeekPreviewBitmap.PixelFormat := pf32bit;
   FOverlayVisible := False;
   FSeekBarVisible := False;
+  FSeekBarHoverPositionMs := -1;
   FSeekPreviewVisible := False;
   FSeekWheelFrameStepMs := DEFAULT_FRAME_STEP_MS;
   ResetZoom;
@@ -469,6 +471,7 @@ begin
     FNextFileButton.Visible := False;
   if FSeekBar <> nil then
     FSeekBar.SetProgress(0, 0);
+  FSeekBarHoverPositionMs := -1;
   ClearSeekHoverPreview;
   SetSeekBarVisible(False);
   Invalidate;
@@ -1004,6 +1007,7 @@ begin
     State.Track := TrackRect;
     State.PositionMs := FSeekBar.CurrentDisplayPositionMs;
     State.MaxMs := FSeekBar.MaxMs;
+    State.HoverPositionMs := FSeekBarHoverPositionMs;
     State.Dragging := FSeekBar.Dragging;
     SetLength(State.Chapters, Length(FSeekBar.Chapters));
     for ChapterIndex := 0 to High(State.Chapters) do
@@ -1087,6 +1091,7 @@ begin
     FSeekBar.Visible := Value;
   if not Value then
   begin
+    FSeekBarHoverPositionMs := -1;
     ClearSeekHoverPreview;
     if Assigned(FOnSeekHoverPreviewEnd) then
       FOnSeekHoverPreviewEnd(Self);
@@ -1154,6 +1159,7 @@ begin
       FOnSeekHoverPreviewEnd(Self);
     if FSeekBar.MouseDown(Point(X, Y)) then
     begin
+      FSeekBarHoverPositionMs := FSeekBar.CurrentDisplayPositionMs;
       UpdateD3DSeekBarOverlayState;
       InvalidateOverlayControl(FSeekBar);
     end;
@@ -1261,10 +1267,21 @@ begin
       InvalidateOverlayControl(FLastFrameButton);
   end;
 
-  if FSeekBarVisible and (FSeekBar <> nil) and FSeekBar.MouseMove(MousePoint) then
+  if FSeekBarVisible and (FSeekBar <> nil) then
   begin
-    UpdateD3DSeekBarOverlayState;
-    InvalidateOverlayControl(FSeekBar);
+    if FSeekBar.HoverPositionFromPoint(MousePoint, HoverPositionMs) then
+      FSeekBarHoverPositionMs := HoverPositionMs
+    else if not FSeekBar.Dragging then
+      FSeekBarHoverPositionMs := -1;
+    if FSeekBar.MouseMove(MousePoint) then
+    begin
+      if FSeekBar.Dragging then
+        FSeekBarHoverPositionMs := FSeekBar.CurrentDisplayPositionMs;
+      UpdateD3DSeekBarOverlayState;
+      InvalidateOverlayControl(FSeekBar);
+    end
+    else
+      UpdateD3DSeekBarOverlayState;
   end;
 
   if ((not FPlaybackActive) and FSeekBarVisible and (FSeekBar <> nil) and
@@ -1321,6 +1338,8 @@ begin
   begin
     if FSeekBar.MouseUp(Point(X, Y)) then
     begin
+      if not FSeekBar.HoverPositionFromPoint(Point(X, Y), FSeekBarHoverPositionMs) then
+        FSeekBarHoverPositionMs := -1;
       UpdateD3DSeekBarOverlayState;
       InvalidateOverlayControl(FSeekBar);
     end;
@@ -1726,6 +1745,8 @@ begin
     FSeekBar.SetProgress(PositionMs, MaxMs);
     if FSeekBarVisible then
     begin
+      if FSeekBar.Dragging then
+        FSeekBarHoverPositionMs := FSeekBar.CurrentDisplayPositionMs;
       UpdateD3DSeekBarOverlayState;
       InvalidateOverlayControl(FSeekBar);
     end;

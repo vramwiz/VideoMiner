@@ -20,6 +20,7 @@ type
     Track          : TRect;   // progress track の client 座標
     PositionMs     : Integer; // 表示する現在位置 ms
     MaxMs          : Integer; // 動画長 ms
+    HoverPositionMs: Integer; // hover/drag で指している位置 ms、なしなら -1
     Dragging       : Boolean; // シークバーをドラッグ中か
     Chapters       : TArray<TD3D11SeekBarOverlayChapter>; // D3D 側で描くチャプター目盛り
   end;
@@ -955,6 +956,9 @@ var
   ErrorMessage: string;
   FilledRect: TRect;
   HighlightRect: TRect;
+  HoverGuideRect: TRect;
+  HoverRatio: Double;
+  HoverX: Integer;
   KnobCenterY: Integer;
   KnobCorePad: Integer;
   KnobHaloPadX: Integer;
@@ -997,6 +1001,23 @@ begin
   HighlightRect := FilledRect;
   HighlightRect.Bottom := Min(HighlightRect.Bottom, HighlightRect.Top + 2);
   DrawOverlayRect(HighlightRect, 0.58, 0.84, 1.0, 0.52);
+
+  if (State.HoverPositionMs >= 0) and (State.HoverPositionMs <= State.MaxMs) then
+  begin
+    HoverRatio := State.HoverPositionMs / State.MaxMs;
+    HoverRatio := Max(0.0, Min(1.0, HoverRatio));
+    HoverX := TrackRect.Left + Round(TrackRect.Width * HoverRatio);
+    if State.Dragging then
+      HoverGuideRect := Rect(HoverX - 2, TrackRect.Top - 17, HoverX + 3,
+        TrackRect.Bottom + 24)
+    else
+      HoverGuideRect := Rect(HoverX - 1, TrackRect.Top - 12, HoverX + 2,
+        TrackRect.Bottom + 18);
+    if State.Dragging then
+      DrawOverlayRect(HoverGuideRect, 0.70, 0.88, 1.0, 0.72)
+    else
+      DrawOverlayRect(HoverGuideRect, 1.0, 1.0, 1.0, 0.34);
+  end;
 
   for Chapter in State.Chapters do
   begin
