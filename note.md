@@ -23,9 +23,9 @@
    - まず Debug ログ量を絞り、`playback_tick`、`paint`、`decode_ms`、`paint_ms`、`timer_interval` を確認する。
 4. 4K 以上のデコード表示経路を段階的に改善する。
    - 直近の 4K30 高負荷テストでは、QSV の主負担は GPU->CPU 転送ではなく、NV12 -> BGRA の `sws_scale` と負 stride 回避コピーだった。
-   - まず D3D 直接表示へ進む前に、CPU 側の変換削減を検討する。
-   - 候補は `sws_scale` を避ける NV12 -> BGRA 変換、SIMD/並列化、出力形式の見直し、負 stride へ安全に直接書ける変換手段の調査。
-   - その後に、QSV/D3D11VA から GPU texture を受け取り、D3D11 swap chain や shader で表示する経路が成立するかを調査する。
+   - CPU 側の変換削減として `SWS_FAST_BILINEAR`、`BGR0` 出力、単一スレッドの自前 NV12 -> BGRX32 直接変換を試したが、QSV 4K30 ではいずれも悪化したため不採用。
+   - FFmpeg 同梱範囲では `sws_scale` がかなり最適化されており、外部 SIMD ライブラリを増やさない前提では CPU 変換の追加改善余地は小さい。
+   - 次は、QSV/D3D11VA から GPU texture を受け取り、D3D11 swap chain や shader で表示する経路が成立するかを調査する段階。
    - D3D 表示は overlay、ズーム、回転、シークプレビュー、フレームコピー機能への影響が大きいため、本体へ入れる前に小さいプロトタイプで速度差だけ確認する。
 
 ## 後続課題
