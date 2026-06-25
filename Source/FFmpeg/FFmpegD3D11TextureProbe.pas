@@ -47,6 +47,7 @@ type
     FullScreenPressed: Boolean; // 全画面ボタン押下中か
     TransportVisible: Boolean; // 中央の再生/シーク操作ボタンを描くか
     TransportPlaying: Boolean; // 中央ボタンに一時停止アイコンを出すか
+    TransportBounds : TRect;   // 中央ボタン群を 1 つにまとめる背景/ヒット領域
     FirstButton    : TRect;   // 先頭へ移動する中央ボタン
     SkipBackwardButton: TRect; // 10 秒戻し中央ボタン
     PlayPauseButton: TRect;   // 再生/一時停止中央ボタン
@@ -167,6 +168,7 @@ type
     procedure DrawSeekBarChapterButtons(const State: TD3D11SeekBarOverlayState);
     procedure DrawSeekBarFullScreen(const State: TD3D11SeekBarOverlayState);
     procedure DrawTransportButtonBackground(const ButtonRect: TRect);
+    procedure DrawTransportGroupBackground(const GroupRect: TRect);
     procedure DrawTransportTriangle(CenterX, CenterY, Width, Height,
       Direction: Integer; R, G, B, A: Single);
     procedure DrawTransportEdgeIcon(const ButtonRect: TRect; Forward: Boolean);
@@ -1989,10 +1991,15 @@ end;
 procedure TNv12TextureProbe.DrawTransportButtonBackground(
   const ButtonRect: TRect);
 begin
-  if ButtonRect.IsEmpty then
+end;
+
+procedure TNv12TextureProbe.DrawTransportGroupBackground(
+  const GroupRect: TRect);
+begin
+  if GroupRect.IsEmpty then
     Exit;
 
-  DrawOverlayRect(ButtonRect, 0, 0, 0, 0.36);
+  DrawOverlayRect(GroupRect, 0, 0, 0, 0.38);
 end;
 
 procedure TNv12TextureProbe.DrawTransportTriangle(CenterX, CenterY, Width,
@@ -2154,6 +2161,7 @@ begin
   if not State.TransportVisible then
     Exit;
 
+  DrawTransportGroupBackground(State.TransportBounds);
   DrawTransportEdgeIcon(State.FirstButton, False);
   DrawTransportSkipIcon(State.SkipBackwardButton, False);
   DrawTransportPlayPauseIcon(State.PlayPauseButton, State.TransportPlaying);

@@ -591,7 +591,8 @@ begin
     [PositionMs, FShownFrameCache.Width, FShownFrameCache.Height]));
 {$ENDIF}
   FSurface.Bitmap.Assign(FShownFrameCache);
-  FSurface.PresentImmediate;
+  if not TryPresentSurfaceBitmapWithD3D then
+    FSurface.PresentImmediate;
 end;
 
 function TVideoMinerVideoView.TryPresentLoopFrameCache(StartMs: Integer): Boolean;

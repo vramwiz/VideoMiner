@@ -325,14 +325,14 @@ var
   BaseSize: Integer;
 begin
   BaseSize := Min(PreviewRect.Width, PreviewRect.Height);
-  Result := Round(BaseSize * 0.145);
-  Result := Max(58, Min(112, Result));
+  Result := Round(BaseSize * 0.125);
+  Result := Max(52, Min(96, Result));
 end;
 
 function OverlayCenterButtonSize(const PreviewRect: TRect): Integer;
 begin
-  Result := Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.14);
-  Result := Max(48, Min(128, Result));
+  Result := Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.115);
+  Result := Max(42, Min(104, Result));
 end;
 
 procedure DrawAlphaBlackRect(Canvas: TCanvas; const DrawRect: TRect;

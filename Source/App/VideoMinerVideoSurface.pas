@@ -123,6 +123,8 @@ type
     function FitRect: TRect;
     // 中央 overlay ボタン群の配置を現在の動画表示矩形へ合わせる
     procedure UpdateCenterOverlayButtonLayouts;
+    // 中央 overlay ボタン群を 1 つの操作領域として扱う矩形を返す
+    function CenterOverlayGroupBounds: TRect;
     // 中央 overlay ボタン群に当たっているか返す
     function HitAnyOverlayButton(const Point: TPoint): Boolean;
     // 下側シークバーに当たっているか返す
@@ -1169,14 +1171,12 @@ begin
 end;
 
 function TVideoMinerVideoSurface.HitAnyOverlayButton(const Point: TPoint): Boolean;
+var
+  GroupBounds: TRect;
 begin
   UpdateCenterOverlayButtonLayouts;
-  Result :=
-    ((FFirstFrameButton <> nil) and FFirstFrameButton.BoundsHitTest(Point)) or
-    ((FSkipBackwardButton <> nil) and FSkipBackwardButton.BoundsHitTest(Point)) or
-    ((FPlayPauseButton <> nil) and FPlayPauseButton.BoundsHitTest(Point)) or
-    ((FSkipForwardButton <> nil) and FSkipForwardButton.BoundsHitTest(Point)) or
-    ((FLastFrameButton <> nil) and FLastFrameButton.BoundsHitTest(Point));
+  GroupBounds := CenterOverlayGroupBounds;
+  Result := (not GroupBounds.IsEmpty) and PtInRect(GroupBounds, Point);
 end;
 
 function TVideoMinerVideoSurface.HitPreviousFileButton(
@@ -1276,6 +1276,23 @@ begin
     FLastFrameButton.UpdateLayout(PreviewRect);
 end;
 
+function TVideoMinerVideoSurface.CenterOverlayGroupBounds: TRect;
+begin
+  Result := TRect.Empty;
+  if (FFirstFrameButton <> nil) and (not FFirstFrameButton.BoundsRect.IsEmpty) then
+    Result := FFirstFrameButton.BoundsRect;
+  if (FSkipBackwardButton <> nil) and (not FSkipBackwardButton.BoundsRect.IsEmpty) then
+    UnionRect(Result, Result, FSkipBackwardButton.BoundsRect);
+  if (FPlayPauseButton <> nil) and (not FPlayPauseButton.BoundsRect.IsEmpty) then
+    UnionRect(Result, Result, FPlayPauseButton.BoundsRect);
+  if (FSkipForwardButton <> nil) and (not FSkipForwardButton.BoundsRect.IsEmpty) then
+    UnionRect(Result, Result, FSkipForwardButton.BoundsRect);
+  if (FLastFrameButton <> nil) and (not FLastFrameButton.BoundsRect.IsEmpty) then
+    UnionRect(Result, Result, FLastFrameButton.BoundsRect);
+  if not Result.IsEmpty then
+    InflateRect(Result, 10, 8);
+end;
+
 procedure TVideoMinerVideoSurface.UpdateD3DSeekBarOverlayState;
 var
   ChapterIndex: Integer;
@@ -1303,6 +1320,7 @@ begin
     UpdateCenterOverlayButtonLayouts;
     State.TransportVisible := True;
     State.TransportPlaying := FPlaybackActive;
+    State.TransportBounds := CenterOverlayGroupBounds;
     if FFirstFrameButton <> nil then
       State.FirstButton := FFirstFrameButton.BoundsRect;
     if FSkipBackwardButton <> nil then
@@ -1713,7 +1731,13 @@ begin
       (not FSeekBar.Dragging) and
       FSeekBar.HoverPositionFromPoint(MousePoint, HoverPositionMs)) then
   begin
-    if Assigned(FOnSeekHoverPreview) then
+    if HIDE_LEGACY_SEEK_BAR_PAINT and CanUseD3DFramePresentation and
+       (Nv12TextureD3DFramePresented or D3DFrameRecentlyPresented) then
+    begin
+      if FSeekPreviewVisible and Assigned(FOnSeekHoverPreviewEnd) then
+        FOnSeekHoverPreviewEnd(Self);
+    end
+    else if Assigned(FOnSeekHoverPreview) then
       FOnSeekHoverPreview(Self, HoverPositionMs, MousePoint);
   end
   else if (not KeepSeekBarVisible) and Assigned(FOnSeekHoverPreviewEnd) then
@@ -2246,9 +2270,21 @@ begin
 end;
 
 procedure TVideoMinerVideoSurface.HidePlaybackStartOverlays;
+var
+  MousePoint: TPoint;
+  KeepCenterOverlay: Boolean;
 begin
+  MousePoint := ScreenToClient(Mouse.CursorPos);
+  KeepCenterOverlay := HitAnyOverlayButton(MousePoint);
+
   ClearSeekHoverPreview;
-  SetOverlayVisible(False);
+  if not KeepCenterOverlay then
+    SetOverlayVisible(False)
+  else
+  begin
+    UpdateD3DSeekBarOverlayState;
+    RefreshD3DFramePresentation;
+  end;
   SetSeekBarVisibleFrom('hide_playback_start_overlays', False);
   UpdateD3DSeekBarOverlayState;
 end;

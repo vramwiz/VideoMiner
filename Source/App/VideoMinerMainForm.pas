@@ -1412,6 +1412,28 @@ end;
 
 procedure TVideoMinerMainForm.SeekToLastFrame;
 begin
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format(
+    'main_seek_last current_ms=%d seek_ms=%d max_ms=%d last_ms=%d',
+    [FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs,
+     FMediaSession.SeekMaxMs, LastFrameSeekPositionMs]));
+{$ENDIF}
+  if FVideoView <> nil then
+  begin
+    FVideoView.ClearFrameCache;
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog('main_seek_last clear_frame_cache');
+{$ENDIF}
+  end;
+  if FPlaybackController <> nil then
+    FPlaybackController.StopForSeek;
+  if FVideoView <> nil then
+  begin
+    FVideoView.ClearSeekHoverPreview;
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog('main_seek_last clear_seek_hover_preview');
+{$ENDIF}
+  end;
   SeekToMs(LastFrameSeekPositionMs, False);
 end;
 
