@@ -1118,8 +1118,6 @@ begin
     Result := 0.30
   else if Hovered then
     Result := 0.20
-  else if Active then
-    Result := 0.14
   else
     Result := 0;
 end;
@@ -1265,6 +1263,52 @@ begin
         Y + Scale * 5), R, G, B, A);
       DrawOverlayRect(Rect(X + Scale, Y + Scale * 5, X + Scale * 5,
         Y + Scale * 6), R, G, B, A);
+    end;
+    'S':
+    begin
+      DrawOverlayRect(Rect(X + Scale, Y + Scale, X + Scale * 6,
+        Y + Scale * 2), R, G, B, A);
+      DrawOverlayRect(Rect(X, Y + Scale * 2, X + Scale,
+        Y + Scale * 5), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale, Y + Scale * 5, X + Scale * 5,
+        Y + Scale * 6), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 5, Y + Scale * 6, X + Scale * 6,
+        Y + Scale * 9), R, G, B, A);
+      DrawOverlayRect(Rect(X, Y + Scale * 9, X + Scale * 5,
+        Y + Scale * 10), R, G, B, A);
+    end;
+    'T':
+    begin
+      DrawOverlayRect(Rect(X, Y + Scale, X + Scale * 6,
+        Y + Scale * 2), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 2, Y + Scale * 2, X + Scale * 4,
+        Y + Scale * 10), R, G, B, A);
+    end;
+    'N':
+    begin
+      DrawOverlayRect(Rect(X, Y + Scale, X + Scale, Y + Scale * 10),
+        R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 5, Y + Scale, X + Scale * 6,
+        Y + Scale * 10), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale, Y + Scale * 2, X + Scale * 2,
+        Y + Scale * 4), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 2, Y + Scale * 4, X + Scale * 3,
+        Y + Scale * 6), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 3, Y + Scale * 6, X + Scale * 4,
+        Y + Scale * 8), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 4, Y + Scale * 8, X + Scale * 5,
+        Y + Scale * 10), R, G, B, A);
+    end;
+    'E':
+    begin
+      DrawOverlayRect(Rect(X, Y + Scale, X + Scale, Y + Scale * 10),
+        R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale, Y + Scale, X + Scale * 6,
+        Y + Scale * 2), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale, Y + Scale * 5, X + Scale * 5,
+        Y + Scale * 6), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale, Y + Scale * 9, X + Scale * 6,
+        Y + Scale * 10), R, G, B, A);
     end;
     '%':
     begin

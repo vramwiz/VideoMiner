@@ -336,6 +336,7 @@ const
   SEEK_WHEEL_STEP_MS    = 1000; // 通常時のホイールシーク幅 ms
   WHEEL_ZOOM_STEP       = 1.20; // ホイール 1 ノッチあたりのズーム倍率
   ALPHA_CHECK_SIZE      = 16;   // alpha 確認表示の市松模様 1 マス px
+  HIDE_LEGACY_SEEK_BAR_PAINT = True; // D3D seek bar 移行中は旧 GDI seek bar を描かない
   SEEK_PREVIEW_WIDTH    = 160;  // シークバー hover プレビューの標準幅 px
   SEEK_PREVIEW_MARGIN   = 8;    // シークバー hover プレビューの余白 px
   LOADING_TIMER_MS      = 80;    // 読み込み中インジケータを進める間隔 ms
@@ -1759,7 +1760,8 @@ begin
   end;
   if (FNextFileButton <> nil) and FNextFileButton.Visible then
     FNextFileButton.Paint(DrawCanvas);
-  if FSeekBarVisible and (FSeekBar <> nil) then
+  if FSeekBarVisible and (FSeekBar <> nil) and
+     (not HIDE_LEGACY_SEEK_BAR_PAINT) then
   begin
     SeekBarCompactStyle := FPlaybackActive or FForceCompactSeekBarPaint;
     FSeekBar.CompactPlaybackStyle := SeekBarCompactStyle;
