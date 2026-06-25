@@ -56,6 +56,7 @@ const
   SEEK_HOVER_PREVIEW_INITIAL_DELAY_MS = 140; // 最初の hover でプレビュー表示を始めるまでの待ち時間 ms
   SEEK_HOVER_PREVIEW_UPDATE_DELAY_MS  = 5;   // 表示済みプレビューを別位置へ更新するまでの待ち時間 ms
   SEEK_HOVER_PREVIEW_REUSE_MS         = 80;  // 近い hover 位置では前回プレビューを再利用する幅 ms
+  SEEK_HOVER_PREVIEW_EDGE_BACKOFF_MS  = 500; // 末尾付近で該当位置の decode が失敗した時に少し手前を試す幅 ms
 
 function ElapsedMsFromTick(StartTick: Int64): Double;
 begin
@@ -192,6 +193,8 @@ end;
 
 procedure TVideoMinerSeekHoverPreviewController.TimerTick(Sender: TObject);
 var
+  BackoffMs: Double;
+  BackoffPositionMs: Integer;
   ErrorMessage: string;
   FallbackMs: Double;
   FastMs: Double;
@@ -220,12 +223,23 @@ begin
     FBitmap, ErrorMessage, True);
   FastMs := StepWatch.Elapsed.TotalMilliseconds;
   FallbackMs := 0;
+  BackoffMs := 0;
   if (not FastOk) then
   begin
     StepWatch := TStopwatch.StartNew;
     FastOk := FVideoView.DecodeFrameToBitmap(FPreviewDecoder, PositionMs,
       FBitmap, ErrorMessage, False);
     FallbackMs := StepWatch.Elapsed.TotalMilliseconds;
+  end;
+  if (not FastOk) and (PositionMs > 0) then
+  begin
+    BackoffPositionMs := Max(0, PositionMs - SEEK_HOVER_PREVIEW_EDGE_BACKOFF_MS);
+    StepWatch := TStopwatch.StartNew;
+    FastOk := FVideoView.DecodeFrameToBitmap(FPreviewDecoder, BackoffPositionMs,
+      FBitmap, ErrorMessage, True);
+    BackoffMs := StepWatch.Elapsed.TotalMilliseconds;
+    if FastOk then
+      PositionMs := BackoffPositionMs;
   end;
 
   if FastOk then
@@ -237,9 +251,9 @@ begin
     FPreviewActive := True;
     if VideoMinerDebugLogEnabled then
       WriteVideoMinerDebugLog(Format(
-        'seek_hover_preview_decode request=%d decode=%d position_ms=%d wait_ms=%.3f fast_ms=%.3f fallback_ms=%.3f set_ms=%.3f total_ms=%.3f reuse=%d',
+        'seek_hover_preview_decode request=%d decode=%d position_ms=%d wait_ms=%.3f fast_ms=%.3f fallback_ms=%.3f backoff_ms=%.3f set_ms=%.3f total_ms=%.3f reuse=%d',
         [FRequestCount, FDecodeCount, PositionMs, ElapsedMsFromTick(FPendingTick),
-         FastMs, FallbackMs, SetMs, TotalWatch.Elapsed.TotalMilliseconds,
+         FastMs, FallbackMs, BackoffMs, SetMs, TotalWatch.Elapsed.TotalMilliseconds,
          FReuseCount]));
     FPendingTick := 0;
   end
@@ -247,9 +261,14 @@ begin
   begin
     if VideoMinerDebugLogEnabled then
       WriteVideoMinerDebugLog(Format(
-        'seek_hover_preview_decode_failed request=%d decode=%d position_ms=%d wait_ms=%.3f fast_ms=%.3f fallback_ms=%.3f total_ms=%.3f err="%s"',
+        'seek_hover_preview_decode_failed request=%d decode=%d position_ms=%d wait_ms=%.3f fast_ms=%.3f fallback_ms=%.3f backoff_ms=%.3f total_ms=%.3f err="%s"',
         [FRequestCount, FDecodeCount, PositionMs, ElapsedMsFromTick(FPendingTick),
-         FastMs, FallbackMs, TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
+         FastMs, FallbackMs, BackoffMs, TotalWatch.Elapsed.TotalMilliseconds,
+         ErrorMessage]));
+    WriteVideoMinerSlowLog(Format(
+      'seek_hover_preview_decode_failed request=%d decode=%d position_ms=%d fast_ms=%.3f fallback_ms=%.3f backoff_ms=%.3f total_ms=%.3f err="%s"',
+      [FRequestCount, FDecodeCount, PositionMs, FastMs, FallbackMs, BackoffMs,
+       TotalWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
     if FVideoView <> nil then
       FVideoView.ClearSeekHoverPreview;
     FPreviewActive := False;

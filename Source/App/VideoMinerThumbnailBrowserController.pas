@@ -105,6 +105,8 @@ begin
   WriteVideoMinerSlowLog(Format('thumbnail toggle_begin visible=%s',
     [BoolToStr(FBrowser.Visible, True)]));
   FBrowser.SetMediaList(FMediaList);
+  if not FBrowser.Visible then
+    FBrowser.ShowHistoryIfMediaListEmpty;
   FBrowser.Toggle;
   WriteVideoMinerSlowLog(Format('thumbnail toggle_end visible=%s',
     [BoolToStr(FBrowser.Visible, True)]));

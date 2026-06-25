@@ -2314,7 +2314,14 @@ begin
 
   HitRect := Rect(Bounds.Left + Track.Left, Bounds.Top + Track.Top,
     Bounds.Left + Track.Right, Bounds.Top + Track.Bottom);
-  InflateRect(HitRect, 0, 18);
+  InflateRect(HitRect, 0, 34);
+  if not Bounds.IsEmpty then
+  begin
+    HitRect.Left := Max(HitRect.Left, Bounds.Left);
+    HitRect.Right := Min(HitRect.Right, Bounds.Right);
+    HitRect.Top := Max(HitRect.Top, Bounds.Top);
+    HitRect.Bottom := Min(HitRect.Bottom, Bounds.Bottom);
+  end;
   if not PtInRect(HitRect, Point) then
     Exit;
 

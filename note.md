@@ -115,6 +115,7 @@
       - 2026-06-25: 中央ボタン表示条件から `not FPlaybackActive` を外し、再生中でも中央ボタン領域へマウスを載せたら表示するようにした。
       - 2026-06-25: シークバー hover 中に一瞬のヒット判定外れで消えることがあるため、表示中の hit test に少し余白を持たせ、最終ヒットから 350ms は表示を維持するようにした。
       - 2026-06-25: 黒縁がある動画でシークバー hover 判定が黒縁分ずれるため、シークバー配置基準を `ClientRect` ではなく動画表示矩形の `FitRect` へ戻した。
+      - 2026-06-25: hover preview 小窓の表示中は bitmap preview を GDI で描くため `Paint` へ落ちる。その際に旧 `TVideoMinerOverlaySeekBar.Paint` を呼ぶと `Vol / Check / Loop` 付き旧パネルが出るため、preview 中だけ track / hover 線 / ノブだけの最小 fallback を描くようにした。
       - 2026-06-25: 手動チャプターの追加/削除/右クリックトグルは固定時間幅ではなく、現在のシークバー track 幅から 8px 相当の時間幅を計算して近接判定するようにした。画面上で細かく重なって見えるチャプターが増え続けるのを抑える。
       - 次回は実画面で、ソフトウェアデコード時の seek bar が旧/GDI ではなく D3D overlay 表示になっているかを目視確認する。
    - D3D overlay 化のデバッグ方法:
@@ -143,8 +144,9 @@
   - 実動画で誤検知が見えてきたらしきい値を設定化する。
   - チェック結果の一覧表示や外部出力を検討する。
 - シークバー hover 表示を、現在の時刻テキストではなく該当位置のフレーム画像 preview にする。
-  - 現在は hover 位置の時間表示が主になっているが、本来はそのフレームの画像を見せる。
-  - D3D overlay 化後も再生を阻害しないよう、preview 用 decode / texture 合成 / キャッシュの扱いを分けて検討する。
+  - 2026-06-25: D3D frame 保持中でも hover preview 表示時は GDI paint へ進め、既存の小窓 bitmap preview を描くようにした。
+  - 2026-06-25: D3D seek bar 上の hover 時刻ラベルは廃止し、画像 preview と競合しないようにした。
+  - D3D overlay 化後に完全 D3D 合成へ寄せる場合は、preview bitmap の texture 化と sprite 合成を別途検討する。
 - サムネイル一覧の操作性をさらに整える。
   - hover しながら高速移動した時の追従感とデコード負荷を確認する。
   - ホバー時ダイジェストは、基本一覧が安定してから検討する。
@@ -156,6 +158,14 @@
   - まずはディスクキャッシュ miss の 1 枚生成だけを worker 化し、キャッシュ hit や hover 実動画プレビューとは分離して検証する。
   - worker ごとに専用デコーダを持ち、UI 反映は main thread 側で生存確認と世代確認を行ってから反映する。
   - 一覧を閉じた時、動画を切り替えた時、再読み込みした時に古い worker 結果を確実に捨てる。
+- 再生を進めるとメモリ使用量が急増する問題を調査する。
+  - 2026-06-25: 再生していくと数 GB 単位のメモリを一瞬で消費することがある。
+  - 2026-06-25: D3D context が古い texture / render target / swap chain を bind したまま作り直す可能性を疑い、resource 作り直し前に `ClearState` + `Flush` で参照を外す暫定対策を入れた。
+  - 2026-06-25: D3D present 経路に `d3d_memory` ログを追加した。短尺 `x_31.mp4` の Win64 Debug 約 20 秒再生では private bytes 約 197 MB で横ばい。
+  - ユーザー環境の再現動画で、まだ数 GB へ急増するかを最優先で再確認する。
+  - まずは D3D texture / swap chain / BGRX32 temp buffer / frame cache / thumbnail cache / FFmpeg frame・packet 周りの解放漏れを疑う。
+  - 再生中に一定間隔で private bytes / working set / D3D resource 作成数相当のログを出し、増え続ける所有物を切り分ける。
+  - hover preview やサムネイル一覧を閉じた状態でも増えるかを確認し、通常再生経路と overlay/preview 経路を分けて見る。
 - ループ再生の先頭戻りをさらに滑らかにする。
   - 2026-06-25: ループ再生で、終端到達時に数フレームだけ前のフレームが表示された後に先頭フレームになる現象がある。2 回目は正常で、初回だけの可能性がある。
   - D3D11 実表示経路では D3D present 成功時に `DecodeNextFrame` が早期 return するため、ループ先頭フレームキャッシュの保存がスキップされる点を疑う。

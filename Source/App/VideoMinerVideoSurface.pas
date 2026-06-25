@@ -108,6 +108,8 @@ type
     procedure DrawSafeAreaGuide(Canvas: TCanvas; const DestRect: TRect);
     // シークバー hover 位置のフレームプレビューを描く
     procedure DrawSeekHoverPreview(Canvas: TCanvas);
+    // hover preview 中だけ使う、旧パネルを含まない最小 seek bar を描く
+    procedure DrawSeekPreviewSeekBarFallback(Canvas: TCanvas);
     // 読み込み中であることを示すテキストを描く
     procedure DrawLoadingIndicator(Canvas: TCanvas);
     // alpha 確認用の市松模様合成 Bitmap を最新化する
@@ -124,6 +126,8 @@ type
     function HitAnyOverlayButton(const Point: TPoint): Boolean;
     // 下側シークバーに当たっているか返す
     function HitSeekBar(const Point: TPoint): Boolean;
+    // 表示中の下側シークバーを維持する領域に当たっているか返す
+    function HitSeekBarKeepAlive(const Point: TPoint): Boolean;
     // 下側シークバーを配置するフォーム側の基準領域を返す
     function SeekBarLayoutRect: TRect;
     // D3D 表示中に backbuffer 上へ描く簡易シークバー状態を更新する
@@ -347,6 +351,7 @@ const
   HIDE_LEGACY_CENTER_OVERLAY_PAINT = True; // 中央操作も D3D overlay 側へ寄せる
   SEEK_PREVIEW_WIDTH    = 160;  // シークバー hover プレビューの標準幅 px
   SEEK_PREVIEW_MARGIN   = 8;    // シークバー hover プレビューの余白 px
+  SEEK_FALLBACK_ACCENT_COLOR = $00F0A040; // hover preview 中の最小 fallback seek bar 色
   LOADING_TIMER_MS      = 80;    // 読み込み中インジケータを進める間隔 ms
   LOADING_SEGMENTS      = 36;    // 欠け丸を構成する線分数
   LOADING_GAP_SEGMENTS  = 7;     // 欠けとして空ける線分数
@@ -1025,6 +1030,79 @@ begin
   Canvas.Brush.Style := bsSolid;
 end;
 
+procedure TVideoMinerVideoSurface.DrawSeekPreviewSeekBarFallback(Canvas: TCanvas);
+var
+  FilledRect: TRect;
+  HoverMs: Integer;
+  HoverRatio: Double;
+  HoverX: Integer;
+  KnobRadius: Integer;
+  KnobX: Integer;
+  KnobY: Integer;
+  MaxMs: Integer;
+  PositionMs: Integer;
+  PositionRatio: Double;
+  TrackRect: TRect;
+begin
+  if (FSeekBar = nil) or (not FSeekBarVisible) then
+    Exit;
+
+  FSeekBar.UpdateLayout(SeekBarLayoutRect);
+  TrackRect := FSeekBar.CurrentTrackRect;
+  if TrackRect.IsEmpty then
+    Exit;
+
+  MaxMs := FSeekBar.MaxMs;
+  if MaxMs <= 0 then
+    Exit;
+
+  PositionMs := FSeekBar.CurrentDisplayPositionMs;
+  PositionRatio := Max(0.0, Min(1.0, PositionMs / MaxMs));
+  KnobX := TrackRect.Left + Round(TrackRect.Width * PositionRatio);
+  KnobY := TrackRect.Top + TrackRect.Height div 2;
+
+  Canvas.Brush.Style := bsSolid;
+  Canvas.Pen.Style := psClear;
+  Canvas.Brush.Color := clBlack;
+  Canvas.RoundRect(TrackRect.Left - 2, TrackRect.Top - 4,
+    TrackRect.Right + 2, TrackRect.Bottom + 4, TrackRect.Height + 6,
+    TrackRect.Height + 6);
+  Canvas.Brush.Color := $00505050;
+  Canvas.RoundRect(TrackRect.Left, TrackRect.Top, TrackRect.Right,
+    TrackRect.Bottom, TrackRect.Height, TrackRect.Height);
+
+  FilledRect := TrackRect;
+  FilledRect.Right := Max(FilledRect.Left + TrackRect.Height, KnobX);
+  Canvas.Brush.Color := SEEK_FALLBACK_ACCENT_COLOR;
+  Canvas.RoundRect(FilledRect.Left, FilledRect.Top, FilledRect.Right,
+    FilledRect.Bottom, TrackRect.Height, TrackRect.Height);
+
+  HoverMs := FSeekBarHoverPositionMs;
+  if (HoverMs < 0) and FSeekPreviewVisible then
+    HoverMs := FSeekPreviewPositionMs;
+  if (HoverMs >= 0) and (HoverMs <= MaxMs) then
+  begin
+    HoverRatio := Max(0.0, Min(1.0, HoverMs / MaxMs));
+    HoverX := TrackRect.Left + Round(TrackRect.Width * HoverRatio);
+    Canvas.Pen.Style := psSolid;
+    Canvas.Pen.Width := 1;
+    Canvas.Pen.Color := clWhite;
+    Canvas.MoveTo(HoverX, TrackRect.Top - 8);
+    Canvas.LineTo(HoverX, TrackRect.Bottom + 12);
+    Canvas.Pen.Style := psClear;
+  end;
+
+  KnobRadius := 9;
+  Canvas.Brush.Color := SEEK_FALLBACK_ACCENT_COLOR;
+  Canvas.Ellipse(KnobX - KnobRadius, KnobY - KnobRadius,
+    KnobX + KnobRadius, KnobY + KnobRadius);
+  Canvas.Brush.Color := $00FFD18A;
+  Canvas.Ellipse(KnobX - 4, KnobY - 4, KnobX + 4, KnobY + 4);
+
+  Canvas.Pen.Style := psSolid;
+  Canvas.Brush.Style := bsSolid;
+end;
+
 function TVideoMinerVideoSurface.ImagePointFromClient(const Point: TPoint;
   out ImageX, ImageY: Double): Boolean;
 var
@@ -1106,16 +1184,41 @@ end;
 function TVideoMinerVideoSurface.HitSeekBar(const Point: TPoint): Boolean;
 var
   HitRect: TRect;
+  TrackHitMs: Integer;
 begin
   if FSeekBar <> nil then
     FSeekBar.UpdateLayout(SeekBarLayoutRect);
-  Result := (FSeekBar <> nil) and FSeekBar.BoundsHitTest(Point);
-  if (not Result) and FSeekBarVisible and (FSeekBar <> nil) then
+  Result := (FSeekBar <> nil) and
+    (FSeekBar.BoundsHitTest(Point) or
+     FSeekBar.HoverPositionFromPoint(Point, TrackHitMs));
+  if (not Result) and (FSeekBar <> nil) then
   begin
     HitRect := FSeekBar.BoundsRect;
-    InflateRect(HitRect, 12, 18);
+    InflateRect(HitRect, 16, 30);
     Result := PtInRect(HitRect, Point);
   end;
+end;
+
+function TVideoMinerVideoSurface.HitSeekBarKeepAlive(
+  const Point: TPoint): Boolean;
+var
+  HitRect: TRect;
+begin
+  Result := False;
+  if FSeekBar = nil then
+    Exit;
+
+  FSeekBar.UpdateLayout(SeekBarLayoutRect);
+  HitRect := FSeekBar.BoundsRect;
+  if HitRect.IsEmpty then
+    Exit;
+
+  InflateRect(HitRect, 28, 54);
+  HitRect.Left := Max(0, HitRect.Left);
+  HitRect.Right := Min(ClientWidth, HitRect.Right);
+  HitRect.Top := Max(0, HitRect.Top);
+  HitRect.Bottom := Min(ClientHeight, HitRect.Bottom);
+  Result := PtInRect(HitRect, Point);
 end;
 
 function TVideoMinerVideoSurface.ChapterMarkerToleranceMs(MaxMs,
@@ -1189,7 +1292,7 @@ begin
       State.LastButton := FLastFrameButton.BoundsRect;
   end;
   if (FSeekBar <> nil) and (FSeekBarVisible or FSeekBar.Dragging) and
-     (not FSeekPreviewVisible) and (not FSafeAreaVisible) and
+     (not FSafeAreaVisible) and
      (not FLoadingActive) then
   begin
     FSeekBar.UpdateLayout(SeekBarLayoutRect);
@@ -1429,6 +1532,7 @@ procedure TVideoMinerVideoSurface.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   DestRect: TRect;
   HoverPositionMs: Integer;
+  KeepAliveHit: Boolean;
   KeepSeekBarVisible: Boolean;
   MousePoint: TPoint;
   SeekBarHit: Boolean;
@@ -1476,9 +1580,10 @@ begin
 
   SetOverlayVisible(HitAnyOverlayButton(MousePoint));
   SeekBarHit := HitSeekBar(MousePoint);
-  if SeekBarHit then
+  KeepAliveHit := FSeekBarVisible and HitSeekBarKeepAlive(MousePoint);
+  if SeekBarHit or KeepAliveHit then
     FSeekBarLastHitTick := GetTickCount64;
-  KeepSeekBarVisible := SeekBarHit or
+  KeepSeekBarVisible := SeekBarHit or KeepAliveHit or
     ((FSeekBar <> nil) and FSeekBar.Dragging) or
     (FSeekBarVisible and (FSeekBarLastHitTick > 0) and
       (GetTickCount64 - FSeekBarLastHitTick <= 350));
@@ -1540,7 +1645,7 @@ begin
     if Assigned(FOnSeekHoverPreview) then
       FOnSeekHoverPreview(Self, HoverPositionMs, MousePoint);
   end
-  else if Assigned(FOnSeekHoverPreviewEnd) then
+  else if (not KeepSeekBarVisible) and Assigned(FOnSeekHoverPreviewEnd) then
     FOnSeekHoverPreviewEnd(Self);
 end;
 
@@ -1764,7 +1869,7 @@ begin
     Exit;
   end;
 
-  D3DFrameCurrent := Nv12TextureD3DFramePresented and (not FSourceHasAlpha);
+  D3DFrameCurrent := Nv12TextureD3DFramePresented and CanUseD3DFramePresentation;
   CenterOverlayDrawnByD3D := D3DFrameCurrent;
   if (not D3DFrameCurrent) and FOverlayVisible and
      CanUseD3DFramePresentation and D3DFrameRecentlyPresented then
@@ -1801,6 +1906,21 @@ begin
   if (FBitmap.Width <= 0) or (FBitmap.Height <= 0) then
   begin
     DrawCanvas.FillRect(ClientRect);
+    if FSeekBar <> nil then
+    begin
+      SeekBarCompactStyle := FPlaybackActive or FForceCompactSeekBarPaint or
+        HIDE_LEGACY_SEEK_BAR_PAINT;
+      FSeekBar.CompactPlaybackStyle := SeekBarCompactStyle;
+      FSeekBar.UpdateLayout(SeekBarLayoutRect);
+      if FSeekBarVisible then
+      begin
+        if FSeekPreviewVisible then
+          DrawSeekPreviewSeekBarFallback(DrawCanvas)
+        else
+          FSeekBar.Paint(DrawCanvas);
+      end;
+    end;
+    DrawSeekHoverPreview(DrawCanvas);
     DrawLoadingIndicator(DrawCanvas);
     if UsePaintBuffer then
       Canvas.Draw(0, 0, FPaintBuffer);
@@ -1878,7 +1998,12 @@ begin
     FSeekBar.CompactPlaybackStyle := SeekBarCompactStyle;
     LogSeekBarPaintState(SeekBarCompactStyle, D3DFrameCurrent);
     if SeekBarCompactStyle then
-      FSeekBar.Paint(DrawCanvas);
+    begin
+      if FSeekPreviewVisible then
+        DrawSeekPreviewSeekBarFallback(DrawCanvas)
+      else
+        FSeekBar.Paint(DrawCanvas);
+    end;
   end;
   DrawSeekHoverPreview(DrawCanvas);
   DrawLoadingIndicator(DrawCanvas);

@@ -133,6 +133,7 @@ type
     function EnsureProbeWindow(out ErrorMessage: string): Boolean;
     function EnsureSwapChain(out Recreated: Boolean; out ErrorMessage: string): Boolean;
     function EnsureDisplaySwapChain(out Recreated: Boolean; out ErrorMessage: string): Boolean;
+    procedure ReleaseD3DContextReferences;
     procedure LogErrorOnce(const ErrorMessage: string);
     procedure ProbePlaneTextures(Frame: PAVFrame);
     procedure ProbeShaderDraw(Frame: PAVFrame);
@@ -153,7 +154,6 @@ type
     procedure DrawOverlayText(X, Y, Scale: Integer; const Text: string; R, G, B, A: Single);
     procedure DrawSeekBarMuteIcon(const IconRect: TRect; const State: TD3D11SeekBarOverlayState);
     procedure DrawSeekBarTimeText(const State: TD3D11SeekBarOverlayState);
-    procedure DrawSeekBarHoverLabel(const State: TD3D11SeekBarOverlayState);
     procedure DrawSeekBarVolume(const State: TD3D11SeekBarOverlayState);
     procedure DrawSeekBarPlaybackRate(const State: TD3D11SeekBarOverlayState);
     procedure DrawSeekBarEndAction(const State: TD3D11SeekBarOverlayState);
@@ -183,9 +183,52 @@ var
   GlobalD3DFramePresented: Boolean;
   GlobalD3DSeekBarOverlay: TD3D11SeekBarOverlayState;
   LastD3DPresentLogTick: UInt64;
+  LastD3DMemoryLogTick: UInt64;
   LastD3DPresentOverlayVisible: Boolean;
   LastD3DPresentDragging: Boolean;
   LastD3DPresentTransportVisible: Boolean;
+
+type
+  TProcessMemoryCountersEx = record
+    cb: DWORD;
+    PageFaultCount: DWORD;
+    PeakWorkingSetSize: NativeUInt;
+    WorkingSetSize: NativeUInt;
+    QuotaPeakPagedPoolUsage: NativeUInt;
+    QuotaPagedPoolUsage: NativeUInt;
+    QuotaPeakNonPagedPoolUsage: NativeUInt;
+    QuotaNonPagedPoolUsage: NativeUInt;
+    PagefileUsage: NativeUInt;
+    PeakPagefileUsage: NativeUInt;
+    PrivateUsage: NativeUInt;
+  end;
+
+function GetProcessMemoryInfo(Process: THandle;
+  var Counters: TProcessMemoryCountersEx; Size: DWORD): BOOL; stdcall;
+  external 'psapi.dll';
+
+procedure LogD3DMemoryUsage(const Context: string; Force: Boolean = False);
+var
+  Counters: TProcessMemoryCountersEx;
+  NowTick: UInt64;
+begin
+  NowTick := GetTickCount64;
+  if (not Force) and (NowTick - LastD3DMemoryLogTick < 1000) then
+    Exit;
+
+  FillChar(Counters, SizeOf(Counters), 0);
+  Counters.cb := SizeOf(Counters);
+  if not GetProcessMemoryInfo(GetCurrentProcess, Counters, SizeOf(Counters)) then
+    Exit;
+
+  LastD3DMemoryLogTick := NowTick;
+  WriteVideoMinerD3DLog(Format(
+    'd3d_memory context=%s private_mb=%.1f working_mb=%.1f peak_working_mb=%.1f pagefile_mb=%.1f',
+    [Context, Counters.PrivateUsage / 1048576.0,
+     Counters.WorkingSetSize / 1048576.0,
+     Counters.PeakWorkingSetSize / 1048576.0,
+     Counters.PagefileUsage / 1048576.0]));
+end;
 
 function TextureProbeEnabled: Boolean;
 begin
@@ -208,6 +251,15 @@ end;
 function Nv12TextureD3DFramePresented: Boolean;
 begin
   Result := GlobalD3DFramePresented;
+end;
+
+procedure TNv12TextureProbe.ReleaseD3DContextReferences;
+begin
+  if not Assigned(FDeviceContext) then
+    Exit;
+
+  FDeviceContext.ClearState;
+  FDeviceContext.Flush;
 end;
 
 procedure ClearNv12TextureD3DFramePresented;
@@ -271,6 +323,7 @@ begin
   if Assigned(FTexture) and (FTextureWidth = Width) and (FTextureHeight = Height) then
     Exit;
 
+  ReleaseD3DContextReferences;
   FTexture := nil;
   FillChar(Desc, SizeOf(Desc), 0);
   Desc.Width := Width;
@@ -311,6 +364,7 @@ begin
      (FTextureWidth = Width) and (FTextureHeight = Height) then
     Exit;
 
+  ReleaseD3DContextReferences;
   FYTexture := nil;
   FUvTexture := nil;
   FYResourceView := nil;
@@ -478,6 +532,7 @@ begin
      (FTextureWidth = Width) and (FTextureHeight = Height) then
     Exit(True);
 
+  ReleaseD3DContextReferences;
   FRenderTexture := nil;
   FRenderView := nil;
   FillChar(Desc, SizeOf(Desc), 0);
@@ -522,6 +577,7 @@ begin
      (FBgrxWidth = Width) and (FBgrxHeight = Height) then
     Exit;
 
+  ReleaseD3DContextReferences;
   FBgrxTexture := nil;
   FBgrxResourceView := nil;
   FillChar(Desc, SizeOf(Desc), 0);
@@ -776,6 +832,7 @@ begin
      (FSwapHeight = FTargetHeight) then
     Exit(True);
 
+  ReleaseD3DContextReferences;
   FSwapRenderView := nil;
   FSwapChain := nil;
   FSwapWindow := 0;
@@ -858,6 +915,7 @@ begin
      (FDisplayHeight = FTargetHeight) then
     Exit(True);
 
+  ReleaseD3DContextReferences;
   FDisplayRenderView := nil;
   FDisplaySwapChain := nil;
   FDisplayWindow := 0;
@@ -919,6 +977,7 @@ end;
 
 destructor TNv12TextureProbe.Destroy;
 begin
+  ReleaseD3DContextReferences;
   FDisplayRenderView := nil;
   FDisplaySwapChain := nil;
   FSwapRenderView := nil;
@@ -1589,41 +1648,6 @@ begin
   DrawOverlayText(X, Y, Scale, Text, 1, 1, 1, 0.86);
 end;
 
-procedure TNv12TextureProbe.DrawSeekBarHoverLabel(
-  const State: TD3D11SeekBarOverlayState);
-var
-  HoverRatio: Double;
-  HoverX: Integer;
-  Scale: Integer;
-  Text: string;
-  TextWidth: Integer;
-  X: Integer;
-  Y: Integer;
-begin
-  if State.Bounds.IsEmpty or State.Track.IsEmpty or (State.MaxMs <= 0) or
-     (State.HoverPositionMs < 0) or (State.HoverPositionMs > State.MaxMs) then
-    Exit;
-
-  Scale := 2;
-  if State.CheckEnabled then
-    Text := IntToStr(Max(0, State.HoverPositionMs) div Max(1, State.FrameStepMs) + 1)
-  else
-    Text := SeekBarTimeText(State.HoverPositionMs);
-  TextWidth := OverlayTextWidth(Text, Scale);
-
-  HoverRatio := State.HoverPositionMs / State.MaxMs;
-  HoverRatio := Max(0.0, Min(1.0, HoverRatio));
-  HoverX := State.Track.Left + Round(State.Track.Width * HoverRatio);
-  X := HoverX - TextWidth div 2;
-  X := Max(State.Bounds.Left + 16, Min(State.Bounds.Right - TextWidth - 16, X));
-  Y := Max(State.Bounds.Top + 8, State.Track.Top - Scale * 15);
-
-  DrawOverlayRect(Rect(X - 7, Y - 5, X + TextWidth + 7,
-    Y + Scale * 12 + 5), 0, 0, 0, 0.42);
-  DrawOverlayText(X + 1, Y + 1, Scale, Text, 0, 0, 0, 0.56);
-  DrawOverlayText(X, Y, Scale, Text, 1, 1, 1, 0.86);
-end;
-
 procedure TNv12TextureProbe.DrawSeekBarMuteIcon(const IconRect: TRect;
   const State: TD3D11SeekBarOverlayState);
 var
@@ -2268,7 +2292,6 @@ begin
       0.52, 0.82, 1.0, 1.0);
 
     DrawSeekBarTimeText(State);
-    DrawSeekBarHoverLabel(State);
     DrawSeekBarVolume(State);
     DrawSeekBarPlaybackRate(State);
     DrawSeekBarEndAction(State);
@@ -2395,6 +2418,7 @@ begin
   FCurrentFrameIsBgrx32 := False;
   GlobalD3DFramePresented := True;
   Result := True;
+  LogD3DMemoryUsage('present_nv12');
   if VideoMinerSlowLogEnabled then
     WriteVideoMinerSlowLog(Format(
       'd3d11_display_present frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d y_stride=%d uv_stride=%d range=%d space=%d recreated=%s overlay=%s transport=%s dragging=%s upload_ms=%.3f clear_ms=%.3f draw_ms=%.3f overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
@@ -2552,6 +2576,7 @@ begin
   FCurrentFrameIsBgrx32 := True;
   GlobalD3DFramePresented := True;
   Result := True;
+  LogD3DMemoryUsage('present_bgrx32');
   if VideoMinerSlowLogEnabled then
     WriteVideoMinerSlowLog(Format(
       'd3d11_display_present_bgrx32 frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d stride=%d recreated=%s overlay=%s transport=%s dragging=%s upload_ms=%.3f draw_ms=%.3f overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
@@ -2674,6 +2699,7 @@ begin
 
     GlobalD3DFramePresented := True;
     Result := True;
+    LogD3DMemoryUsage('represent_bgrx32');
     if VideoMinerSlowLogEnabled then
       WriteVideoMinerSlowLog(Format(
         'd3d11_display_represent_bgrx32 frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d overlay=%s transport=%s dragging=%s overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
@@ -2756,6 +2782,7 @@ begin
 
   GlobalD3DFramePresented := True;
   Result := True;
+  LogD3DMemoryUsage('represent_nv12');
   if VideoMinerSlowLogEnabled then
     WriteVideoMinerSlowLog(Format(
       'd3d11_display_represent frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d overlay=%s transport=%s dragging=%s overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
@@ -2869,6 +2896,7 @@ procedure TNv12TextureProbe.SetTargetWindow(WindowHandle: HWND; Width, Height: I
 begin
   if (FTargetWidth <> Width) or (FTargetHeight <> Height) then
   begin
+    ReleaseD3DContextReferences;
     FDisplayRenderView := nil;
     FDisplaySwapChain := nil;
     FDisplayWindow := 0;

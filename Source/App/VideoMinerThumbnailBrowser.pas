@@ -87,6 +87,8 @@ type
     procedure ClearThumbnailCache;
     // フォルダ閲覧履歴と選択中フォルダの一覧を再読み込みする
     procedure RefreshFolderHistory;
+    // 現在一覧が空ならフォルダ履歴から表示対象を復元する
+    procedure ShowFolderHistoryWhenMediaListEmpty;
     // 表示中一覧で現在開いている動画の位置を返す
     function ActiveFileIndexInMediaList: Integer;
     // 指定方向のズームボタン矩形を返す
@@ -122,7 +124,8 @@ type
     // hover プレビューを停止する
     procedure StopPreview;
     // 指定履歴フォルダ内の動画一覧をサムネイル表示する
-    procedure ShowFolderHistory(Index: Integer; PromoteHistory: Boolean);
+    procedure ShowFolderHistory(Index: Integer; PromoteHistory: Boolean;
+      const KnownFirstFile: string = '');
     // タイマーでサムネイルを 1 枚ずつ生成する
     procedure ThumbnailTimer(Sender: TObject);
     // タイマーで hover プレビューを 1 フレーム進める
@@ -187,6 +190,8 @@ type
     destructor Destroy; override;
     // 表示するメディア一覧を差し替える
     procedure SetMediaList(MediaList: TVideoMinerMediaList);
+    // 現在一覧が空ならフォルダ履歴から表示対象を復元する
+    procedure ShowHistoryIfMediaListEmpty;
     // フォーム経由で届いたホイール入力を一覧操作として処理する
     function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean;
@@ -2087,8 +2092,38 @@ begin
     [Length(FThumbnailStates), FCurrentIndex, FSelectedIndex]));
 end;
 
+procedure TVideoMinerThumbnailBrowser.ShowFolderHistoryWhenMediaListEmpty;
+var
+  FileName: string;
+  I: Integer;
+begin
+  if (FMediaList <> nil) and (FMediaList.Count > 0) then
+    Exit;
+
+  FFolderHistory := LoadFolderHistory;
+  for I := 0 to High(FFolderHistory) do
+  begin
+    FileName := TVideoMinerMediaList.FirstMediaFileInFolder(FFolderHistory[I]);
+    if FileName = '' then
+      Continue;
+
+    FFolderHistorySelectedIndex := I;
+    FFolderHistoryHoverIndex := -1;
+    ShowFolderHistory(I, False, FileName);
+    WriteThumbnailLog(Format(
+      'show_history_when_empty index=%d folder="%s"',
+      [I, FFolderHistory[I]]));
+    Exit;
+  end;
+end;
+
+procedure TVideoMinerThumbnailBrowser.ShowHistoryIfMediaListEmpty;
+begin
+  ShowFolderHistoryWhenMediaListEmpty;
+end;
+
 procedure TVideoMinerThumbnailBrowser.ShowFolderHistory(Index: Integer;
-  PromoteHistory: Boolean);
+  PromoteHistory: Boolean; const KnownFirstFile: string);
 var
   FileName: string;
   Folder: string;
@@ -2105,7 +2140,9 @@ begin
     FFolderHistoryHoverIndex := -1;
   end;
 
-  FileName := TVideoMinerMediaList.FirstMediaFileInFolder(Folder);
+  FileName := KnownFirstFile;
+  if FileName = '' then
+    FileName := TVideoMinerMediaList.FirstMediaFileInFolder(Folder);
   if FileName = '' then
   begin
     StopPreview;

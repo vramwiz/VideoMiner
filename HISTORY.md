@@ -2,6 +2,47 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-25 起動復元 skip 後のサムネイル一覧復元
+- NAS など遅いデバイス上の動画を最後に開いた場合、起動時はフリーズ防止のため前回動画を開かない。
+- その状態で右クリックからサムネイル一覧を開くと、フォルダ履歴行には前回フォルダが表示される一方、通常サムネイル一覧は現在 `MediaList` が空のため何も表示されなかった。
+- サムネイル一覧を開く時だけ、現在 `MediaList` が空ならフォルダ履歴から最初に動画を持つフォルダを選び、一時 `MediaList` を構築して通常サムネイル欄へ表示するようにした。
+- 一覧を閉じる操作では NAS 走査をしないよう、復元処理は開く時だけに限定した。
+- 履歴フォルダの先頭動画探索結果を `ShowFolderHistory` に渡し、同じフォルダを二度走査しないようにした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+
+## 2026-06-25 hover preview 中に旧 seek bar が出る問題
+- hover preview 小窓を表示する間は bitmap preview を GDI で描くため、D3D frame 表示を止めて `Paint` へ落ちる。
+- その GDI fallback 内で `TVideoMinerOverlaySeekBar.Paint` を呼ぶと、`Vol / 1.0x / Check / Loop` 付きの旧パネルが再表示されることがあった。
+- hover preview 表示中だけ旧 seek bar paint を呼ばず、track / 進捗 / hover 線 / ノブだけの最小 fallback を `TVideoMinerVideoSurface.DrawSeekPreviewSeekBarFallback` で描くようにした。
+- これにより preview 小窓は GDI で維持しつつ、旧フル操作パネルが混ざらないようにした。
+- 確認:
+  - Win64 Debug: 成功。
+
+## 2026-06-25 D3D 再生中メモリ急増の暫定対策
+- ユーザー確認で、D3D 化前には無かった可能性が高い、再生中に数 GB 単位でメモリを一瞬で消費する問題が出ている。
+- D3D immediate context が shader resource / render target を bind したまま texture、render target view、swap chain を nil にして作り直すと、context 側の参照で古い GPU resource が解放されない可能性がある。
+- `TNv12TextureProbe.ReleaseD3DContextReferences` を追加し、resource / swap chain / target window を作り直す前と破棄時に `ClearState` + `Flush` で D3D context の参照を外すようにした。
+- D3D present 経路に `d3d_memory` ログを追加し、private bytes / working set / peak working set / pagefile を 1 秒間隔で確認できるようにした。
+- `C:\Users\zan12\Videos\x_31.mp4` を Win64 Debug で約 20 秒自動再生して確認した範囲では、private bytes は約 197 MB 付近で横ばいになり、数 GB への急増は再現しなかった。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+
+## 2026-06-25 シークバー hover を画像 preview 優先へ変更
+- D3D frame 保持中の `Paint` が `Nv12TextureD3DFramePresented` だけを見て早期 return していたため、`FSeekPreviewVisible=True` でも GDI 側の `DrawSeekHoverPreview` に到達できず、hover 位置の時刻表示だけが残ることがあった。
+- `D3DFrameCurrent` 判定を `CanUseD3DFramePresentation` に揃え、`seek_preview_visible` など D3D 合成をブロックする状態では GDI paint へ進めるようにした。
+- D3D seek bar の hover 時刻ラベルを削除し、シークバー hover 中は画像 preview 小窓を優先して表示するようにした。
+- 小窓が出る位置と出ない位置がある場合に備え、hover decode が通常位置で失敗したら 500ms 手前を追加で試すようにした。
+- それでも失敗した場合は `seek_hover_preview_decode_failed` を slow log に出し、対象位置、fast/fallback/backoff の各時間、FFmpeg 側エラーを確認できるようにした。
+- ユーザー確認で、一時停止中でもシークバー本体を左右に hover するとバー自体が消え、少し下を左右移動すると維持されるケースがあった。
+- `HoverPositionFromPoint` の有効帯を上下 34px へ広げ、`HitSeekBar` も track 判定と広めの bounds 判定を併用するようにして、D3D/GDI の見た目と hit test のわずかなずれで hover end にならないようにした。
+- 上記でも、黒いシークバー周辺パネル上にマウスがあるのに移動で消えるケースが残ったため、track 判定とは別に `HitSeekBarKeepAlive` を追加した。
+- シークバー表示中は bounds を上下左右へ広げた keep-alive 領域内にいる限り `SetSeekBarVisible(False)` へ落とさず、track から一瞬外れただけでは `SeekHoverPreviewEnd` も呼ばないようにした。
+- 追加確認で、サムネイル小窓が表示された瞬間にシークバーが消えることが分かった。`FSeekPreviewVisible=True` の間に D3D seek bar state を空にしていたため、preview 表示中も seek bar state は維持するようにした。
+- D3D/NV12 表示中は CPU 側 `FBitmap` が空のまま GDI paint へ落ちることがあるため、bitmap が空でも seek bar と hover preview 小窓だけは描くようにした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+
 ## 2026-06-25 ソフトウェアデコード表示の D3D 経路追加
 - ソフトウェアデコードとハードウェアデコードで seek bar / overlay GUI を二重実装しない方針に合わせ、CPU BGRX32 frame を D3D texture へ upload して表示する経路を追加した。
 - 既存の NV12 D3D 表示が成功した場合はそのまま使い、NV12 D3D 表示に乗らなかった CPU fallback frame だけを `DXGI_FORMAT_B8G8R8A8_UNORM` texture として D3D backbuffer へ描く。
