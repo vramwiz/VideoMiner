@@ -20,8 +20,21 @@
   - D3D の簡易文字描画へ `V` / `o` / `l` / `%` を追加した。
   - 速度表示は右下ではなく、ミュートアイコン右側の旧 `PlaybackRateButtonRect` 相当位置へ移した。
   - ユーザー確認で `Vol` 表示が小さめに見えたため、音量ラベルを 2px スケールへ上げた。
+  - `%` の点が小さく `/` に見えやすかったため、上下の丸部分を太らせた専用描画へ変更した。
+- 終端到達時動作表示を D3D seek bar へ移した。
+  - `TD3D11SeekBarOverlayState` に `EndActionText` を追加し、旧 seek bar の `Loop` / `Stop` などの表示文字列を渡すようにした。
+  - D3D の簡易文字描画へ `P` を追加し、旧 `EndActionButtonRect` 相当位置へ表示する。
+- `Loop` の末尾は大文字 `P` より小文字風の方が自然に見えたため、`p` 専用描画を追加した。
+- チャプター追加/削除表示を D3D seek bar へ移した。
+  - D3D の簡易文字描画へ `+` / `-` を追加し、旧 `AddChapterButtonRect` / `DeleteChapterButtonRect` 相当位置へ表示する。
+- 全画面ボタン表示を D3D seek bar へ移した。
+  - `TD3D11SeekBarOverlayState` に `FullScreen` を追加し、旧 seek bar の全画面状態を渡すようにした。
+  - 旧 `FullScreenButtonRect` 相当位置へ、通常時は四隅へ広がる矢印、全画面中は中央へ戻る矢印を描く。
+- `Check` 表示を D3D seek bar へ移した。
+  - D3D の簡易文字描画へ `C` / `h` / `e` / `k` を追加し、Check 中は赤寄りに強調する。
+- 再生中 D3D 表示で下段操作群が消えるケースがあったため、音量/速度/Loop/チャプター/全画面の行位置は旧 GDI に近い seek bar パネル下端基準へ戻した。
 - 確認:
-  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、エラー 0。既存の hint 警告は残る。
 
 ## 2026-06-25 起動時前回ファイル復元後の D3D seek bar 対策
 - 原因:

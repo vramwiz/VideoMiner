@@ -26,7 +26,25 @@ type
     FrameStepMs    : Integer; // Check 中の 1 フレーム相当 ms
     VolumePercent  : Integer; // 音量パーセント
     Muted          : Boolean; // ミュート中か
+    VolumeHovered  : Boolean; // 音量バー上にマウスがあるか
+    VolumeDragging : Boolean; // 音量バーをドラッグ中か
+    MuteHovered    : Boolean; // ミュートボタン上にマウスがあるか
+    MutePressed    : Boolean; // ミュートボタン押下中か
     PlaybackRateText: string; // 再生速度表示
+    PlaybackRateHovered: Boolean; // 再生速度ボタン上にマウスがあるか
+    PlaybackRatePressed: Boolean; // 再生速度ボタン押下中か
+    EndActionText  : string; // 終端到達時動作表示
+    EndActionHovered: Boolean; // 終端動作ボタン上にマウスがあるか
+    EndActionPressed: Boolean; // 終端動作ボタン押下中か
+    CheckHovered   : Boolean; // Check ボタン上にマウスがあるか
+    CheckPressed   : Boolean; // Check ボタン押下中か
+    AddChapterHovered: Boolean; // チャプター追加ボタン上にマウスがあるか
+    AddChapterPressed: Boolean; // チャプター追加ボタン押下中か
+    DeleteChapterHovered: Boolean; // チャプター削除ボタン上にマウスがあるか
+    DeleteChapterPressed: Boolean; // チャプター削除ボタン押下中か
+    FullScreen     : Boolean; // 全画面表示中か
+    FullScreenHovered: Boolean; // 全画面ボタン上にマウスがあるか
+    FullScreenPressed: Boolean; // 全画面ボタン押下中か
     Chapters       : TArray<TD3D11SeekBarOverlayChapter>; // D3D 側で描くチャプター目盛り
   end;
 
@@ -100,6 +118,7 @@ type
     procedure ProbeShaderDraw(Frame: PAVFrame);
     procedure ProbeSwapChainPresent(Frame: PAVFrame);
     procedure DrawOverlayRect(const Rect: TRect; R, G, B, A: Single);
+    procedure DrawOverlayLine(X1, Y1, X2, Y2, Thickness: Integer; R, G, B, A: Single);
     procedure DrawOverlayCircleApprox(CenterX, CenterY, Radius: Integer;
       R, G, B, A: Single);
     procedure DrawOverlayDigit(X, Y, Scale, Digit: Integer; R, G, B, A: Single);
@@ -109,11 +128,17 @@ type
     procedure DrawOverlayX(X, Y, Scale: Integer; R, G, B, A: Single);
     procedure DrawOverlayLetter(X, Y, Scale: Integer; Ch: Char; R, G, B,
       A: Single);
+    procedure DrawOverlayPlus(X, Y, Scale: Integer; R, G, B, A: Single);
+    procedure DrawOverlayMinus(X, Y, Scale: Integer; R, G, B, A: Single);
     procedure DrawOverlayText(X, Y, Scale: Integer; const Text: string; R, G, B, A: Single);
     procedure DrawSeekBarMuteIcon(const IconRect: TRect; const State: TD3D11SeekBarOverlayState);
     procedure DrawSeekBarTimeText(const State: TD3D11SeekBarOverlayState);
+    procedure DrawSeekBarHoverLabel(const State: TD3D11SeekBarOverlayState);
     procedure DrawSeekBarVolume(const State: TD3D11SeekBarOverlayState);
     procedure DrawSeekBarPlaybackRate(const State: TD3D11SeekBarOverlayState);
+    procedure DrawSeekBarEndAction(const State: TD3D11SeekBarOverlayState);
+    procedure DrawSeekBarChapterButtons(const State: TD3D11SeekBarOverlayState);
+    procedure DrawSeekBarFullScreen(const State: TD3D11SeekBarOverlayState);
     function DrawSeekBarOverlay(const State: TD3D11SeekBarOverlayState): Double;
   public
     destructor Destroy; override;
@@ -971,6 +996,34 @@ begin
   FDeviceContext.Draw(6, 0);
 end;
 
+procedure TNv12TextureProbe.DrawOverlayLine(X1, Y1, X2, Y2, Thickness: Integer;
+  R, G, B, A: Single);
+var
+  HalfThickness: Integer;
+  I: Integer;
+  Steps: Integer;
+  X: Integer;
+  Y: Integer;
+begin
+  Thickness := Max(1, Thickness);
+  HalfThickness := Thickness div 2;
+  Steps := Max(Abs(X2 - X1), Abs(Y2 - Y1));
+  if Steps <= 0 then
+  begin
+    DrawOverlayRect(Rect(X1 - HalfThickness, Y1 - HalfThickness,
+      X1 + HalfThickness + 1, Y1 + HalfThickness + 1), R, G, B, A);
+    Exit;
+  end;
+
+  for I := 0 to Steps do
+  begin
+    X := X1 + Round((X2 - X1) * I / Steps);
+    Y := Y1 + Round((Y2 - Y1) * I / Steps);
+    DrawOverlayRect(Rect(X - HalfThickness, Y - HalfThickness,
+      X + HalfThickness + 1, Y + HalfThickness + 1), R, G, B, A);
+  end;
+end;
+
 procedure TNv12TextureProbe.DrawOverlayCircleApprox(CenterX, CenterY,
   Radius: Integer; R, G, B, A: Single);
 var
@@ -1042,6 +1095,8 @@ begin
         Inc(Result, Scale * 7);
       '%':
         Inc(Result, Scale * 7);
+      '+', '-':
+        Inc(Result, Scale * 7);
       'l', 'L':
         Inc(Result, Scale * 4);
       ' ':
@@ -1050,6 +1105,23 @@ begin
       Inc(Result, Scale * 7);
     end;
   end;
+end;
+
+function SeekBarToolRowTop(const State: TD3D11SeekBarOverlayState): Integer;
+begin
+  Result := State.Bounds.Bottom - 40;
+end;
+
+function SeekBarButtonBackAlpha(Hovered, Pressed, Active: Boolean): Single;
+begin
+  if Pressed then
+    Result := 0.30
+  else if Hovered then
+    Result := 0.20
+  else if Active then
+    Result := 0.14
+  else
+    Result := 0;
 end;
 
 procedure TNv12TextureProbe.DrawOverlayDigit(X, Y, Scale, Digit: Integer;
@@ -1139,6 +1211,19 @@ end;
 procedure TNv12TextureProbe.DrawOverlayLetter(X, Y, Scale: Integer; Ch: Char;
   R, G, B, A: Single);
 begin
+  if Ch = 'p' then
+  begin
+    DrawOverlayRect(Rect(X, Y + Scale * 3, X + Scale, Y + Scale * 12),
+      R, G, B, A);
+    DrawOverlayRect(Rect(X + Scale, Y + Scale * 3, X + Scale * 5,
+      Y + Scale * 4), R, G, B, A);
+    DrawOverlayRect(Rect(X + Scale * 5, Y + Scale * 4, X + Scale * 6,
+      Y + Scale * 7), R, G, B, A);
+    DrawOverlayRect(Rect(X + Scale, Y + Scale * 7, X + Scale * 5,
+      Y + Scale * 8), R, G, B, A);
+    Exit;
+  end;
+
   case UpCase(Ch) of
     'V':
     begin
@@ -1170,15 +1255,54 @@ begin
       DrawOverlayRect(Rect(X + Scale, Y + Scale * 9, X + Scale * 4,
         Y + Scale * 10), R, G, B, A);
     end;
+    'P':
+    begin
+      DrawOverlayRect(Rect(X, Y + Scale, X + Scale, Y + Scale * 10),
+        R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale, Y + Scale, X + Scale * 5,
+        Y + Scale * 2), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 5, Y + Scale * 2, X + Scale * 6,
+        Y + Scale * 5), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale, Y + Scale * 5, X + Scale * 5,
+        Y + Scale * 6), R, G, B, A);
+    end;
     '%':
     begin
-      DrawOverlayRect(Rect(X + Scale, Y + Scale * 2, X + Scale * 2,
+      DrawOverlayRect(Rect(X, Y + Scale * 2, X + Scale * 3,
         Y + Scale * 3), R, G, B, A);
-      DrawOverlayRect(Rect(X + Scale * 4, Y + Scale * 8, X + Scale * 5,
+      DrawOverlayRect(Rect(X, Y + Scale * 3, X + Scale,
+        Y + Scale * 5), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 2, Y + Scale * 3, X + Scale * 3,
+        Y + Scale * 5), R, G, B, A);
+      DrawOverlayRect(Rect(X, Y + Scale * 5, X + Scale * 3,
+        Y + Scale * 6), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 4, Y + Scale * 6, X + Scale * 7,
+        Y + Scale * 7), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 4, Y + Scale * 7, X + Scale * 5,
         Y + Scale * 9), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 6, Y + Scale * 7, X + Scale * 7,
+        Y + Scale * 9), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 4, Y + Scale * 9, X + Scale * 7,
+        Y + Scale * 10), R, G, B, A);
       DrawOverlaySlash(X + Scale, Y, Scale, R, G, B, A);
     end;
   end;
+end;
+
+procedure TNv12TextureProbe.DrawOverlayPlus(X, Y, Scale: Integer; R, G, B,
+  A: Single);
+begin
+  DrawOverlayRect(Rect(X + Scale * 3, Y + Scale * 3, X + Scale * 4,
+    Y + Scale * 9), R, G, B, A);
+  DrawOverlayRect(Rect(X + Scale, Y + Scale * 5, X + Scale * 6,
+    Y + Scale * 7), R, G, B, A);
+end;
+
+procedure TNv12TextureProbe.DrawOverlayMinus(X, Y, Scale: Integer; R, G, B,
+  A: Single);
+begin
+  DrawOverlayRect(Rect(X + Scale, Y + Scale * 5, X + Scale * 6,
+    Y + Scale * 7), R, G, B, A);
 end;
 
 procedure TNv12TextureProbe.DrawOverlayText(X, Y, Scale: Integer;
@@ -1217,6 +1341,16 @@ begin
       '%':
       begin
         DrawOverlayLetter(X, Y, Scale, Ch, R, G, B, A);
+        Inc(X, Scale * 7);
+      end;
+      '+':
+      begin
+        DrawOverlayPlus(X, Y, Scale, R, G, B, A);
+        Inc(X, Scale * 7);
+      end;
+      '-':
+      begin
+        DrawOverlayMinus(X, Y, Scale, R, G, B, A);
         Inc(X, Scale * 7);
       end;
       'l', 'L':
@@ -1259,6 +1393,41 @@ begin
   DrawOverlayText(X, Y, Scale, Text, 1, 1, 1, 0.86);
 end;
 
+procedure TNv12TextureProbe.DrawSeekBarHoverLabel(
+  const State: TD3D11SeekBarOverlayState);
+var
+  HoverRatio: Double;
+  HoverX: Integer;
+  Scale: Integer;
+  Text: string;
+  TextWidth: Integer;
+  X: Integer;
+  Y: Integer;
+begin
+  if State.Bounds.IsEmpty or State.Track.IsEmpty or (State.MaxMs <= 0) or
+     (State.HoverPositionMs < 0) or (State.HoverPositionMs > State.MaxMs) then
+    Exit;
+
+  Scale := 2;
+  if State.CheckEnabled then
+    Text := IntToStr(Max(0, State.HoverPositionMs) div Max(1, State.FrameStepMs) + 1)
+  else
+    Text := SeekBarTimeText(State.HoverPositionMs);
+  TextWidth := OverlayTextWidth(Text, Scale);
+
+  HoverRatio := State.HoverPositionMs / State.MaxMs;
+  HoverRatio := Max(0.0, Min(1.0, HoverRatio));
+  HoverX := State.Track.Left + Round(State.Track.Width * HoverRatio);
+  X := HoverX - TextWidth div 2;
+  X := Max(State.Bounds.Left + 16, Min(State.Bounds.Right - TextWidth - 16, X));
+  Y := Max(State.Bounds.Top + 8, State.Track.Top - Scale * 15);
+
+  DrawOverlayRect(Rect(X - 7, Y - 5, X + TextWidth + 7,
+    Y + Scale * 12 + 5), 0, 0, 0, 0.42);
+  DrawOverlayText(X + 1, Y + 1, Scale, Text, 0, 0, 0, 0.56);
+  DrawOverlayText(X, Y, Scale, Text, 1, 1, 1, 0.86);
+end;
+
 procedure TNv12TextureProbe.DrawSeekBarMuteIcon(const IconRect: TRect;
   const State: TD3D11SeekBarOverlayState);
 var
@@ -1295,26 +1464,34 @@ end;
 procedure TNv12TextureProbe.DrawSeekBarVolume(
   const State: TD3D11SeekBarOverlayState);
 var
+  BackAlpha: Single;
   FilledRect: TRect;
   FillRatio: Double;
   LabelText: string;
   LabelY: Integer;
   Scale: Integer;
+  ToolTop: Integer;
   TrackRect: TRect;
 begin
   if State.Bounds.IsEmpty then
     Exit;
 
   Scale := 2;
+  ToolTop := SeekBarToolRowTop(State);
   LabelText := Format('Vol %d%%', [Max(0, Min(100, State.VolumePercent))]);
-  LabelY := State.Bounds.Bottom - 40;
+  LabelY := ToolTop;
   DrawOverlayText(State.Bounds.Left + 22 + 1, LabelY + 1, Scale, LabelText,
     0, 0, 0, 0.55);
   DrawOverlayText(State.Bounds.Left + 22, LabelY, Scale, LabelText,
     1, 1, 1, 0.86);
 
-  TrackRect := Rect(State.Bounds.Left + 22, State.Bounds.Bottom - 10,
-    State.Bounds.Left + 112, State.Bounds.Bottom - 5);
+  TrackRect := Rect(State.Bounds.Left + 22, ToolTop + Scale * 13,
+    State.Bounds.Left + 112, ToolTop + Scale * 13 + 5);
+  BackAlpha := SeekBarButtonBackAlpha(State.VolumeHovered,
+    State.VolumeDragging, False);
+  if BackAlpha > 0 then
+    DrawOverlayRect(Rect(TrackRect.Left - 8, LabelY - 4, TrackRect.Right + 8,
+      TrackRect.Bottom + 6), 1, 1, 1, BackAlpha);
   DrawOverlayRect(TrackRect, 1, 1, 1, 0.26);
 
   FillRatio := Max(0, Min(100, State.VolumePercent)) / 100;
@@ -1333,19 +1510,26 @@ procedure TNv12TextureProbe.DrawSeekBarPlaybackRate(
   const State: TD3D11SeekBarOverlayState);
 var
   Active: Boolean;
+  BackAlpha: Single;
   MuteRect: TRect;
   RateRect: TRect;
   Scale: Integer;
   Text: string;
   TextWidth: Integer;
+  ToolTop: Integer;
   X: Integer;
   Y: Integer;
 begin
   if State.Bounds.IsEmpty then
     Exit;
 
-  MuteRect := Rect(State.Bounds.Left + 134, State.Bounds.Bottom - 40,
-    State.Bounds.Left + 162, State.Bounds.Bottom - 12);
+  ToolTop := SeekBarToolRowTop(State);
+  MuteRect := Rect(State.Bounds.Left + 134, ToolTop, State.Bounds.Left + 162,
+    ToolTop + 28);
+  BackAlpha := SeekBarButtonBackAlpha(State.MuteHovered, State.MutePressed,
+    State.Muted);
+  if BackAlpha > 0 then
+    DrawOverlayRect(MuteRect, 1, 1, 1, BackAlpha);
   DrawSeekBarMuteIcon(MuteRect, State);
 
   Text := State.PlaybackRateText;
@@ -1358,14 +1542,220 @@ begin
   X := RateRect.Left + (RateRect.Width - TextWidth) div 2;
   Y := RateRect.Top + (RateRect.Height - Scale * 11) div 2;
   Active := not SameText(Text, '1.0x');
-  if Active then
+  BackAlpha := SeekBarButtonBackAlpha(State.PlaybackRateHovered,
+    State.PlaybackRatePressed, Active);
+  if BackAlpha > 0 then
     DrawOverlayRect(Rect(X - 8, Y - 6, X + TextWidth + 8, Y + Scale * 12 + 4),
-      0.95, 0.78, 0.20, 0.18);
+      0.95, 0.78, 0.20, BackAlpha);
   DrawOverlayText(X + 1, Y + 1, Scale, Text, 0, 0, 0, 0.55);
   if Active then
     DrawOverlayText(X, Y, Scale, Text, 0.95, 0.78, 0.20, 0.92)
   else
     DrawOverlayText(X, Y, Scale, Text, 1, 1, 1, 0.72);
+end;
+
+procedure TNv12TextureProbe.DrawSeekBarEndAction(
+  const State: TD3D11SeekBarOverlayState);
+var
+  BackAlpha: Single;
+  ButtonRect: TRect;
+  Scale: Integer;
+  Text: string;
+  TextWidth: Integer;
+  ToolTop: Integer;
+  X: Integer;
+  Y: Integer;
+begin
+  if State.Bounds.IsEmpty then
+    Exit;
+
+  Text := State.EndActionText;
+  if Text = '' then
+    Text := 'Stop';
+  Scale := 2;
+  TextWidth := OverlayTextWidth(Text, Scale);
+  ToolTop := SeekBarToolRowTop(State);
+  ButtonRect := Rect(State.Bounds.Right - 110, ToolTop, State.Bounds.Right - 56,
+    ToolTop + 28);
+  X := ButtonRect.Left + (ButtonRect.Width - TextWidth) div 2;
+  Y := ButtonRect.Top + (ButtonRect.Height - Scale * 11) div 2;
+  BackAlpha := SeekBarButtonBackAlpha(State.EndActionHovered,
+    State.EndActionPressed, False);
+  if BackAlpha > 0 then
+    DrawOverlayRect(ButtonRect, 1, 1, 1, BackAlpha);
+  DrawOverlayText(X + 1, Y + 1, Scale, Text, 0, 0, 0, 0.55);
+  DrawOverlayText(X, Y, Scale, Text, 1, 1, 1, 0.78);
+end;
+
+procedure TNv12TextureProbe.DrawSeekBarChapterButtons(
+  const State: TD3D11SeekBarOverlayState);
+var
+  AddRect: TRect;
+  BackAlpha: Single;
+  CheckRect: TRect;
+  DeleteRect: TRect;
+  EndRect: TRect;
+  FullRect: TRect;
+  Scale: Integer;
+  TextWidth: Integer;
+  ToolTop: Integer;
+  X: Integer;
+  Y: Integer;
+begin
+  if State.Bounds.IsEmpty or (State.Bounds.Width < 520) then
+    Exit;
+
+  Scale := 2;
+  ToolTop := SeekBarToolRowTop(State);
+  FullRect := Rect(State.Bounds.Right - 48, ToolTop - 1, State.Bounds.Right - 14,
+    ToolTop + 33);
+  EndRect := Rect(FullRect.Left - 62, FullRect.Top, FullRect.Left - 8,
+    FullRect.Bottom);
+  CheckRect := Rect(EndRect.Left - 84, EndRect.Top, EndRect.Left - 8,
+    EndRect.Bottom);
+  DeleteRect := Rect(CheckRect.Left - 38, CheckRect.Top, CheckRect.Left - 6,
+    CheckRect.Bottom);
+  AddRect := Rect(DeleteRect.Left - 38, DeleteRect.Top, DeleteRect.Left - 6,
+    DeleteRect.Bottom);
+
+  BackAlpha := SeekBarButtonBackAlpha(State.AddChapterHovered,
+    State.AddChapterPressed, False);
+  if BackAlpha > 0 then
+    DrawOverlayRect(AddRect, 1, 1, 1, BackAlpha);
+  TextWidth := OverlayTextWidth('+', Scale);
+  X := AddRect.Left + (AddRect.Width - TextWidth) div 2;
+  Y := AddRect.Top + (AddRect.Height - Scale * 11) div 2;
+  DrawOverlayText(X + 1, Y + 1, Scale, '+', 0, 0, 0, 0.55);
+  DrawOverlayText(X, Y, Scale, '+', 1, 1, 1, 0.78);
+
+  BackAlpha := SeekBarButtonBackAlpha(State.DeleteChapterHovered,
+    State.DeleteChapterPressed, False);
+  if BackAlpha > 0 then
+    DrawOverlayRect(DeleteRect, 1, 1, 1, BackAlpha);
+  TextWidth := OverlayTextWidth('-', Scale);
+  X := DeleteRect.Left + (DeleteRect.Width - TextWidth) div 2;
+  Y := DeleteRect.Top + (DeleteRect.Height - Scale * 11) div 2;
+  DrawOverlayText(X + 1, Y + 1, Scale, '-', 0, 0, 0, 0.55);
+  DrawOverlayText(X, Y, Scale, '-', 1, 1, 1, 0.78);
+
+  BackAlpha := SeekBarButtonBackAlpha(State.CheckHovered, State.CheckPressed,
+    State.CheckEnabled);
+  if BackAlpha > 0 then
+    DrawOverlayRect(CheckRect, 0.91, 0.14, 0.14, BackAlpha);
+  TextWidth := OverlayTextWidth('Check', Scale);
+  X := CheckRect.Left + (CheckRect.Width - TextWidth) div 2;
+  Y := CheckRect.Top + (CheckRect.Height - Scale * 11) div 2;
+  DrawOverlayText(X + 1, Y + 1, Scale, 'Check', 0, 0, 0, 0.55);
+  if State.CheckEnabled then
+    DrawOverlayText(X, Y, Scale, 'Check', 0.95, 0.20, 0.20, 0.95)
+  else
+    DrawOverlayText(X, Y, Scale, 'Check', 1, 1, 1, 0.78);
+end;
+
+procedure TNv12TextureProbe.DrawSeekBarFullScreen(
+  const State: TD3D11SeekBarOverlayState);
+var
+  BackAlpha: Single;
+  Bottom: Integer;
+  CenterX: Integer;
+  CenterY: Integer;
+  Head: Integer;
+  IconRect: TRect;
+  Inset: Integer;
+  L: Integer;
+  Left: Integer;
+  PenWidth: Integer;
+  R: Integer;
+  Right: Integer;
+  T: Integer;
+  Top: Integer;
+  B: Integer;
+  ToolTop: Integer;
+  WindowRect: TRect;
+begin
+  if State.Bounds.IsEmpty then
+    Exit;
+
+  ToolTop := SeekBarToolRowTop(State);
+  IconRect := Rect(State.Bounds.Right - 48, ToolTop - 1,
+    State.Bounds.Right - 14, ToolTop + 33);
+  BackAlpha := SeekBarButtonBackAlpha(State.FullScreenHovered,
+    State.FullScreenPressed, False);
+  if BackAlpha > 0 then
+    DrawOverlayRect(IconRect, 1, 1, 1, BackAlpha);
+  Left := IconRect.Left;
+  Top := IconRect.Top;
+  Right := IconRect.Right - 1;
+  Bottom := IconRect.Bottom - 1;
+  CenterX := IconRect.Left + IconRect.Width div 2;
+  CenterY := IconRect.Top + IconRect.Height div 2;
+  Inset := 7;
+  Head := 7;
+  PenWidth := 2;
+
+  if State.FullScreen then
+  begin
+    WindowRect := Rect(CenterX - 7, CenterY - 6, CenterX + 8, CenterY + 7);
+    DrawOverlayLine(WindowRect.Left, WindowRect.Top, WindowRect.Right,
+      WindowRect.Top, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(WindowRect.Right, WindowRect.Top, WindowRect.Right,
+      WindowRect.Bottom, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(WindowRect.Right, WindowRect.Bottom, WindowRect.Left,
+      WindowRect.Bottom, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(WindowRect.Left, WindowRect.Bottom, WindowRect.Left,
+      WindowRect.Top, PenWidth, 1, 1, 1, 0.78);
+
+    DrawOverlayLine(Left + Inset, Top + Inset, WindowRect.Left,
+      WindowRect.Top, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(WindowRect.Left, WindowRect.Top, WindowRect.Left - Head,
+      WindowRect.Top, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(WindowRect.Left, WindowRect.Top, WindowRect.Left,
+      WindowRect.Top - Head, PenWidth, 1, 1, 1, 0.78);
+
+    DrawOverlayLine(Right - Inset, Top + Inset, WindowRect.Right,
+      WindowRect.Top, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(WindowRect.Right, WindowRect.Top, WindowRect.Right + Head,
+      WindowRect.Top, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(WindowRect.Right, WindowRect.Top, WindowRect.Right,
+      WindowRect.Top - Head, PenWidth, 1, 1, 1, 0.78);
+
+    DrawOverlayLine(Left + Inset, Bottom - Inset, WindowRect.Left,
+      WindowRect.Bottom, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(WindowRect.Left, WindowRect.Bottom, WindowRect.Left - Head,
+      WindowRect.Bottom, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(WindowRect.Left, WindowRect.Bottom, WindowRect.Left,
+      WindowRect.Bottom + Head, PenWidth, 1, 1, 1, 0.78);
+
+    DrawOverlayLine(Right - Inset, Bottom - Inset, WindowRect.Right,
+      WindowRect.Bottom, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(WindowRect.Right, WindowRect.Bottom, WindowRect.Right + Head,
+      WindowRect.Bottom, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(WindowRect.Right, WindowRect.Bottom, WindowRect.Right,
+      WindowRect.Bottom + Head, PenWidth, 1, 1, 1, 0.78);
+  end
+  else
+  begin
+    L := Left + Inset;
+    T := Top + Inset;
+    R := Right - Inset;
+    B := Bottom - Inset;
+
+    DrawOverlayLine(CenterX - 5, CenterY - 5, L, T, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(L, T, L + Head, T, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(L, T, L, T + Head, PenWidth, 1, 1, 1, 0.78);
+
+    DrawOverlayLine(CenterX + 5, CenterY - 5, R, T, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(R, T, R - Head, T, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(R, T, R, T + Head, PenWidth, 1, 1, 1, 0.78);
+
+    DrawOverlayLine(CenterX - 5, CenterY + 5, L, B, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(L, B, L + Head, B, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(L, B, L, B - Head, PenWidth, 1, 1, 1, 0.78);
+
+    DrawOverlayLine(CenterX + 5, CenterY + 5, R, B, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(R, B, R - Head, B, PenWidth, 1, 1, 1, 0.78);
+    DrawOverlayLine(R, B, R, B - Head, PenWidth, 1, 1, 1, 0.78);
+  end;
 end;
 
 function TNv12TextureProbe.DrawSeekBarOverlay(
@@ -1388,6 +1778,7 @@ var
   StepWatch: TStopwatch;
   TrackRect: TRect;
   BlendFactor: TFourSingleArray;
+  Viewport: D3D11_VIEWPORT;
 begin
   Result := 0;
   if (not State.Visible) or State.Bounds.IsEmpty or State.Track.IsEmpty or
@@ -1400,6 +1791,14 @@ begin
   end;
 
   StepWatch := TStopwatch.StartNew;
+  FillChar(Viewport, SizeOf(Viewport), 0);
+  Viewport.TopLeftX := 0;
+  Viewport.TopLeftY := 0;
+  Viewport.Width := FTargetWidth;
+  Viewport.Height := FTargetHeight;
+  Viewport.MinDepth := 0;
+  Viewport.MaxDepth := 1;
+  FDeviceContext.RSSetViewports(1, @Viewport);
   FDeviceContext.OMSetRenderTargets(1, FDisplayRenderView, nil);
   DrawOverlayRect(State.Bounds, 0, 0, 0, 0.36);
 
@@ -1471,6 +1870,12 @@ begin
     KnobCoreRadius := 13;
     KnobInnerRadius := 8;
   end
+  else if (State.HoverPositionMs >= 0) and (State.HoverPositionMs <= State.MaxMs) then
+  begin
+    KnobHaloRadius := 22;
+    KnobCoreRadius := 12;
+    KnobInnerRadius := 7;
+  end
   else
   begin
     KnobHaloRadius := 20;
@@ -1485,8 +1890,12 @@ begin
     0.52, 0.82, 1.0, 1.0);
 
   DrawSeekBarTimeText(State);
+  DrawSeekBarHoverLabel(State);
   DrawSeekBarVolume(State);
   DrawSeekBarPlaybackRate(State);
+  DrawSeekBarEndAction(State);
+  DrawSeekBarChapterButtons(State);
+  DrawSeekBarFullScreen(State);
 
   FillChar(BlendFactor, SizeOf(BlendFactor), 0);
   FDeviceContext.OMSetBlendState(nil, BlendFactor, $FFFFFFFF);

@@ -1133,7 +1133,25 @@ begin
     State.FrameStepMs := FSeekBar.FrameStepMs;
     State.VolumePercent := FSeekBar.VolumePercent;
     State.Muted := FSeekBar.Muted;
+    State.VolumeHovered := FSeekBar.VolumeHovered;
+    State.VolumeDragging := FSeekBar.VolumeDragging;
+    State.MuteHovered := FSeekBar.MuteButtonHovered;
+    State.MutePressed := FSeekBar.MuteButtonPressed;
     State.PlaybackRateText := FSeekBar.PlaybackRateText;
+    State.PlaybackRateHovered := FSeekBar.PlaybackRateButtonHovered;
+    State.PlaybackRatePressed := FSeekBar.PlaybackRateButtonPressed;
+    State.EndActionText := FSeekBar.EndActionText;
+    State.EndActionHovered := FSeekBar.EndActionButtonHovered;
+    State.EndActionPressed := FSeekBar.EndActionButtonPressed;
+    State.CheckHovered := FSeekBar.CheckButtonHovered;
+    State.CheckPressed := FSeekBar.CheckButtonPressed;
+    State.AddChapterHovered := FSeekBar.AddChapterButtonHovered;
+    State.AddChapterPressed := FSeekBar.AddChapterButtonPressed;
+    State.DeleteChapterHovered := FSeekBar.DeleteChapterButtonHovered;
+    State.DeleteChapterPressed := FSeekBar.DeleteChapterButtonPressed;
+    State.FullScreen := FSeekBar.FullScreen;
+    State.FullScreenHovered := FSeekBar.FullScreenButtonHovered;
+    State.FullScreenPressed := FSeekBar.FullScreenButtonPressed;
     SetLength(State.Chapters, Length(FSeekBar.Chapters));
     for ChapterIndex := 0 to High(State.Chapters) do
     begin
@@ -1223,6 +1241,7 @@ begin
     if Assigned(FOnSeekHoverPreviewEnd) then
       FOnSeekHoverPreviewEnd(Self);
   end;
+  UpdateD3DSeekBarOverlayState;
   InvalidateOverlayControl(FSeekBar);
 end;
 
@@ -1396,6 +1415,7 @@ begin
 
   if FSeekBarVisible and (FSeekBar <> nil) then
   begin
+    FSeekBar.UpdateLayout(SeekBarLayoutRect);
     if FSeekBar.HoverPositionFromPoint(MousePoint, HoverPositionMs) then
       FSeekBarHoverPositionMs := HoverPositionMs
     else if not FSeekBar.Dragging then
@@ -1995,6 +2015,8 @@ begin
   begin
     FSeekBar.FullScreen := Value;
     if FSeekBarVisible then
+      UpdateD3DSeekBarOverlayState;
+    if FSeekBarVisible then
       InvalidateOverlayControl(FSeekBar);
   end;
 end;
@@ -2026,6 +2048,8 @@ begin
   if FSeekBar <> nil then
   begin
     FSeekBar.EndActionText := Value;
+    if FSeekBarVisible then
+      UpdateD3DSeekBarOverlayState;
     if FSeekBarVisible then
       InvalidateOverlayControl(FSeekBar);
   end;

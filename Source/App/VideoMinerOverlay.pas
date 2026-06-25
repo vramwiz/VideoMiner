@@ -260,12 +260,22 @@ type
     procedure SetProgress(PositionMs, MaxMs: Integer);
     function WheelPosition(WheelDelta, StepMs: Integer): Integer;
     property CheckEnabled: Boolean read FCheckEnabled write SetCheckEnabled;
+    property AddChapterButtonHovered: Boolean read FAddChapterButtonHovered;
+    property AddChapterButtonPressed: Boolean read FAddChapterButtonPressed;
+    property CheckButtonHovered: Boolean read FCheckButtonHovered;
+    property CheckButtonPressed: Boolean read FCheckButtonPressed;
     property Chapters: TVideoMinerOverlayChapters read FChapters write SetChapters;
     property CompactPlaybackStyle: Boolean read FCompactPlaybackStyle
       write FCompactPlaybackStyle;
+    property DeleteChapterButtonHovered: Boolean read FDeleteChapterButtonHovered;
+    property DeleteChapterButtonPressed: Boolean read FDeleteChapterButtonPressed;
     property Dragging: Boolean read FDragging;
+    property EndActionButtonHovered: Boolean read FEndActionButtonHovered;
+    property EndActionButtonPressed: Boolean read FEndActionButtonPressed;
     property EndActionText: string read FEndActionText write SetEndActionText;
     property FullScreen: Boolean read FFullScreen write SetFullScreen;
+    property FullScreenButtonHovered: Boolean read FFullScreenButtonHovered;
+    property FullScreenButtonPressed: Boolean read FFullScreenButtonPressed;
     property FrameStepMs: Integer read FFrameStepMs write SetFrameStepMs;
     property MaxMs: Integer read FMaxMs;
     property OnAddChapterClick: TNotifyEvent read FOnAddChapterClick write FOnAddChapterClick;
@@ -278,7 +288,13 @@ type
     property OnSeek: TVideoMinerOverlaySeekEvent read FOnSeek write FOnSeek;
     property OnVolumeChange: TVideoMinerOverlayVolumeEvent read FOnVolumeChange write FOnVolumeChange;
     property Muted: Boolean read FMuted write SetMuted;
+    property MuteButtonHovered: Boolean read FMuteButtonHovered;
+    property MuteButtonPressed: Boolean read FMuteButtonPressed;
+    property PlaybackRateButtonHovered: Boolean read FPlaybackRateButtonHovered;
+    property PlaybackRateButtonPressed: Boolean read FPlaybackRateButtonPressed;
     property PlaybackRateText: string read FPlaybackRateText write SetPlaybackRateText;
+    property VolumeDragging: Boolean read FVolumeDragging;
+    property VolumeHovered: Boolean read FVolumeHovered;
     property VolumePercent: Integer read FVolumePercent write SetVolumePercent;
   end;
 implementation
@@ -1520,7 +1536,7 @@ var
   EndRect: TRect;
 begin
   EndRect := EndActionButtonRect;
-  Result := Rect(EndRect.Left - 64, EndRect.Top, EndRect.Left - 8,
+  Result := Rect(EndRect.Left - 84, EndRect.Top, EndRect.Left - 8,
     EndRect.Bottom);
 end;
 
@@ -2249,8 +2265,9 @@ begin
   if Track.IsEmpty then
     Exit;
 
-  HitRect := Rect(Bounds.Left + Track.Left, Bounds.Top,
-    Bounds.Left + Track.Right, Bounds.Bottom);
+  HitRect := Rect(Bounds.Left + Track.Left, Bounds.Top + Track.Top,
+    Bounds.Left + Track.Right, Bounds.Top + Track.Bottom);
+  InflateRect(HitRect, 0, 18);
   if not PtInRect(HitRect, Point) then
     Exit;
 
