@@ -20,6 +20,7 @@ type
     Track          : TRect;   // progress track の client 座標
     PositionMs     : Integer; // 表示する現在位置 ms
     MaxMs          : Integer; // 動画長 ms
+    Dragging       : Boolean; // シークバーをドラッグ中か
     Chapters       : TArray<TD3D11SeekBarOverlayChapter>; // D3D 側で描くチャプター目盛り
   end;
 
@@ -954,6 +955,8 @@ var
   ErrorMessage: string;
   FilledRect: TRect;
   KnobRect: TRect;
+  KnobPadX: Integer;
+  KnobPadY: Integer;
   MarkerRect: TRect;
   MarkerX: Integer;
   PositionRatio: Double;
@@ -1000,7 +1003,18 @@ begin
   end;
 
   MarkerX := TrackRect.Left + Round(TrackRect.Width * PositionRatio);
-  KnobRect := Rect(MarkerX - 7, TrackRect.Top - 5, MarkerX + 7, TrackRect.Bottom + 6);
+  if State.Dragging then
+  begin
+    KnobPadX := 10;
+    KnobPadY := 8;
+  end
+  else
+  begin
+    KnobPadX := 7;
+    KnobPadY := 5;
+  end;
+  KnobRect := Rect(MarkerX - KnobPadX, TrackRect.Top - KnobPadY,
+    MarkerX + KnobPadX, TrackRect.Bottom + KnobPadY + 1);
   DrawOverlayRect(KnobRect, 0.25, 0.63, 0.94, 1.0);
 
   FillChar(BlendFactor, SizeOf(BlendFactor), 0);
@@ -1122,12 +1136,13 @@ begin
   GlobalD3DFramePresented := True;
   Result := True;
   WriteVideoMinerSlowLog(Format(
-    'd3d11_display_present frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d y_stride=%d uv_stride=%d range=%d space=%d recreated=%s overlay=%s upload_ms=%.3f clear_ms=%.3f draw_ms=%.3f overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
+    'd3d11_display_present frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d y_stride=%d uv_stride=%d range=%d space=%d recreated=%s overlay=%s dragging=%s upload_ms=%.3f clear_ms=%.3f draw_ms=%.3f overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
     [Frame.width, Frame.height, FTargetWidth, FTargetHeight,
      ViewLeft, ViewTop, ViewLeft + ViewWidth, ViewTop + ViewHeight,
      Frame.linesize[0], Frame.linesize[1], Frame.color_range,
      Frame.colorspace, BoolToStr(Recreated, True),
-     BoolToStr(GlobalD3DSeekBarOverlay.Visible, True), UploadMs, ClearMs,
+     BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
+     BoolToStr(GlobalD3DSeekBarOverlay.Dragging, True), UploadMs, ClearMs,
      DrawMs, OverlayMs, PresentMs, TotalWatch.Elapsed.TotalMilliseconds]));
 end;
 

@@ -991,7 +991,8 @@ var
   TrackRect: TRect;
 begin
   FillChar(State, SizeOf(State), 0);
-  if (FSeekBar <> nil) and FPlaybackActive and FSeekBarVisible and
+  if (FSeekBar <> nil) and FPlaybackActive and
+     (FSeekBarVisible or FSeekBar.Dragging) and
      (not FSeekPreviewVisible) and (not FSafeAreaVisible) and
      (not FLoadingActive) then
   begin
@@ -1003,6 +1004,7 @@ begin
     State.Track := TrackRect;
     State.PositionMs := FSeekBar.CurrentDisplayPositionMs;
     State.MaxMs := FSeekBar.MaxMs;
+    State.Dragging := FSeekBar.Dragging;
     SetLength(State.Chapters, Length(FSeekBar.Chapters));
     for ChapterIndex := 0 to High(State.Chapters) do
     begin
@@ -1151,7 +1153,10 @@ begin
     if Assigned(FOnSeekHoverPreviewEnd) then
       FOnSeekHoverPreviewEnd(Self);
     if FSeekBar.MouseDown(Point(X, Y)) then
+    begin
+      UpdateD3DSeekBarOverlayState;
       InvalidateOverlayControl(FSeekBar);
+    end;
     MouseCapture := True;
   end;
 
@@ -1257,7 +1262,10 @@ begin
   end;
 
   if FSeekBarVisible and (FSeekBar <> nil) and FSeekBar.MouseMove(MousePoint) then
+  begin
+    UpdateD3DSeekBarOverlayState;
     InvalidateOverlayControl(FSeekBar);
+  end;
 
   if ((not FPlaybackActive) and FSeekBarVisible and (FSeekBar <> nil) and
       (not FSeekBar.Dragging) and
@@ -1312,7 +1320,10 @@ begin
      (FSeekBarVisible or FSeekBar.Dragging) then
   begin
     if FSeekBar.MouseUp(Point(X, Y)) then
+    begin
+      UpdateD3DSeekBarOverlayState;
       InvalidateOverlayControl(FSeekBar);
+    end;
     MouseCapture := False;
     SetSeekBarVisible(HitSeekBar(Point(X, Y)));
   end;
@@ -1714,7 +1725,10 @@ begin
   begin
     FSeekBar.SetProgress(PositionMs, MaxMs);
     if FSeekBarVisible then
+    begin
+      UpdateD3DSeekBarOverlayState;
       InvalidateOverlayControl(FSeekBar);
+    end;
   end;
 end;
 
