@@ -1123,6 +1123,7 @@ end;
 procedure TVideoMinerMainForm.PlayFromCurrentPosition;
 var
   FrameShown: Boolean;
+  RestartFromBeginning: Boolean;
 begin
   if FMediaSession.VideoFile = '' then
     Exit;
@@ -1131,7 +1132,9 @@ begin
     FVideoView.HidePlaybackStartOverlays;
 
   FrameShown := FMediaSession.CurrentVideoPositionMs = FMediaSession.SeekPositionMs;
-  if FMediaSession.SeekPositionMs >= FMediaSession.SeekMaxMs then
+  RestartFromBeginning := (FMediaSession.SeekMaxMs > 0) and
+    (FMediaSession.SeekPositionMs >= LastFrameSeekPositionMs);
+  if RestartFromBeginning then
   begin
     FUpdatingSeek := True;
     try

@@ -2,6 +2,25 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-25 終端停止後の再生再開
+- 終端到達で停止した後に Space または再生ボタンを押しても反応がないように見える問題を修正した。
+- 終端停止時の表示位置は `SeekMaxMs` ではなく `LastFrameSeekPositionMs` になるため、`PlayFromCurrentPosition` の先頭戻し判定を `SeekMaxMs` 以上から最終フレーム表示位置以上へ変更した。
+- これにより、Stop 動作で最終フレームに止まった状態からの再生操作は先頭フレームへ戻してから再生開始する。
+- D3D seek bar 移行中の `HIDE_LEGACY_SEEK_BAR_PAINT=True` により、停止中は hover で `FSeekBarVisible=True` になっても GDI seek bar が描かれない状態だったため、停止中だけは旧 GDI seek bar 描画を許可した。
+- ただし停止中 fallback 描画が旧フル UI に戻って見えたため、`HIDE_LEGACY_SEEK_BAR_PAINT=True` 中の GDI seek bar 描画は停止中でも compact 表示へ寄せた。
+- 旧 `TVideoMinerOverlaySeekBar.Paint` に入る限り旧表示へ戻りやすいため、`HIDE_LEGACY_SEEK_BAR_PAINT=True` 中は旧 Paint を呼ばず、`TVideoMinerVideoSurface.DrawMigratedSeekBarFallback` で移行済み表示に近い fallback を描くようにした。旧 seek bar は hit test / 操作 / 参考実装として残す。
+- 停止中 fallback の全面角丸パネルが旧 UI の土台のように見えたため、移行済み表示ではパネル背景を描かず、track / ノブ / 操作表示だけを描くようにした。
+- fallback 側に残した `Vol` / 速度 / `Stop` / `Check` / `-` / `+` / 全画面の簡易表示も旧 UI っぽく見えるため、停止中 fallback では描かず、track / ノブ / 中央時刻だけに絞った。
+- 中央時刻だけが半端に残り、track が映像上へ寄って見えにくかったため、停止中 fallback は下端の track / ノブだけを描くようにした。
+- それでも fallback の横バー自体が旧表示の残りに見えるため、`HIDE_LEGACY_SEEK_BAR_PAINT=True` 中は GDI fallback seek bar を描かないようにし、旧っぽい描画入口を完全に塞いだ。停止中に新 D3D seek bar を表示するには、停止中フレームを D3D backbuffer へ載せる経路が別途必要。
+- 起動直後の停止フレームでも新 D3D seek bar を出せるように、指定位置の `ShowFrameAt` でも回転なしなら NV12 frame を D3D backbuffer へ同時に Present するようにした。
+- D3D probe に保持中の NV12 texture を再描画する `PresentCurrentNv12TextureFrame` を追加し、seek bar の hover / 表示切替だけで動画と現在の D3D seek bar overlay を再 Present できるようにした。
+- 停止中の `seek_bar_visible_while_paused` ブロックを外し、`UpdateD3DSeekBarOverlayState` も再生中限定ではなく停止中 hover / drag の状態を D3D 側へ渡すようにした。
+- hover preview など表示目的でない seek decode がD3Dへ誤表示しないよう、D3D display allowed は各デコード呼び出し中だけ有効にし、終了時に必ず戻すようにした。
+- 確認:
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+
 ## 2026-06-25 D3D seek bar の Check 表示移設
 - 旧 GDI seek bar から新 D3D seek bar への段階移設として、Check 中の表示を D3D 側へ渡すようにした。
 - `TD3D11SeekBarOverlayState` に `CheckEnabled` / `FrameStepMs` を追加し、Check 中は D3D overlay の中央表示を時刻ではなくフレーム番号形式 `current / max` へ切り替える。

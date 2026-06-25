@@ -89,7 +89,17 @@
        - 再生中/停止中の seek bar 表示を D3D 側へ寄せる。
        - 右側操作表示の細かい位置関係を基準画像に合わせて調整する。
        - hover preview 小窓は bitmap/texture 合成が必要なので、seek bar 本体と基本操作の後で扱う。
-       - 旧 GDI seek bar は移行完了までは停止中/fallback 用として残し、D3D 側が十分揃ったら削除対象にする。
+     - 旧 GDI seek bar は移行完了までは停止中/fallback 用として残し、D3D 側が十分揃ったら削除対象にする。
+     - 2026-06-25: 旧 GDI / fallback seek bar の描画入口を塞いだ結果、余計な旧表示は消えたが、起動直後の停止状態ではマウスを動かしても新 D3D seek bar が表示されない。
+       - 試したこと:
+         - `ShowFrameAt` の指定位置デコードでも、回転なしなら NV12 frame を D3D backbuffer へ同時に Present する変更を入れた。
+         - `FFmpegD3D11TextureProbe.pas` に保持中の NV12 texture を再描画する `PresentCurrentNv12TextureFrame` を追加した。
+         - 停止中の `seek_bar_visible_while_paused` ブロックを外し、停止中 hover / drag でも `UpdateD3DSeekBarOverlayState` が D3D 側へ状態を渡すようにした。
+         - hover preview など表示目的でない seek decode が誤って D3D Present しないよう、D3D display allowed は各デコード呼び出し中だけ有効にした。
+       - それでもユーザー確認では、起動直後にシークバー領域へマウスを動かしても新 D3D seek bar は出ない。
+       - 次回はコードだけで推測せず、Debug ログで初期停止フレームの `d3d11_display_present` / hover 時の `d3d11_display_represent` / `surface_present_immediate` / `paint_skip_d3d_frame` の有無を確認する。
+       - 特に、起動直後の前回ファイル復元が本当に `ShowFrameAt` の D3D 許可経路を通っているか、また hover 時に `RefreshD3DFramePresentation` が呼ばれているかを見る。
+       - 必要なら一時的に、起動直後の停止フレーム D3D Present と hover 再Present の成否を Release でも出る軽量ログへ追加する。
    - D3D overlay 化のデバッグ方法:
      - テストファイルは `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4`。
      - Debug Win64 / `VIDEOMINER_DEBUG_LOG=1` / `VIDEOMINER_SLOW_LOG=1` で確認する。D3D11 実表示は既定で有効。

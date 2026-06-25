@@ -52,6 +52,7 @@ type
 procedure ProbeNv12TextureUpload(Frame: PAVFrame);
 procedure SetNv12TextureProbeTargetWindow(WindowHandle: HWND; Width, Height: Integer);
 function PresentNv12TextureFrame(Frame: PAVFrame): Boolean;
+function PresentCurrentNv12TextureFrame: Boolean;
 function Nv12TextureD3DDisplayEnabled: Boolean;
 function Nv12TextureD3DFramePresented: Boolean;
 procedure ClearNv12TextureD3DFramePresented;
@@ -144,6 +145,7 @@ type
     destructor Destroy; override;
     procedure Probe(Frame: PAVFrame);
     function PresentFrame(Frame: PAVFrame): Boolean;
+    function PresentCurrentFrame: Boolean;
     procedure SetTargetWindow(WindowHandle: HWND; Width, Height: Integer);
   end;
 
@@ -2086,6 +2088,105 @@ begin
   end;
 end;
 
+function TNv12TextureProbe.PresentCurrentFrame: Boolean;
+var
+  ClearColor   : TFourSingleArray; // letterbox 領域を塗る黒
+  ErrorMessage : string;           // D3D 表示失敗理由
+  OverlayMs    : Double;           // D3D overlay 描画時間
+  PresentMs    : Double;           // Present 呼び出し時間
+  Recreated    : Boolean;          // swap chain を今回作り直したか
+  ResourceViews: array[0..1] of ID3D11ShaderResourceView;
+  StepWatch    : TStopwatch;       // 各 step の計測
+  TotalWatch   : TStopwatch;       // D3D 表示全体の計測
+  ViewHeight   : Integer;          // アスペクト比維持後の描画高さ
+  ViewLeft     : Integer;          // アスペクト比維持後の描画左位置
+  ViewTop      : Integer;          // アスペクト比維持後の描画上位置
+  Viewport     : D3D11_VIEWPORT;
+  ViewWidth    : Integer;          // アスペクト比維持後の描画幅
+begin
+  Result := False;
+  GlobalD3DFramePresented := False;
+  if (not Nv12TextureD3DDisplayEnabled) or (FTextureWidth <= 0) or
+     (FTextureHeight <= 0) or (not Assigned(FYResourceView)) or
+     (not Assigned(FUvResourceView)) then
+    Exit;
+  if not EnsureDevice(ErrorMessage) then
+  begin
+    LogErrorOnce(ErrorMessage);
+    Exit;
+  end;
+  if not EnsureShaderPipeline(FTextureWidth, FTextureHeight, ErrorMessage) then
+  begin
+    LogErrorOnce(ErrorMessage);
+    Exit;
+  end;
+  if not EnsureDisplaySwapChain(Recreated, ErrorMessage) then
+  begin
+    LogErrorOnce(ErrorMessage);
+    Exit;
+  end;
+  if not EnsureRectPipeline(ErrorMessage) then
+    LogErrorOnce(ErrorMessage);
+
+  TotalWatch := TStopwatch.StartNew;
+  ViewWidth := FTargetWidth;
+  ViewHeight := (Int64(FTargetWidth) * FTextureHeight) div FTextureWidth;
+  if ViewHeight > FTargetHeight then
+  begin
+    ViewHeight := FTargetHeight;
+    ViewWidth := (Int64(FTargetHeight) * FTextureWidth) div FTextureHeight;
+  end;
+  if ViewWidth < 1 then
+    ViewWidth := 1;
+  if ViewHeight < 1 then
+    ViewHeight := 1;
+  ViewLeft := (FTargetWidth - ViewWidth) div 2;
+  ViewTop := (FTargetHeight - ViewHeight) div 2;
+
+  FillChar(Viewport, SizeOf(Viewport), 0);
+  Viewport.TopLeftX := ViewLeft;
+  Viewport.TopLeftY := ViewTop;
+  Viewport.Width := ViewWidth;
+  Viewport.Height := ViewHeight;
+  Viewport.MinDepth := 0;
+  Viewport.MaxDepth := 1;
+  ResourceViews[0] := FYResourceView;
+  ResourceViews[1] := FUvResourceView;
+
+  ClearColor[0] := 0;
+  ClearColor[1] := 0;
+  ClearColor[2] := 0;
+  ClearColor[3] := 1;
+  FDeviceContext.ClearRenderTargetView(FDisplayRenderView, ClearColor);
+
+  FDeviceContext.IASetInputLayout(nil);
+  FDeviceContext.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  FDeviceContext.VSSetShader(FVertexShader, nil, 0);
+  FDeviceContext.PSSetShader(FPixelShader, nil, 0);
+  FDeviceContext.PSSetShaderResources(0, Length(ResourceViews), ResourceViews[0]);
+  FDeviceContext.PSSetSamplers(0, 1, FSampler);
+  FDeviceContext.RSSetViewports(1, @Viewport);
+  FDeviceContext.OMSetRenderTargets(1, FDisplayRenderView, nil);
+  FDeviceContext.Draw(3, 0);
+
+  OverlayMs := DrawSeekBarOverlay(GlobalD3DSeekBarOverlay);
+
+  StepWatch := TStopwatch.StartNew;
+  FDisplaySwapChain.Present(0, 0);
+  PresentMs := StepWatch.Elapsed.TotalMilliseconds;
+
+  GlobalD3DFramePresented := True;
+  Result := True;
+  if VideoMinerSlowLogEnabled then
+    WriteVideoMinerSlowLog(Format(
+      'd3d11_display_represent frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d overlay=%s dragging=%s overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
+      [FTextureWidth, FTextureHeight, FTargetWidth, FTargetHeight,
+       ViewLeft, ViewTop, ViewLeft + ViewWidth, ViewTop + ViewHeight,
+       BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
+       BoolToStr(GlobalD3DSeekBarOverlay.Dragging, True), OverlayMs, PresentMs,
+       TotalWatch.Elapsed.TotalMilliseconds]));
+end;
+
 procedure TNv12TextureProbe.Probe(Frame: PAVFrame);
 var
   ErrorMessage : string;     // D3D11 初期化/texture 作成失敗の理由
@@ -2226,6 +2327,16 @@ begin
   if GlobalProbe = nil then
     GlobalProbe := TNv12TextureProbe.Create;
   Result := GlobalProbe.PresentFrame(Frame);
+end;
+
+function PresentCurrentNv12TextureFrame: Boolean;
+begin
+  Result := False;
+  if not Nv12TextureD3DDisplayEnabled then
+    Exit;
+  if GlobalProbe = nil then
+    Exit;
+  Result := GlobalProbe.PresentCurrentFrame;
 end;
 
 procedure SetNv12TextureProbeTargetWindow(WindowHandle: HWND; Width, Height: Integer);

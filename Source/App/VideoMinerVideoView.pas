@@ -880,6 +880,7 @@ begin
     Exit;
   end;
 
+  SetNv12TextureD3DDisplayAllowed(False);
   if FastSeek then
     Result := Decoder.DecodeFrameToBgrx32Fast(PositionMs, Buffer,
       BufferStride, ErrorMessage)
@@ -898,6 +899,7 @@ function TVideoMinerVideoView.ShowFrameAt(Decoder: TFFmpegDecoder;
 var
   Buffer: Pointer;
   BufferStride: Integer;
+  D3DAllowed: Boolean;
   EffectiveRotation: Integer;
 {$IFDEF DEBUG}
   Signature: TVideoMinerFrameSignature;
@@ -932,17 +934,26 @@ begin
     end;
   end;
 
+  EffectiveRotation := DisplayRotationDegrees(Decoder.Info.RotationDegrees);
+  D3DAllowed := PresentFrame and (EffectiveRotation = 0) and
+    FSurface.PrepareD3DFramePresentation;
+  SetNv12TextureD3DDisplayAllowed(D3DAllowed);
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format(
-    'show_frame_decode_begin position_ms=%d present=%s fast=%s',
-    [PositionMs, BoolToStr(PresentFrame, True), BoolToStr(FastSeek, True)]));
+    'show_frame_decode_begin position_ms=%d present=%s fast=%s d3d_allowed=%s',
+    [PositionMs, BoolToStr(PresentFrame, True), BoolToStr(FastSeek, True),
+     BoolToStr(D3DAllowed, True)]));
 {$ENDIF}
-  if FastSeek then
-    Result := Decoder.DecodeFrameToBgrx32Fast(PositionMs, Buffer,
-      BufferStride, ErrorMessage)
-  else
-    Result := Decoder.DecodeFrameToBgrx32(PositionMs, Buffer, BufferStride,
-      ErrorMessage);
+  try
+    if FastSeek then
+      Result := Decoder.DecodeFrameToBgrx32Fast(PositionMs, Buffer,
+        BufferStride, ErrorMessage)
+    else
+      Result := Decoder.DecodeFrameToBgrx32(PositionMs, Buffer, BufferStride,
+        ErrorMessage);
+  finally
+    SetNv12TextureD3DDisplayAllowed(False);
+  end;
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format(
     'show_frame_decode_end position_ms=%d result=%s err="%s"',
@@ -953,8 +964,6 @@ begin
     Result := False;
     Exit;
   end;
-
-  EffectiveRotation := DisplayRotationDegrees(Decoder.Info.RotationDegrees);
 {$IFDEF DEBUG}
   if PresentFrame then
   begin
@@ -992,11 +1001,15 @@ begin
 
   if PresentFrame then
   begin
-    PresentImmediate(FSurface.Bitmap);
+    if Nv12TextureD3DFramePresented then
+      FSurface.MarkD3DFramePresented
+    else
+      PresentImmediate(FSurface.Bitmap);
 {$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
-      'show_frame_present_immediate position_ms=%d bitmap=%dx%d',
-      [PositionMs, FSurface.Bitmap.Width, FSurface.Bitmap.Height]));
+      'show_frame_present_immediate position_ms=%d bitmap=%dx%d d3d_presented=%s',
+      [PositionMs, FSurface.Bitmap.Width, FSurface.Bitmap.Height,
+       BoolToStr(Nv12TextureD3DFramePresented, True)]));
     if CurrentFrameSignature(Signature) then
       WriteVideoMinerSlowLog(Format(
         'show_frame_signature position_ms=%d %s',
@@ -1046,9 +1059,13 @@ begin
        BoolToStr(FSurface.CanUseD3DFramePresentation, True)]));
 {$ENDIF}
   ClearNv12TextureD3DFramePresented;
-  if not Decoder.DecodeNextFrameToBgrx32Optional(Buffer, BufferStride,
-    ConvertFrame, PositionMs, ErrorMessage) then
-    Exit;
+  try
+    if not Decoder.DecodeNextFrameToBgrx32Optional(Buffer, BufferStride,
+      ConvertFrame, PositionMs, ErrorMessage) then
+      Exit;
+  finally
+    SetNv12TextureD3DDisplayAllowed(False);
+  end;
 
   if ConvertFrame and Nv12TextureD3DFramePresented then
   begin

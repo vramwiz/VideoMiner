@@ -125,6 +125,8 @@ type
     function SeekBarLayoutRect: TRect;
     // D3D 表示中に backbuffer 上へ描く簡易シークバー状態を更新する
     procedure UpdateD3DSeekBarOverlayState;
+    // 保持中の D3D frame へ現在の簡易シークバー状態を重ねて再表示する
+    function RefreshD3DFramePresentation: Boolean;
     // D3D11 直接表示を止めている最初の理由を返す
     function D3DFramePresentationBlockReason: string;
     // D3D11 直接表示の現在状態を状態変化時または低頻度でログへ出す
@@ -466,6 +468,8 @@ end;
 procedure TVideoMinerVideoSurface.Clear;
 begin
   CancelPendingSurfaceClick;
+  ClearNv12TextureD3DFramePresented;
+  FLastD3DFramePresentedTick := 0;
   FBitmap.SetSize(0, 0);
   FAlphaCompositeBitmap.SetSize(0, 0);
   FAlphaCompositeDirty := True;
@@ -544,8 +548,6 @@ begin
     Result := 'source_has_alpha'
   else if FOverlayVisible then
     Result := 'center_overlay_visible'
-  else if FSeekBarVisible and (not FPlaybackActive) then
-    Result := 'seek_bar_visible_while_paused'
   else if FSeekPreviewVisible then
     Result := 'seek_preview_visible'
   else if FSafeAreaVisible then
@@ -1115,8 +1117,7 @@ var
   TrackRect: TRect;
 begin
   FillChar(State, SizeOf(State), 0);
-  if (FSeekBar <> nil) and FPlaybackActive and
-     (FSeekBarVisible or FSeekBar.Dragging) and
+  if (FSeekBar <> nil) and (FSeekBarVisible or FSeekBar.Dragging) and
      (not FSeekPreviewVisible) and (not FSafeAreaVisible) and
      (not FLoadingActive) then
   begin
@@ -1161,6 +1162,19 @@ begin
     end;
   end;
   SetNv12TextureD3DSeekBarOverlay(State);
+end;
+
+function TVideoMinerVideoSurface.RefreshD3DFramePresentation: Boolean;
+begin
+  Result := False;
+  if FSourceHasAlpha or (FLastD3DFramePresentedTick = 0) then
+    Exit;
+
+  SetNv12TextureProbeTargetWindow(Handle, ClientWidth, ClientHeight);
+  UpdateD3DSeekBarOverlayState;
+  Result := PresentCurrentNv12TextureFrame;
+  if Result then
+    MarkD3DFramePresented;
 end;
 
 function TVideoMinerVideoSurface.CanStartPan(const Point: TPoint): Boolean;
@@ -1243,6 +1257,7 @@ begin
       FOnSeekHoverPreviewEnd(Self);
   end;
   UpdateD3DSeekBarOverlayState;
+  RefreshD3DFramePresentation;
   InvalidateOverlayControl(FSeekBar);
 end;
 
@@ -1426,10 +1441,14 @@ begin
       if FSeekBar.Dragging then
         FSeekBarHoverPositionMs := FSeekBar.CurrentDisplayPositionMs;
       UpdateD3DSeekBarOverlayState;
+      RefreshD3DFramePresentation;
       InvalidateOverlayControl(FSeekBar);
     end
     else
+    begin
       UpdateD3DSeekBarOverlayState;
+      RefreshD3DFramePresentation;
+    end;
   end;
 
   if ((not FPlaybackActive) and FSeekBarVisible and (FSeekBar <> nil) and
@@ -1661,9 +1680,7 @@ begin
     Exit;
   end;
 
-  D3DFrameCurrent := (Nv12TextureD3DFramePresented or
-    (FPlaybackActive and FSeekBarVisible and D3DFrameRecentlyPresented)) and
-    (not FSourceHasAlpha);
+  D3DFrameCurrent := Nv12TextureD3DFramePresented and (not FSourceHasAlpha);
   UsePaintBuffer := FOverlayVisible or FSeekBarVisible or FSeekPreviewVisible or
     ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible) or
     ((FNextFileButton <> nil) and FNextFileButton.Visible);
@@ -1731,7 +1748,8 @@ begin
     FNextFileButton.UpdateLayout(ClientRect);
   if FSeekBar <> nil then
   begin
-    SeekBarCompactStyle := FPlaybackActive or FForceCompactSeekBarPaint;
+    SeekBarCompactStyle := FPlaybackActive or FForceCompactSeekBarPaint or
+      HIDE_LEGACY_SEEK_BAR_PAINT;
     FSeekBar.CompactPlaybackStyle := SeekBarCompactStyle;
     FSeekBar.UpdateLayout(SeekBarLayoutRect);
   end;
@@ -1760,13 +1778,14 @@ begin
   end;
   if (FNextFileButton <> nil) and FNextFileButton.Visible then
     FNextFileButton.Paint(DrawCanvas);
-  if FSeekBarVisible and (FSeekBar <> nil) and
-     (not HIDE_LEGACY_SEEK_BAR_PAINT) then
+  if FSeekBarVisible and (FSeekBar <> nil) then
   begin
-    SeekBarCompactStyle := FPlaybackActive or FForceCompactSeekBarPaint;
+    SeekBarCompactStyle := FPlaybackActive or FForceCompactSeekBarPaint or
+      HIDE_LEGACY_SEEK_BAR_PAINT;
     FSeekBar.CompactPlaybackStyle := SeekBarCompactStyle;
     LogSeekBarPaintState(SeekBarCompactStyle, D3DFrameCurrent);
-    FSeekBar.Paint(DrawCanvas);
+    if not HIDE_LEGACY_SEEK_BAR_PAINT then
+      FSeekBar.Paint(DrawCanvas);
   end;
   DrawSeekHoverPreview(DrawCanvas);
   DrawLoadingIndicator(DrawCanvas);

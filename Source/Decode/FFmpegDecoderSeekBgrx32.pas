@@ -29,8 +29,8 @@ function DecodeFrameToBgrx32Fast(
 implementation
 
 uses
-  System.Diagnostics, System.SysUtils, FFmpegApi, FFmpegFrameConvert,
-  FFmpegQsvDecode, FFmpegStreamInfo, VideoMinerDebugLog;
+  System.Diagnostics, System.SysUtils, FFmpegApi, FFmpegD3D11TextureProbe,
+  FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo, VideoMinerDebugLog;
 
 // フレームの表示時刻を、取得できる範囲で最も信頼できる値として返す。
 function DisplayFrameTimestamp(Frame: PAVFrame): Int64;
@@ -180,6 +180,8 @@ begin
 {$IFDEF DEBUG}
             ConvertWatch := TStopwatch.StartNew;
 {$ENDIF}
+            ProbeNv12TextureUpload(ConvertSourceFrame);
+            PresentNv12TextureFrame(ConvertSourceFrame);
             CopyFrameToBgrx32BufferCached(ConvertSourceFrame, Buffer, BufferStride,
               Context.DirectSwsContext, Context.DirectSwsSrcWidth, Context.DirectSwsSrcHeight,
               Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat,
