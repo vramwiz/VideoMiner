@@ -1896,6 +1896,14 @@ begin
       else
         StepMs := SEEK_WHEEL_STEP_MS;
       SeekPositionMs := FSeekBar.WheelPosition(WheelDelta, StepMs);
+      if SeekPositionMs < FSeekBar.CurrentDisplayPositionMs then
+      begin
+        FSeekBar.SetProgress(SeekPositionMs, FSeekBar.MaxMs);
+        FSeekBarHoverPositionMs := SeekPositionMs;
+        UpdateD3DSeekBarOverlayState;
+        RefreshD3DFramePresentation;
+        InvalidateOverlayControl(FSeekBar);
+      end;
       if Assigned(FOnSeekByWheel) then
         FOnSeekByWheel(Self, SeekPositionMs);
       Result := True;
@@ -2299,6 +2307,7 @@ begin
       if FSeekBar.Dragging then
         FSeekBarHoverPositionMs := FSeekBar.CurrentDisplayPositionMs;
       UpdateD3DSeekBarOverlayState;
+      RefreshD3DFramePresentation;
       InvalidateOverlayControl(FSeekBar);
     end;
   end;

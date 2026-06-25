@@ -79,6 +79,9 @@ type
     FSeeking                         : Boolean;                         // シーク処理中か
     FSeekGuardTargetMs               : Integer;                         // シーク直後に再生 tick を守る対象位置 ms
     FSeekGuardRemaining              : Integer;                         // シーク guard を残す tick 数
+    FReverseWheelSeekPending         : Boolean;                         // 逆方向ホイールシークの実デコードを保留中か
+    FReverseWheelSeekPositionMs      : Integer;                         // 保留中の逆方向ホイールシーク先 ms
+    FReverseWheelSeekTimer           : TTimer;                          // 逆方向ホイールシークを落ち着くまで遅延するタイマー
     FRestartPlaybackTimer            : TTimer;                          // シーク後に再生再開を遅延させるタイマー
     FCurrentFileReloadController     : TVideoMinerCurrentFileReloadController; // 現在ファイルの外部更新監視
     FExternalOpenController          : TVideoMinerExternalOpenController; // 外部からの open 要求制御
@@ -159,6 +162,8 @@ type
     procedure SeekPlaybackTickToMs(PositionMs: Integer; FrameAlreadyShown: Boolean);
     // 指定位置へシークし、必要なら再生状態を復元する
     procedure SeekToMs(PositionMs: Integer; ResumeIfPlaying: Boolean = True);
+    // ホイール操作の指定位置シーク。停止中の逆方向だけ実デコードを少し遅延する
+    procedure SeekByWheelToMs(PositionMs: Integer);
     // 現在位置から相対移動する
     procedure SeekByMs(DeltaMs: Integer);
     // 先頭フレームへ移動する
@@ -175,6 +180,8 @@ type
     procedure StartupOpenTimer(Sender: TObject);
     // シーク後の遅延再生再開を処理する
     procedure RestartPlaybackTimer(Sender: TObject);
+    // 保留中の逆方向ホイールシークを実行する
+    procedure ReverseWheelSeekTimer(Sender: TObject);
     // 終端到達時の停止/ループ/次動画動作を処理する
     procedure FinishPlaybackAtEnd;
     // 別プロセスから渡されたファイル名を受け取る
@@ -221,6 +228,7 @@ var
 implementation
 
 const
+  REVERSE_WHEEL_SEEK_DELAY_MS  = 350;       // 逆方向ホイールの連続入力をまとめる待ち時間 ms
   SEEK_RESTART_DELAY_MS         = 15;        // シーク後に再生再開を遅延させる時間 ms
   TITLE_BAR_COLOR               = $00171617; // 独自タイトルバーの通常背景色
   CLOSE_BUTTON_HOVER_COLOR      = $00232323; // 閉じるボタン hover 時の背景色
@@ -422,6 +430,7 @@ begin
   FCommandController.OnRotateDisplay := RotateDisplay90;
   FCommandController.OnSaveAudioSettings := SaveAudioPlaybackSettings;
   FCommandController.OnSeekByMs := SeekByMs;
+  FCommandController.OnSeekByWheel := SeekByWheelToMs;
   FCommandController.OnSeekToFirstFrame := SeekToFirstFrame;
   FCommandController.OnSeekToLastFrame := SeekToLastFrame;
   FCommandController.OnShowHelp := ShowHelpOverlay;
@@ -456,6 +465,11 @@ begin
   FRestartPlaybackTimer.Enabled := False;
   FRestartPlaybackTimer.Interval := SEEK_RESTART_DELAY_MS;
   FRestartPlaybackTimer.OnTimer := RestartPlaybackTimer;
+  FReverseWheelSeekTimer := TTimer.Create(Self);
+  FReverseWheelSeekTimer.Enabled := False;
+  FReverseWheelSeekTimer.Interval := REVERSE_WHEEL_SEEK_DELAY_MS;
+  FReverseWheelSeekTimer.OnTimer := ReverseWheelSeekTimer;
+  FReverseWheelSeekPositionMs := -1;
   FStartupOpenTimer := TTimer.Create(Self);
   FStartupOpenTimer.Enabled := False;
   FStartupOpenTimer.Interval := 120;
@@ -527,6 +541,8 @@ begin
       FVideoView.PlaybackActive := False;
     if FRestartPlaybackTimer <> nil then
       FRestartPlaybackTimer.Enabled := False;
+    if FReverseWheelSeekTimer <> nil then
+      FReverseWheelSeekTimer.Enabled := False;
     if FStartupOpenTimer <> nil then
       FStartupOpenTimer.Enabled := False;
     if FCurrentFileReloadController <> nil then
@@ -1167,6 +1183,10 @@ begin
   if FMediaSession.VideoFile = '' then
     Exit;
 
+  FReverseWheelSeekPending := False;
+  if FReverseWheelSeekTimer <> nil then
+    FReverseWheelSeekTimer.Enabled := False;
+
   if FVideoView <> nil then
     FVideoView.HidePlaybackStartOverlays;
 
@@ -1266,6 +1286,9 @@ var
   PreviewInfo: TVideoInfo;
   ErrorMessage: string;
 begin
+  FReverseWheelSeekPending := False;
+  if FReverseWheelSeekTimer <> nil then
+    FReverseWheelSeekTimer.Enabled := False;
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format(
     'main_seek_to_ms_call requested_ms=%d resume_if_playing=%s current_ms=%d seek_ms=%d max_ms=%d',
@@ -1318,6 +1341,55 @@ begin
      FMediaSession.SeekPositionMs, FSeekGuardTargetMs,
      FSeekGuardRemaining]));
 {$ENDIF}
+end;
+
+procedure TVideoMinerMainForm.SeekByWheelToMs(PositionMs: Integer);
+var
+  BaseMs: Integer;
+  TargetMs: Integer;
+begin
+  if (FMediaSession.VideoFile = '') or (FMediaSession.SeekMaxMs <= 0) then
+    Exit;
+
+  TargetMs := Max(0, Min(FMediaSession.SeekMaxMs, PositionMs));
+  BaseMs := FMediaSession.CurrentVideoPositionMs;
+  if BaseMs < 0 then
+    BaseMs := FMediaSession.SeekPositionMs;
+
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format(
+    'main_wheel_seek target_ms=%d base_ms=%d current_ms=%d seek_ms=%d playback=%s pending=%s',
+    [TargetMs, BaseMs, FMediaSession.CurrentVideoPositionMs,
+     FMediaSession.SeekPositionMs, BoolToStr(PlaybackActiveOrPending, True),
+     BoolToStr(FReverseWheelSeekPending, True)]));
+{$ENDIF}
+
+  if (not PlaybackActiveOrPending) and (TargetMs < BaseMs) then
+  begin
+    FReverseWheelSeekPending := True;
+    FReverseWheelSeekPositionMs := TargetMs;
+    FUpdatingSeek := True;
+    try
+      FMediaSession.SeekPositionMs := TargetMs;
+    finally
+      FUpdatingSeek := False;
+    end;
+    if FInfoController <> nil then
+      FInfoController.UpdatePlaybackProgress(TargetMs);
+    if FReverseWheelSeekTimer <> nil then
+    begin
+      FReverseWheelSeekTimer.Enabled := False;
+      FReverseWheelSeekTimer.Enabled := True;
+    end;
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format(
+      'main_reverse_wheel_seek_defer target_ms=%d base_ms=%d delay_ms=%d',
+      [TargetMs, BaseMs, REVERSE_WHEEL_SEEK_DELAY_MS]));
+{$ENDIF}
+    Exit;
+  end;
+
+  SeekToMs(TargetMs, True);
 end;
 
 procedure TVideoMinerMainForm.SeekByMs(DeltaMs: Integer);
@@ -1689,6 +1761,35 @@ begin
     FrameAlreadyShown, FastSeek, False, FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs,
     FMediaSession.LoopSegmentStartMs, FMediaSession.LoopSegmentEndMs, FSeekGuardTargetMs,
     FSeekGuardRemaining, FInfoController.SetStatusCaption);
+end;
+
+procedure TVideoMinerMainForm.ReverseWheelSeekTimer(Sender: TObject);
+var
+  TargetMs: Integer;
+begin
+  if FReverseWheelSeekTimer <> nil then
+    FReverseWheelSeekTimer.Enabled := False;
+
+  if (not FReverseWheelSeekPending) or FLoadingVideo then
+  begin
+    FReverseWheelSeekPending := False;
+    Exit;
+  end;
+
+  TargetMs := FReverseWheelSeekPositionMs;
+  FReverseWheelSeekPending := False;
+  FReverseWheelSeekPositionMs := -1;
+  if (FMediaSession.VideoFile = '') or (TargetMs < 0) or
+     (TargetMs > FMediaSession.SeekMaxMs) then
+    Exit;
+
+{$IFDEF DEBUG}
+  WriteVideoMinerSlowLog(Format(
+    'main_reverse_wheel_seek_fire target_ms=%d current_ms=%d seek_ms=%d',
+    [TargetMs, FMediaSession.CurrentVideoPositionMs,
+     FMediaSession.SeekPositionMs]));
+{$ENDIF}
+  SeekToMs(TargetMs, True);
 end;
 
 procedure TVideoMinerMainForm.WMNCHitTest(var Message: TWMNCHitTest);

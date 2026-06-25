@@ -42,6 +42,7 @@ type
     FOnRotateDisplay           : TVideoMinerCommandProc;        // 表示だけを90度回転する委譲先
     FOnSaveAudioSettings       : TVideoMinerCommandProc;        // 音量/ミュート変更後の設定保存先
     FOnSeekByMs                : TVideoMinerCommandDeltaProc;   // 相対時間シークの委譲先
+    FOnSeekByWheel             : TVideoMinerCommandPositionProc; // ホイールシークの委譲先
     FOnSeekToFirstFrame        : TVideoMinerCommandProc;        // 先頭フレーム移動の委譲先
     FOnSeekToLastFrame         : TVideoMinerCommandProc;        // 最終フレーム移動の委譲先
     FOnShowHelp                : TVideoMinerCommandProc;        // show help overlay delegate
@@ -149,6 +150,7 @@ type
     property OnRotateDisplay: TVideoMinerCommandProc read FOnRotateDisplay write FOnRotateDisplay;
     property OnSaveAudioSettings: TVideoMinerCommandProc read FOnSaveAudioSettings write FOnSaveAudioSettings;
     property OnSeekByMs: TVideoMinerCommandDeltaProc read FOnSeekByMs write FOnSeekByMs;
+    property OnSeekByWheel: TVideoMinerCommandPositionProc read FOnSeekByWheel write FOnSeekByWheel;
     property OnSeekToFirstFrame: TVideoMinerCommandProc read FOnSeekToFirstFrame write FOnSeekToFirstFrame;
     property OnSeekToLastFrame: TVideoMinerCommandProc read FOnSeekToLastFrame write FOnSeekToLastFrame;
     property OnShowHelp: TVideoMinerCommandProc read FOnShowHelp write FOnShowHelp;
@@ -347,7 +349,9 @@ end;
 procedure TVideoMinerCommandController.SeekByWheel(Sender: TObject;
   PositionMs: Integer);
 begin
-  if Assigned(FOnSeekToMs) then
+  if Assigned(FOnSeekByWheel) then
+    FOnSeekByWheel(PositionMs)
+  else if Assigned(FOnSeekToMs) then
     FOnSeekToMs(PositionMs, True);
 end;
 

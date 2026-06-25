@@ -960,6 +960,7 @@ procedure TVideoMinerPlaybackController.SeekToMs(const VideoFile: string;
   UpdateInfo: TVideoMinerPlaybackNotifyProc);
 var
   ErrorMessage: string;
+  OpenInfo: TVideoInfo;
   ShownPositionMs: Integer;
   TargetMs: Integer;
   WasPlaying: Boolean;
@@ -971,6 +972,7 @@ var
   DebugLogEnabled: Boolean;
 {$ENDIF}
   FastRestart: Boolean;
+  ReverseSeek: Boolean;
 begin
   if (VideoFile = '') or (SeekMaxMs <= 0) then
     Exit;
@@ -994,13 +996,42 @@ begin
     TargetMs := 0
   else if TargetMs > SeekMaxMs then
     TargetMs := SeekMaxMs;
+  ReverseSeek := (CurrentVideoPositionMs >= 0) and
+    (TargetMs < CurrentVideoPositionMs);
 
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format(
-    'seek_begin target_ms=%d requested_ms=%d was_playing=%s resume_if_playing=%s stop_ms=%.3f',
-    [TargetMs, PositionMs, BoolToStr(WasPlaying, True),
+    'seek_begin target_ms=%d requested_ms=%d current_ms=%d reverse=%s was_playing=%s resume_if_playing=%s stop_ms=%.3f',
+    [TargetMs, PositionMs, CurrentVideoPositionMs,
+     BoolToStr(ReverseSeek, True), BoolToStr(WasPlaying, True),
      BoolToStr(ResumeIfPlaying, True), StopMs]));
 {$ENDIF}
+
+  if ReverseSeek then
+  begin
+    FPreviewShownPositionMs := -1;
+    FPreviewShownGeneration := -1;
+    if FPreviewDecoder <> nil then
+    begin
+      FPreviewDecoder.Close;
+      if not FPreviewDecoder.Open(VideoFile, OpenInfo, ErrorMessage) then
+      begin
+{$IFDEF DEBUG}
+        WriteVideoMinerSlowLog(Format(
+          'seek_reverse_preview_reopen_failed target_ms=%d current_ms=%d err="%s"',
+          [TargetMs, CurrentVideoPositionMs, ErrorMessage]));
+{$ENDIF}
+        if Assigned(SetStatus) then
+          SetStatus('Failed to reopen preview decoder: ' + ErrorMessage);
+        Exit;
+      end;
+{$IFDEF DEBUG}
+      WriteVideoMinerSlowLog(Format(
+        'seek_reverse_preview_reopen target_ms=%d current_ms=%d',
+        [TargetMs, CurrentVideoPositionMs]));
+{$ENDIF}
+    end;
+  end;
 
 {$IFDEF DEBUG}
   PreviewMs := 0;
