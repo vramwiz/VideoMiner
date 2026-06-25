@@ -2,6 +2,19 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-25 D3D11 direct display overlay gate
+- `VIDEOMINER_D3D11_DISPLAY=1` の D3D11 実表示中に、overlay / seek bar / seek preview / safe area / loading / zoom が必要な状態では D3D 直接表示を使わず、従来の CPU BGRX32 + GDI 描画へ戻すゲートを追加した。
+  - D3D backbuffer の上へ VCL/GDI overlay だけを直接重ねる案を試したが、D3D `Present` が次フレームで GDI 描画を上書きするためちらついた。現段階では不採用。
+  - `TVideoMinerVideoSurface.CanUseD3DFramePresentation` で、動画本体だけを D3D 表示してよい状態かを判定するようにした。
+  - `TVideoMinerVideoView.DecodeNextFrame` の D3D 許可条件へ surface 側判定を追加し、Debug ログへ `surface_ready` を出すようにした。
+- `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` を Debug Win64 / `VIDEOMINER_D3D11_DISPLAY=1` で計測した。
+  - マウス操作なし: `d3d11_display_present total_ms` p50 約 2.37ms / p90 約 2.77ms、`next_bgrx32_detail convert_ms` p50 約 3.35ms / p90 約 4.00ms、`playback_tick total_ms` p50 約 10.52ms / p90 約 13.09ms、drop は 0。
+  - overlay / seek bar を出した操作あり: `surface_ready=False` が出て、D3D 直接表示から CPU BGRX32 経路へ退避した。4K CPU 変換へ戻るため `playback_tick total_ms` は p50 約 21.47ms まで重くなるが、D3D/GDI 同時描画によるちらつきは避ける方針。
+- 判断:
+  - 通常再生中の D3D 高速化は維持できているため、overlay 等が不要な場面では D3D 表示を継続採用する。
+  - overlay 表示中の高速化まで狙う場合は、VCL/GDI を上に重ねるのではなく、D3D 側で overlay texture / sprite を合成する段階が必要。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+
 ## 2026-06-25 D3D11 texture upload probe
 - `VIDEOMINER_TEXTURE_PROBE=1` の Debug 実行時だけ、QSV の NV12 frame を D3D11 texture へアップロードする計測を追加した。
   - `nv12_texture_probe`: `DXGI_FORMAT_NV12` 1 枚 texture へ渡す方式。FFmpeg の Y/UV plane が連続していない場合は packed buffer へ詰め直してから `UpdateSubresource` する。

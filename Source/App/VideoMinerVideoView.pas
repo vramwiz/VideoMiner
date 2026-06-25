@@ -944,6 +944,7 @@ function TVideoMinerVideoView.DecodeNextFrame(Decoder: TFFmpegDecoder;
 var
   Buffer: Pointer;
   BufferStride: Integer;
+  D3DAllowed: Boolean;
   EffectiveRotation: Integer;
 begin
   ErrorMessage := '';
@@ -963,14 +964,15 @@ begin
     Exit;
 
   EffectiveRotation := DisplayRotationDegrees(Decoder.Info.RotationDegrees);
-  SetNv12TextureD3DDisplayAllowed(ConvertFrame and (EffectiveRotation = 0) and
-    (not FLoopFrameCaptureActive));
+  D3DAllowed := ConvertFrame and (EffectiveRotation = 0) and
+    (not FLoopFrameCaptureActive) and FSurface.CanUseD3DFramePresentation;
+  SetNv12TextureD3DDisplayAllowed(D3DAllowed);
 {$IFDEF DEBUG}
   if ConvertFrame then
     WriteVideoMinerSlowLog(Format(
-      'decode_next_d3d_allowed allowed=%s effective_rotation=%d loop_cache_capture=%s',
-      [BoolToStr((EffectiveRotation = 0) and (not FLoopFrameCaptureActive), True),
-       EffectiveRotation, BoolToStr(FLoopFrameCaptureActive, True)]));
+      'decode_next_d3d_allowed allowed=%s effective_rotation=%d loop_cache_capture=%s surface_ready=%s',
+      [BoolToStr(D3DAllowed, True), EffectiveRotation, BoolToStr(FLoopFrameCaptureActive, True),
+       BoolToStr(FSurface.CanUseD3DFramePresentation, True)]));
 {$ENDIF}
   ClearNv12TextureD3DFramePresented;
   if not Decoder.DecodeNextFrameToBgrx32Optional(Buffer, BufferStride,

@@ -235,6 +235,8 @@ type
     function CurrentFrameCornersMostlyDark: Boolean;
     // 現在表示中フレームの簡易署名を返す
     function CurrentFrameSignature(out Signature: TVideoMinerFrameSignature): Boolean;
+    // D3D11 直接表示で動画本体だけを描いてよい状態か返す
+    function CanUseD3DFramePresentation: Boolean;
     // FBitmap を BGRX32 の direct デコード先として使える状態にする
     function PrepareBgrx32Frame(Width, Height: Integer; out Buffer: Pointer;
       out BufferStride: Integer): Boolean;
@@ -501,6 +503,16 @@ function TVideoMinerVideoSurface.CurrentFrameSignature(
   out Signature: TVideoMinerFrameSignature): Boolean;
 begin
   Result := BuildFrameSignature(FBitmap, Signature);
+end;
+
+function TVideoMinerVideoSurface.CanUseD3DFramePresentation: Boolean;
+begin
+  Result := (not FSourceHasAlpha) and (not FOverlayVisible) and
+    (not FSeekBarVisible) and (not FSeekPreviewVisible) and
+    (not FSafeAreaVisible) and (not FLoadingActive) and
+    (FZoomScale <= MIN_ZOOM) and
+    ((FPreviousFileButton = nil) or (not FPreviousFileButton.Visible)) and
+    ((FNextFileButton = nil) or (not FNextFileButton.Visible));
 end;
 
 procedure TVideoMinerVideoSurface.ResetZoom;
@@ -1396,6 +1408,7 @@ var
 {$ENDIF}
   DrawCanvas: TCanvas;
   DestRect: TRect;
+  D3DFrameCurrent: Boolean;
   UsePaintBuffer: Boolean;
 begin
 {$IFDEF DEBUG}
@@ -1410,16 +1423,17 @@ begin
     Exit;
   end;
 
+  D3DFrameCurrent := Nv12TextureD3DFramePresented and (not FSourceHasAlpha);
   UsePaintBuffer := FOverlayVisible or FSeekBarVisible or FSeekPreviewVisible or
     ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible) or
     ((FNextFileButton <> nil) and FNextFileButton.Visible);
-  if Nv12TextureD3DFramePresented and (not UsePaintBuffer) and
-     (not FSafeAreaVisible) and (not FSourceHasAlpha) and (not FLoadingActive) then
+  if D3DFrameCurrent then
   begin
 {$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
-      'paint_skip_d3d_frame client_w=%d client_h=%d paint_ms=%.3f',
-      [ClientWidth, ClientHeight, PaintWatch.Elapsed.TotalMilliseconds]));
+      'paint_skip_d3d_frame client_w=%d client_h=%d surface_ready=%s paint_ms=%.3f',
+      [ClientWidth, ClientHeight, BoolToStr(CanUseD3DFramePresentation, True),
+       PaintWatch.Elapsed.TotalMilliseconds]));
 {$ENDIF}
     Exit;
   end;

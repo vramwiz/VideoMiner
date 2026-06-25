@@ -34,6 +34,7 @@
    - D3D 実表示へ中央 fit / letterbox を追加した。4K30 QSV では `d3d11_display_present total_ms` p50 約 2.6ms、`playback_tick` p50 約 11.0ms で、clear 追加コストは p50 約 0.01ms。
    - 回転が必要なフレームは現時点では D3D 実表示を使わず、既存 CPU BGRX32 経路へ戻す。
    - D3D shader の NV12 -> RGB を BT.709 limited range 前提に補正した。4K30 QSV のログでは `range=1`、`space=2`。色空間が未指定扱いの可能性があるため、BT.601 / BT.709 / BT.2020 / full range の分岐は後続課題。
+   - D3D backbuffer の上へ VCL/GDI overlay を直接重ねるとちらつくため不採用。overlay / seek bar / seek preview / safe area / loading / zoom が必要な間は CPU BGRX32 + GDI 描画へ戻す。
    - 次は D3D 表示の統合を詰める。overlay、ズーム、シークプレビュー、フレームコピー機能との整合を順に見る。
 
 ## 後続課題
