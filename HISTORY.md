@@ -10,12 +10,14 @@
   - 矩形 overlay shader は D3D 表示初期化時に先に作り、再生中に初めて seek bar へ hover した瞬間の shader compile スパイクを避けるようにした。
   - フレーム 0 だけ seek bar が下へずれることがあったため、D3D 許可判定直前に target window と overlay 座標を毎回同期するようにした。
   - クリック/ドラッグ中も D3D overlay state を即時更新し、D3D ログへ `dragging` を出すようにした。ドラッグ中は D3D 側のノブを少し大きく描く。
+  - D3D 簡易 seek bar の見た目を調整した。トラック影、進捗ハイライト、チャプターの小さな足、ノブのハローと芯を矩形合成で追加した。
 - `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` を Debug Win64 / `VIDEOMINER_D3D11_DISPLAY=1` / `VIDEOMINER_DEBUG_LOG=1` / `VIDEOMINER_SLOW_LOG=1` で計測した。
   - 修正前の参考値: `d3d11_display_present total_ms` p50 約 2.29ms / p95 約 2.82ms、`playback_tick total_ms` p50 約 10.35ms / p95 約 13.73ms。
   - 修正後の seek bar hover 測定: `overlay=True` 563 frame、`paint_skip_d3d_frame` 693 回、`d3d_presented=True` 752 回 / `False` 12 回。
   - 修正後の `overlay_ms` は p50 約 0.028ms / p95 約 0.040ms / max 約 0.224ms。
   - 修正後の `d3d11_display_present total_ms` は overlay=True p50 約 2.74ms、overlay=False p50 約 2.74ms で、overlay 合成自体の継続コストはほぼ無視できる範囲。
   - ドラッグ操作中のログでは `dragging=True` 66 frame、`overlay_ms` p50 約 0.023ms / p95 約 0.038ms、`d3d11_display_present total_ms` p50 約 2.44ms。
+  - 見た目調整後のドラッグ確認では `overlay=True` 215 frame、`dragging=True` 61 frame、`overlay_ms` p50 約 0.039ms / p95 約 0.059ms。
 - 残り:
   - 今回の D3D overlay は簡易表示のみ。テキスト、ボタン、音量 UI、細かい hover 状態は従来 GDI 表示のまま後続課題。
   - 絶対値の `playback_tick` は測定回ごとの揺れがあるため、今後は overlay=True/False の同一ログ内比較を優先する。

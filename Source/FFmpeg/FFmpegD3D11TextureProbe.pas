@@ -954,6 +954,11 @@ var
   Chapter: TD3D11SeekBarOverlayChapter;
   ErrorMessage: string;
   FilledRect: TRect;
+  HighlightRect: TRect;
+  KnobCenterY: Integer;
+  KnobCorePad: Integer;
+  KnobHaloPadX: Integer;
+  KnobHaloPadY: Integer;
   KnobRect: TRect;
   KnobPadX: Integer;
   KnobPadY: Integer;
@@ -976,10 +981,12 @@ begin
 
   StepWatch := TStopwatch.StartNew;
   FDeviceContext.OMSetRenderTargets(1, FDisplayRenderView, nil);
-  DrawOverlayRect(State.Bounds, 0, 0, 0, 0.38);
+  DrawOverlayRect(State.Bounds, 0, 0, 0, 0.36);
 
   TrackRect := State.Track;
-  DrawOverlayRect(TrackRect, 1, 1, 1, 0.34);
+  DrawOverlayRect(Rect(TrackRect.Left - 1, TrackRect.Top - 3,
+    TrackRect.Right + 1, TrackRect.Bottom + 3), 0, 0, 0, 0.24);
+  DrawOverlayRect(TrackRect, 1, 1, 1, 0.32);
 
   PositionRatio := State.PositionMs / State.MaxMs;
   PositionRatio := Max(0.0, Min(1.0, PositionRatio));
@@ -987,35 +994,65 @@ begin
   FilledRect := TrackRect;
   FilledRect.Right := Max(FilledRect.Left + 1, MarkerX);
   DrawOverlayRect(FilledRect, 0.25, 0.63, 0.94, 0.90);
+  HighlightRect := FilledRect;
+  HighlightRect.Bottom := Min(HighlightRect.Bottom, HighlightRect.Top + 2);
+  DrawOverlayRect(HighlightRect, 0.58, 0.84, 1.0, 0.52);
 
   for Chapter in State.Chapters do
   begin
     if (Chapter.PositionMs < 0) or (Chapter.PositionMs > State.MaxMs) then
       Continue;
     MarkerX := TrackRect.Left + Round(TrackRect.Width * Chapter.PositionMs / State.MaxMs);
-    MarkerRect := Rect(MarkerX - 1, TrackRect.Top - 5, MarkerX + 2, TrackRect.Bottom + 8);
+    MarkerRect := Rect(MarkerX - 1, TrackRect.Top - 6, MarkerX + 2, TrackRect.Bottom + 9);
     case Chapter.Severity of
-      2: DrawOverlayRect(MarkerRect, 0.93, 0.20, 0.18, 0.95);
-      1: DrawOverlayRect(MarkerRect, 0.95, 0.78, 0.20, 0.95);
+      2:
+      begin
+        DrawOverlayRect(MarkerRect, 0.93, 0.20, 0.18, 0.95);
+        DrawOverlayRect(Rect(MarkerX - 4, TrackRect.Bottom + 8,
+          MarkerX + 5, TrackRect.Bottom + 11), 0.93, 0.20, 0.18, 0.88);
+      end;
+      1:
+      begin
+        DrawOverlayRect(MarkerRect, 0.95, 0.78, 0.20, 0.95);
+        DrawOverlayRect(Rect(MarkerX - 4, TrackRect.Bottom + 8,
+          MarkerX + 5, TrackRect.Bottom + 11), 0.95, 0.78, 0.20, 0.88);
+      end;
     else
-      DrawOverlayRect(MarkerRect, 0.18, 0.85, 0.38, 0.95);
+      begin
+        DrawOverlayRect(MarkerRect, 0.18, 0.85, 0.38, 0.95);
+        DrawOverlayRect(Rect(MarkerX - 4, TrackRect.Bottom + 8,
+          MarkerX + 5, TrackRect.Bottom + 11), 0.18, 0.85, 0.38, 0.88);
+      end;
     end;
   end;
 
   MarkerX := TrackRect.Left + Round(TrackRect.Width * PositionRatio);
+  KnobCenterY := TrackRect.Top + TrackRect.Height div 2;
   if State.Dragging then
   begin
-    KnobPadX := 10;
-    KnobPadY := 8;
+    KnobHaloPadX := 26;
+    KnobHaloPadY := 23;
+    KnobCorePad := 13;
+    KnobPadX := 11;
+    KnobPadY := 9;
   end
   else
   begin
+    KnobHaloPadX := 22;
+    KnobHaloPadY := 20;
+    KnobCorePad := 11;
     KnobPadX := 7;
     KnobPadY := 5;
   end;
-  KnobRect := Rect(MarkerX - KnobPadX, TrackRect.Top - KnobPadY,
-    MarkerX + KnobPadX, TrackRect.Bottom + KnobPadY + 1);
-  DrawOverlayRect(KnobRect, 0.25, 0.63, 0.94, 1.0);
+  DrawOverlayRect(Rect(MarkerX - KnobHaloPadX, KnobCenterY - KnobPadY,
+    MarkerX + KnobHaloPadX, KnobCenterY + KnobPadY + 1), 0.25, 0.63, 0.94, 0.20);
+  DrawOverlayRect(Rect(MarkerX - KnobPadX, KnobCenterY - KnobHaloPadY,
+    MarkerX + KnobPadX, KnobCenterY + KnobHaloPadY + 1), 0.25, 0.63, 0.94, 0.20);
+  KnobRect := Rect(MarkerX - KnobCorePad, KnobCenterY - KnobCorePad,
+    MarkerX + KnobCorePad, KnobCenterY + KnobCorePad);
+  DrawOverlayRect(KnobRect, 0.25, 0.63, 0.94, 0.96);
+  DrawOverlayRect(Rect(MarkerX - KnobPadX, KnobCenterY - KnobPadY,
+    MarkerX + KnobPadX, KnobCenterY + KnobPadY + 1), 0.52, 0.82, 1.0, 1.0);
 
   FillChar(BlendFactor, SizeOf(BlendFactor), 0);
   FDeviceContext.OMSetBlendState(nil, BlendFactor, $FFFFFFFF);
