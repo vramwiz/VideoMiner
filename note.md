@@ -54,6 +54,11 @@
      - `TVideoMinerVideoSurface` から D3D 側へ seek bar state を渡す。
      - D3D seek bar 表示中は VCL `Paint` 側の seek bar 描画を止め、`paint_skip_d3d_frame` のまま D3D 表示を継続する。
      - D3D 簡易 seek bar には現在位置 / 動画長の 7-segment 風時刻表示を追加済み。数字は当面この簡易表現でよい。
+     - 2026-06-25: Check 中は D3D 簡易 seek bar の中央表示を時刻ではなくフレーム番号形式へ切り替えるようにした。
+     - 2026-06-25: D3D 簡易 seek bar の左下へ音量レールを追加し、ミュート時は赤寄りに表示するようにした。
+     - 2026-06-25: D3D 簡易 seek bar の右下へ再生速度表示を追加した。
+     - 2026-06-25: 基準スクリーンショットに合わせ、音量表示、ミュートアイコン、再生速度を旧 GDI と同じ左下クラスタへ寄せた。
+     - 旧 GDI seek bar の基準画像は `Image\seekbar_reference_old_gdi_20260625.png` に保存済み。移行作業中はこの画像を見た目と配置の比較基準として使う。
      - シーク位置ノブは四角ではなく丸が理想。現状は D3D 矩形 pass だけで段付きの円形近似にしている。
      - 2026-06-25 時点のユーザー側ビルドでは、何度ビルドしても旧 VCL/GDI の下部 UI が出ると報告あり。
        - 共有スクリーンショットでは `frame 0`、hover preview 小窓、`Vol / 1.0x / Check / Loop` 付きのフル操作 UI が表示されていた。
@@ -70,7 +75,7 @@
        - 2026-06-25: ユーザー確認で、ループ時に旧/GDI seek bar へ一瞬切り替わる違和感は解消した。
      - 次は旧 GDI seek bar 側に残っている機能を D3D overlay 側へ順に移行する。
        - 再生中/停止中の seek bar 表示を D3D 側へ寄せる。
-       - 音量、速度、Check、Loop、チャプター追加/削除、全画面などの操作表示を D3D 側へ移す。
+       - Loop、チャプター追加/削除、全画面などの操作表示を D3D 側へ移す。
        - hover preview 小窓は bitmap/texture 合成が必要なので、seek bar 本体と基本操作の後で扱う。
        - 旧 GDI seek bar は移行完了までは停止中/fallback 用として残し、D3D 側が十分揃ったら削除対象にする。
    - D3D overlay 化のデバッグ方法:

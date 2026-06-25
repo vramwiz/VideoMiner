@@ -1147,7 +1147,7 @@ begin
   Height := 82;
   Width := Round(PreviewRect.Width * 0.88);
   Width := Max(160, Min(PreviewRect.Width - 32, Width));
-  BottomOffset := Max(12, Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.045));
+  BottomOffset := Max(18, Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.075));
 
   Result.Left := PreviewRect.Left + (PreviewRect.Width - Width) div 2;
   Result.Right := Result.Left + Width;

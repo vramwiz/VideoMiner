@@ -2,6 +2,27 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-25 D3D seek bar の Check 表示移設
+- 旧 GDI seek bar から新 D3D seek bar への段階移設として、Check 中の表示を D3D 側へ渡すようにした。
+- `TD3D11SeekBarOverlayState` に `CheckEnabled` / `FrameStepMs` を追加し、Check 中は D3D overlay の中央表示を時刻ではなくフレーム番号形式 `current / max` へ切り替える。
+- `TVideoMinerVideoSurface.UpdateD3DSeekBarOverlayState` で旧 seek bar の Check 状態と frame step を D3D overlay state へ反映する。
+- Check 状態、frame step、チャプター一覧の変更時も、D3D seek bar 表示中なら overlay state を即更新するようにした。
+- 音量表示の第一段階として、D3D seek bar 左下に音量レールを描くようにした。
+  - `TD3D11SeekBarOverlayState` に `VolumePercent` / `Muted` を追加し、通常時は水色、ミュート時は赤寄りの塗りで状態を示す。
+  - 音量変更とミュート変更時も、D3D seek bar 表示中なら overlay state を即更新する。
+- ユーザー確認で seek bar がやや下へ寄って見えたため、共有レイアウトの下余白を少し増やし、GDI/D3D の表示位置と入力判定をまとめて上へ寄せた。
+- 再生速度表示を D3D seek bar へ移した。
+  - `TD3D11SeekBarOverlayState` に `PlaybackRateText` を追加し、旧 seek bar の速度表示文字列を渡すようにした。
+  - D3D の簡易文字描画へ `.` と `x` を追加し、右下に `1.0x` などを表示する。
+  - 等倍以外の速度では文字を黄色寄りにして、通常速度と区別しやすくした。
+- 基準スクリーンショットに合わせ、D3D 側の音量/速度表示を旧 GDI の左下クラスタへ寄せた。
+  - `Vol 100%` の表示、音量レール、ミュートアイコン、`1.0x` を旧 UI と同じ並びにした。
+  - D3D の簡易文字描画へ `V` / `o` / `l` / `%` を追加した。
+  - 速度表示は右下ではなく、ミュートアイコン右側の旧 `PlaybackRateButtonRect` 相当位置へ移した。
+  - ユーザー確認で `Vol` 表示が小さめに見えたため、音量ラベルを 2px スケールへ上げた。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+
 ## 2026-06-25 起動時前回ファイル復元後の D3D seek bar 対策
 - 原因:
   - 通常のファイル open は `OpenAndPlayFile -> LoadVideoFile(..., True)` で自動再生する。

@@ -1129,6 +1129,11 @@ begin
     State.MaxMs := FSeekBar.MaxMs;
     State.HoverPositionMs := FSeekBarHoverPositionMs;
     State.Dragging := FSeekBar.Dragging;
+    State.CheckEnabled := FSeekBar.CheckEnabled;
+    State.FrameStepMs := FSeekBar.FrameStepMs;
+    State.VolumePercent := FSeekBar.VolumePercent;
+    State.Muted := FSeekBar.Muted;
+    State.PlaybackRateText := FSeekBar.PlaybackRateText;
     SetLength(State.Chapters, Length(FSeekBar.Chapters));
     for ChapterIndex := 0 to High(State.Chapters) do
     begin
@@ -1977,7 +1982,11 @@ procedure TVideoMinerVideoSurface.SetSeekWheelFrameStepMs(Value: Integer);
 begin
   FSeekWheelFrameStepMs := Max(1, Value);
   if FSeekBar <> nil then
+  begin
     FSeekBar.FrameStepMs := FSeekWheelFrameStepMs;
+    if FSeekBarVisible then
+      UpdateD3DSeekBarOverlayState;
+  end;
 end;
 
 procedure TVideoMinerVideoSurface.SetFullScreen(Value: Boolean);
@@ -2028,6 +2037,8 @@ begin
   begin
     FSeekBar.CheckEnabled := Value;
     if FSeekBarVisible then
+      UpdateD3DSeekBarOverlayState;
+    if FSeekBarVisible then
       InvalidateOverlayControl(FSeekBar);
   end;
 end;
@@ -2039,6 +2050,8 @@ begin
   begin
     FSeekBar.Chapters := Value;
     if FSeekBarVisible then
+      UpdateD3DSeekBarOverlayState;
+    if FSeekBarVisible then
       InvalidateOverlayControl(FSeekBar);
   end;
 end;
@@ -2048,6 +2061,8 @@ begin
   if FSeekBar <> nil then
   begin
     FSeekBar.VolumePercent := Value;
+    if FSeekBarVisible then
+      UpdateD3DSeekBarOverlayState;
     if FSeekBarVisible then
       InvalidateOverlayControl(FSeekBar);
   end;
@@ -2059,6 +2074,8 @@ begin
   begin
     FSeekBar.Muted := Value;
     if FSeekBarVisible then
+      UpdateD3DSeekBarOverlayState;
+    if FSeekBarVisible then
       InvalidateOverlayControl(FSeekBar);
   end;
 end;
@@ -2068,6 +2085,8 @@ begin
   if FSeekBar <> nil then
   begin
     FSeekBar.PlaybackRateText := Value;
+    if FSeekBarVisible then
+      UpdateD3DSeekBarOverlayState;
     if FSeekBarVisible then
       InvalidateOverlayControl(FSeekBar);
   end;
