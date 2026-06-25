@@ -34,6 +34,21 @@
   - 次段階は offscreen probe ではなく、実際の `TVideoMinerVideoSurface` に D3D11 swap chain を持たせ、`UpdateSubresource + shader draw + Present` の end-to-end 表示時間を測る。
 - `Debug Win64` ビルド成功。警告 0 / エラー 0。
 
+## 2026-06-25 D3D11 swap chain present probe
+- `VIDEOMINER_TEXTURE_PROBE=1` の Debug 実行時だけ、Y/UV 2 枚 texture を shader で変換して swap chain backbuffer へ描き、`Present(0, 0)` まで測る `nv12_swapchain_probe` を追加した。
+  - `TVideoMinerVideoSurface.PrepareBgrx32Frame` から表示 surface の HWND と client size を probe 側へ渡す。
+  - 最初に実表示 HWND へ直接 Present したところ、VCL/GDI 描画と競合してかなりちらついたため、計測用は同サイズの非表示 probe window へ Present する方式に変更した。
+- `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` を Debug Win64 / `VideoDecoderMode=qsv` / `VIDEOMINER_TEXTURE_PROBE=1` で約 8 秒再生して計測した。
+  - 実表示 HWND へ直接 Present した試行: `nv12_swapchain_probe total_ms` p50 約 2.41ms / p90 約 2.75ms、`present_ms` p50 約 0.47ms。ただし表示ちらつきが大きいため方式としては不採用。
+  - 非表示 probe window への Present: `nv12_swapchain_probe total_ms` p50 約 2.40ms / p90 約 3.27ms、`upload_ms` p50 約 1.96ms、`draw_ms` p50 約 0.06ms、`present_ms` p50 約 0.37ms。
+  - 同じログの現行 CPU 変換は `bgrx32_convert total_ms` p50 約 14.85ms、`sws_ms` p50 約 11.35ms、負 stride 回避 `copy_ms` p50 約 3.48ms。
+  - probe 追加状態の `playback_tick total_ms` は p50 約 31.23ms。drop は 0。
+- 判断:
+  - Present 込みでも D3D11 texture + shader 表示経路は現行 CPU BGRX32 変換より十分軽く、採用方針を継続する。
+  - ただし実表示 HWND へ probe Present を追加するだけでは VCL/GDI と二重描画になり、ちらつくため採用しない。
+  - 次段階は `TVideoMinerVideoSurface` に D3D11 表示経路を別管理で追加し、D3D 有効時は動画フレーム本体を GDI で描かない形にして比較する。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+
 ## 2026-06-25 QSV 表示経路の内訳計測と一時バッファ再利用
 - QSV/software の BGRX32 表示経路へ Debug 計測を追加した。
   - `qsv_transfer`: QSV HW frame を CPU frame へ転送した場合の時間。

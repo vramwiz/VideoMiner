@@ -6,16 +6,17 @@
 interface
 
 uses
-  FFmpegApi;
+  Winapi.Windows, FFmpegApi;
 
 // NV12 frame を D3D11 texture へアップロードし、計測ログを出す。
 procedure ProbeNv12TextureUpload(Frame: PAVFrame);
+procedure SetNv12TextureProbeTargetWindow(WindowHandle: HWND; Width, Height: Integer);
 
 implementation
 
 uses
-  Winapi.Windows, Winapi.D3D11, Winapi.D3DCommon, Winapi.D3DCompiler, Winapi.DxgiFormat,
-  System.Diagnostics, System.SysUtils, VideoMinerDebugLog;
+  Winapi.D3D11, Winapi.D3DCommon, Winapi.D3DCompiler, Winapi.DXGI, Winapi.DxgiFormat,
+  Winapi.DxgiType, System.Diagnostics, System.SysUtils, VideoMinerDebugLog;
 
 type
   TNv12TextureProbe = class
@@ -30,9 +31,18 @@ type
     FUvResourceView : ID3D11ShaderResourceView; // UV plane shader 入力
     FRenderTexture  : ID3D11Texture2D;     // shader 出力先 render target
     FRenderView     : ID3D11RenderTargetView; // shader 出力先 view
+    FSwapChain      : IDXGISwapChain;      // 非表示 window への Present 計測用 swap chain
+    FSwapRenderView : ID3D11RenderTargetView; // swap chain backbuffer view
     FVertexShader   : ID3D11VertexShader;  // fullscreen triangle vertex shader
     FPixelShader    : ID3D11PixelShader;   // NV12 -> RGB pixel shader
     FSampler        : ID3D11SamplerState;  // texture sampler
+    FTargetWindow   : HWND;                // Present 計測先 HWND
+    FTargetWidth    : Integer;             // Present 計測先幅
+    FTargetHeight   : Integer;             // Present 計測先高さ
+    FProbeWindow    : HWND;                // ちらつきを避ける非表示 Present 計測用 HWND
+    FSwapWindow     : HWND;                // swap chain 作成時の HWND
+    FSwapWidth      : Integer;             // swap chain 幅
+    FSwapHeight     : Integer;             // swap chain 高さ
     FTextureWidth   : Integer;             // texture 幅
     FTextureHeight  : Integer;             // texture 高さ
     FPackedBuffer   : TBytes;              // plane が連続していない時の退避バッファ
@@ -44,11 +54,16 @@ type
     function EnsurePlaneTextures(Width, Height: Integer; out Recreated: Boolean;
       out ErrorMessage: string): Boolean;
     function EnsureShaderPipeline(Width, Height: Integer; out ErrorMessage: string): Boolean;
+    function EnsureProbeWindow(out ErrorMessage: string): Boolean;
+    function EnsureSwapChain(out Recreated: Boolean; out ErrorMessage: string): Boolean;
     procedure LogErrorOnce(const ErrorMessage: string);
     procedure ProbePlaneTextures(Frame: PAVFrame);
     procedure ProbeShaderDraw(Frame: PAVFrame);
+    procedure ProbeSwapChainPresent(Frame: PAVFrame);
   public
+    destructor Destroy; override;
     procedure Probe(Frame: PAVFrame);
+    procedure SetTargetWindow(WindowHandle: HWND; Width, Height: Integer);
   end;
 
 var
@@ -346,6 +361,124 @@ begin
   Result := True;
 end;
 
+function TNv12TextureProbe.EnsureProbeWindow(out ErrorMessage: string): Boolean;
+begin
+  Result := False;
+  ErrorMessage := '';
+
+  if (FTargetWindow = 0) or (FTargetWidth <= 0) or (FTargetHeight <= 0) then
+  begin
+    ErrorMessage := 'swap chain target window is not ready.';
+    Exit;
+  end;
+
+  if FProbeWindow <> 0 then
+    Exit(True);
+
+  FProbeWindow := CreateWindowEx(WS_EX_TOOLWINDOW, 'STATIC',
+    'VideoMinerTextureProbe', WS_POPUP, -32000, -32000,
+    FTargetWidth, FTargetHeight, 0, 0, HInstance, nil);
+  if FProbeWindow = 0 then
+  begin
+    ErrorMessage := Format('CreateWindowEx probe window failed. GetLastError=%d',
+      [GetLastError]);
+    Exit;
+  end;
+
+  Result := True;
+end;
+
+function TNv12TextureProbe.EnsureSwapChain(out Recreated: Boolean;
+  out ErrorMessage: string): Boolean;
+var
+  BackBuffer: ID3D11Texture2D;
+  Desc: TDXGISwapChainDesc;
+  Factory: IDXGIFactory;
+  Ret: HRESULT;
+begin
+  Result := False;
+  Recreated := False;
+  ErrorMessage := '';
+
+  if not EnsureProbeWindow(ErrorMessage) then
+    Exit;
+
+  if Assigned(FSwapChain) and Assigned(FSwapRenderView) and
+     (FSwapWindow = FProbeWindow) and (FSwapWidth = FTargetWidth) and
+     (FSwapHeight = FTargetHeight) then
+    Exit(True);
+
+  FSwapRenderView := nil;
+  FSwapChain := nil;
+  FSwapWindow := 0;
+  FSwapWidth := 0;
+  FSwapHeight := 0;
+
+  Ret := CreateDXGIFactory(IID_IDXGIFactory, Factory);
+  if not Succeeded(Ret) then
+  begin
+    ErrorMessage := Format('CreateDXGIFactory failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+    Exit;
+  end;
+
+  FillChar(Desc, SizeOf(Desc), 0);
+  Desc.BufferDesc.Width := FTargetWidth;
+  Desc.BufferDesc.Height := FTargetHeight;
+  Desc.BufferDesc.RefreshRate.Numerator := 0;
+  Desc.BufferDesc.RefreshRate.Denominator := 1;
+  Desc.BufferDesc.Format := DXGI_FORMAT_B8G8R8A8_UNORM;
+  Desc.BufferDesc.ScanlineOrdering := DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+  Desc.BufferDesc.Scaling := DXGI_MODE_SCALING_UNSPECIFIED;
+  Desc.SampleDesc.Count := 1;
+  Desc.SampleDesc.Quality := 0;
+  Desc.BufferUsage := DXGI_USAGE_RENDER_TARGET_OUTPUT;
+  Desc.BufferCount := 1;
+  Desc.OutputWindow := FProbeWindow;
+  Desc.Windowed := True;
+  Desc.SwapEffect := DXGI_SWAP_EFFECT_DISCARD;
+  Desc.Flags := 0;
+
+  Ret := Factory.CreateSwapChain(FDevice as IUnknown, Desc, FSwapChain);
+  if not Succeeded(Ret) then
+  begin
+    ErrorMessage := Format('CreateSwapChain failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+    Exit;
+  end;
+
+  BackBuffer := nil;
+  Ret := FSwapChain.GetBuffer(0, ID3D11Texture2D, BackBuffer);
+  if not Succeeded(Ret) then
+  begin
+    ErrorMessage := Format('IDXGISwapChain.GetBuffer failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+    Exit;
+  end;
+
+  Ret := FDevice.CreateRenderTargetView(BackBuffer, nil, FSwapRenderView);
+  if not Succeeded(Ret) then
+  begin
+    ErrorMessage := Format('CreateRenderTargetView swap chain failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+    Exit;
+  end;
+
+  FSwapWindow := FProbeWindow;
+  FSwapWidth := FTargetWidth;
+  FSwapHeight := FTargetHeight;
+  Recreated := True;
+  Result := True;
+end;
+
+destructor TNv12TextureProbe.Destroy;
+begin
+  FSwapRenderView := nil;
+  FSwapChain := nil;
+  if FProbeWindow <> 0 then
+  begin
+    DestroyWindow(FProbeWindow);
+    FProbeWindow := 0;
+  end;
+  inherited;
+end;
+
 procedure TNv12TextureProbe.LogErrorOnce(const ErrorMessage: string);
 begin
   if ErrorMessage = '' then
@@ -456,6 +589,74 @@ begin
      Cardinal(FFeatureLevel), UploadMs, FlushMs, TotalWatch.Elapsed.TotalMilliseconds]));
 end;
 
+procedure TNv12TextureProbe.ProbeSwapChainPresent(Frame: PAVFrame);
+var
+  ChromaHeight : Integer;    // NV12 UV plane の高さ
+  DrawMs       : Double;     // swap chain backbuffer への描画時間
+  ErrorMessage : string;     // swap chain probe 失敗理由
+  PresentMs    : Double;     // Present 呼び出し時間
+  Recreated    : Boolean;    // swap chain を今回作り直したか
+  ResourceViews: array[0..1] of ID3D11ShaderResourceView;
+  StepWatch    : TStopwatch; // 各 step の計測
+  TotalWatch   : TStopwatch; // probe 全体の計測
+  UploadMs     : Double;     // Y/UV plane upload 合計時間
+  Viewport     : D3D11_VIEWPORT;
+begin
+  if not EnsureShaderPipeline(Frame.width, Frame.height, ErrorMessage) then
+  begin
+    LogErrorOnce(ErrorMessage);
+    Exit;
+  end;
+  if not EnsureSwapChain(Recreated, ErrorMessage) then
+  begin
+    LogErrorOnce(ErrorMessage);
+    Exit;
+  end;
+
+  TotalWatch := TStopwatch.StartNew;
+  ChromaHeight := (Frame.height + 1) div 2;
+
+  StepWatch := TStopwatch.StartNew;
+  FDeviceContext.UpdateSubresource(FYTexture, 0, nil, Frame.data[0],
+    Cardinal(Frame.linesize[0]), Cardinal(Frame.linesize[0] * Frame.height));
+  FDeviceContext.UpdateSubresource(FUvTexture, 0, nil, Frame.data[1],
+    Cardinal(Frame.linesize[1]), Cardinal(Frame.linesize[1] * ChromaHeight));
+  UploadMs := StepWatch.Elapsed.TotalMilliseconds;
+
+  FillChar(Viewport, SizeOf(Viewport), 0);
+  Viewport.TopLeftX := 0;
+  Viewport.TopLeftY := 0;
+  Viewport.Width := FTargetWidth;
+  Viewport.Height := FTargetHeight;
+  Viewport.MinDepth := 0;
+  Viewport.MaxDepth := 1;
+  ResourceViews[0] := FYResourceView;
+  ResourceViews[1] := FUvResourceView;
+
+  StepWatch := TStopwatch.StartNew;
+  FDeviceContext.IASetInputLayout(nil);
+  FDeviceContext.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  FDeviceContext.VSSetShader(FVertexShader, nil, 0);
+  FDeviceContext.PSSetShader(FPixelShader, nil, 0);
+  FDeviceContext.PSSetShaderResources(0, Length(ResourceViews), ResourceViews[0]);
+  FDeviceContext.PSSetSamplers(0, 1, FSampler);
+  FDeviceContext.RSSetViewports(1, @Viewport);
+  FDeviceContext.OMSetRenderTargets(1, FSwapRenderView, nil);
+  FDeviceContext.Draw(3, 0);
+  DrawMs := StepWatch.Elapsed.TotalMilliseconds;
+
+  StepWatch := TStopwatch.StartNew;
+  FSwapChain.Present(0, 0);
+  PresentMs := StepWatch.Elapsed.TotalMilliseconds;
+
+  WriteVideoMinerSlowLog(Format(
+    'nv12_swapchain_probe frame=%dx%d target=%dx%d y_stride=%d uv_stride=%d recreated=%s feature_level=$%.4x upload_ms=%.3f draw_ms=%.3f present_ms=%.3f total_ms=%.3f',
+    [Frame.width, Frame.height, FTargetWidth, FTargetHeight,
+     Frame.linesize[0], Frame.linesize[1], BoolToStr(Recreated, True),
+     Cardinal(FFeatureLevel), UploadMs, DrawMs, PresentMs,
+     TotalWatch.Elapsed.TotalMilliseconds]));
+end;
+
 procedure TNv12TextureProbe.Probe(Frame: PAVFrame);
 var
   ErrorMessage : string;     // D3D11 初期化/texture 作成失敗の理由
@@ -505,6 +706,7 @@ begin
 
   ProbePlaneTextures(Frame);
   ProbeShaderDraw(Frame);
+  ProbeSwapChainPresent(Frame);
 
   TotalWatch := TStopwatch.StartNew;
   PackMs := 0;
@@ -553,6 +755,26 @@ begin
      PackMs, UploadMs, FlushMs, TotalWatch.Elapsed.TotalMilliseconds]));
 end;
 
+procedure TNv12TextureProbe.SetTargetWindow(WindowHandle: HWND; Width, Height: Integer);
+begin
+  if (FTargetWidth <> Width) or (FTargetHeight <> Height) then
+  begin
+    FSwapRenderView := nil;
+    FSwapChain := nil;
+    FSwapWindow := 0;
+    FSwapWidth := 0;
+    FSwapHeight := 0;
+    if FProbeWindow <> 0 then
+    begin
+      DestroyWindow(FProbeWindow);
+      FProbeWindow := 0;
+    end;
+  end;
+  FTargetWindow := WindowHandle;
+  FTargetWidth := Width;
+  FTargetHeight := Height;
+end;
+
 procedure ProbeNv12TextureUpload(Frame: PAVFrame);
 begin
   if not TextureProbeEnabled then
@@ -560,6 +782,15 @@ begin
   if GlobalProbe = nil then
     GlobalProbe := TNv12TextureProbe.Create;
   GlobalProbe.Probe(Frame);
+end;
+
+procedure SetNv12TextureProbeTargetWindow(WindowHandle: HWND; Width, Height: Integer);
+begin
+  if not TextureProbeEnabled then
+    Exit;
+  if GlobalProbe = nil then
+    GlobalProbe := TNv12TextureProbe.Create;
+  GlobalProbe.SetTargetWindow(WindowHandle, Width, Height);
 end;
 
 initialization

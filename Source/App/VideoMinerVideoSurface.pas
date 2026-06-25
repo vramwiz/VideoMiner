@@ -297,7 +297,7 @@ implementation
 
 uses
   System.Diagnostics, System.Math, System.SysUtils, VideoMinerBossOverlay,
-  VideoMinerDebugLog;
+  VideoMinerDebugLog, FFmpegD3D11TextureProbe;
 
 const
   MAX_ZOOM              = 8.0;  // ホイールズームで許可する最大倍率
@@ -480,6 +480,7 @@ begin
     FBitmap.PixelFormat := pf32bit;
   if (FBitmap.Width <> Width) or (FBitmap.Height <> Height) then
     FBitmap.SetSize(Width, Height);
+  SetNv12TextureProbeTargetWindow(Handle, ClientWidth, ClientHeight);
 
   Buffer := FBitmap.ScanLine[0];
   if Height > 1 then
