@@ -37,6 +37,7 @@
    - D3D backbuffer の上へ VCL/GDI overlay を直接重ねるとちらつくため不採用。overlay / seek bar / seek preview / safe area / loading / zoom が必要な間は CPU BGRX32 + GDI 描画へ戻す。
    - D3D 実表示後に一時停止してズームする場合は、現在位置の CPU frame を再取得してから GDI ズーム表示へ戻す。
    - D3D 実表示後に現在フレームをコピーする場合は、コピー直前に現在位置の CPU frame を再取得してから `CurrentFrameBitmap` を使う。
+   - シークバー hover preview の負荷は表示反映ではなく hover 用 fast seek/decode が主因。再生中は hover preview デコードを止め、停止中のみ preview を出す。
    - 次は D3D 表示の統合を詰める。overlay、ズーム、シークプレビュー、フレームコピー機能との整合を順に見る。
 
 ## 後続課題

@@ -37,6 +37,24 @@
   - D3D 表示済みフラグが残ったまま古い CPU bitmap をコピーする経路ではなく、現在位置の CPU frame を再取得してからコピーへ進むことをログで確認した。
 - `Debug Win64` ビルド成功。警告 0 / エラー 0。
 
+## 2026-06-25 seek hover preview load split
+- シークバー hover プレビューの負荷を切り分けるため、`TVideoMinerSeekHoverPreviewController` に要求、再利用、timer 待ち、fast seek、fallback seek、表示反映の Debug ログを追加した。
+  - `seek_hover_preview_schedule`: hover 要求を timer へ積んだ時点。
+  - `seek_hover_preview_reuse`: 近い位置の既存 preview を再利用した時点。
+  - `seek_hover_preview_decode`: timer 発火後の実デコードと表示反映の内訳。
+- 再生中はシークバー hover preview のデコードを走らせないようにした。
+  - 4K30 D3D 再生中にシークバー上を往復させた計測では、変更前は `seek_hover_preview_schedule` 148 回に対して実デコード 1 回だったが、その 1 回が `fast_ms` 約 348ms あり、UI スレッドを止めるには十分重かった。
+  - 変更後、同じ再生中 hover 操作では `seek_hover_preview_schedule` / `seek_hover_preview_decode` ともに 0 回になり、hover preview デコード負荷は再生中から外れた。
+  - この時の `playback_tick total_ms` p50 約 23.15ms は、シークバー表示中に D3D から CPU/GDI 描画へ退避する既存ゲートの影響で、hover preview デコードは発生していない。
+- 停止中 hover では preview 表示を維持した。
+  - Space で停止後にシークバー上を移動した計測では、`seek_hover_preview_decode` 8 回、失敗 0 回。
+  - 初回は `fast_ms` 約 276ms、その後は `fast_ms` p50 約 49.15ms / `total_ms` p50 約 51.82ms、`set_ms` p50 約 1.32ms、fallback は 0 回。
+- 判断:
+  - 体感の大きな引っかかりは preview 表示反映ではなく、hover 用 fast seek/decode が UI スレッドで走ることによる。
+  - 再生中の hover preview は停止し、停止中の確認用 preview として使う方針にする。
+  - さらに軽くするなら、停止中 hover の update delay を広げる、位置を粗く丸める、または hover 用 decode を worker 化する。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+
 ## 2026-06-25 D3D11 texture upload probe
 - `VIDEOMINER_TEXTURE_PROBE=1` の Debug 実行時だけ、QSV の NV12 frame を D3D11 texture へアップロードする計測を追加した。
   - `nv12_texture_probe`: `DXGI_FORMAT_NV12` 1 枚 texture へ渡す方式。FFmpeg の Y/UV plane が連続していない場合は packed buffer へ詰め直してから `UpdateSubresource` する。

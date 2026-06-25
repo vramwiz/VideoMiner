@@ -1211,7 +1211,7 @@ begin
   if FSeekBarVisible and (FSeekBar <> nil) and FSeekBar.MouseMove(MousePoint) then
     InvalidateOverlayControl(FSeekBar);
 
-  if (FSeekBarVisible and (FSeekBar <> nil) and
+  if ((not FPlaybackActive) and FSeekBarVisible and (FSeekBar <> nil) and
       (not FSeekBar.Dragging) and
       FSeekBar.HoverPositionFromPoint(MousePoint, HoverPositionMs)) then
   begin
