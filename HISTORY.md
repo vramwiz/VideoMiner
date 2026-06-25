@@ -83,6 +83,25 @@
   - 次は overlay、ズーム、シークプレビュー、フレームコピー機能との統合を順に進める。
 - `Debug Win64` ビルド成功。警告 0 / エラー 0。
 
+## 2026-06-25 D3D11 loop cache gate and color range correction
+- ループ再生で、終端到達時に数フレームだけ前のフレームが表示された後に先頭フレームになることがある、という観察を `note.md` に残した。
+  - D3D11 実表示で `DecodeNextFrame` が早期 return すると、ループ先頭フレームキャッシュ保存がスキップされるため、キャッシュ捕捉中だけ D3D 実表示を許可しないようにした。
+  - ループ込みの計測では、初回 loop は `loop_frame_cache_miss` だが、その直後に `loop_frame_cache_store` が 4 回発生し、2 回目 loop は `loop_frame_cache_hit` になった。
+  - キャッシュ捕捉中の数フレームだけ CPU BGRX32 経路へ戻るため、通常再生中の D3D 高速化とは切り分けられる。
+- D3D11 shader の NV12 -> RGB 変換を BT.709 limited range 前提に補正した。
+  - 以前は Y を 0..1 のまま扱っていたため、sws の limited range 変換と比べて色味がずれる可能性があった。
+  - Y は 16-235、UV は 16-240 相当へ正規化してから BT.709 係数で RGB へ変換する。
+  - `d3d11_display_present` ログへ `range` と `space` を追加した。
+- `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` を Debug Win64 / `VIDEOMINER_D3D11_DISPLAY=1` で約 10 秒再生して計測した。
+  - `d3d11_display_present` の先頭ログでは `range=1`、`space=2`。range は limited と判断できるが、colorspace は未指定扱いの可能性があるため、現時点では 4K 入力を BT.709 とみなす暫定対応。
+  - `d3d11_display_present total_ms` p50 約 2.09ms / p90 約 2.73ms。
+  - `next_bgrx32_detail convert_ms` p50 約 2.93ms / p90 約 3.98ms。
+  - `playback_tick total_ms` p50 約 9.56ms / p90 約 12.83ms、drop は 0。
+- 判断:
+  - limited range 補正後も D3D11 実表示の性能は維持できている。
+  - 次に色味をさらに詰めるなら、BT.601 / BT.709 / BT.2020 / full range の分岐を shader constant で渡す形にする。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+
 ## 2026-06-25 QSV 表示経路の内訳計測と一時バッファ再利用
 - QSV/software の BGRX32 表示経路へ Debug 計測を追加した。
   - `qsv_transfer`: QSV HW frame を CPU frame へ転送した場合の時間。

@@ -301,8 +301,8 @@ const
     'Texture2D uvTex : register(t1);' + #10 +
     'SamplerState samp0 : register(s0);' + #10 +
     'float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {' + #10 +
-    '  float y = yTex.Sample(samp0, uv).r;' + #10 +
-    '  float2 chroma = uvTex.Sample(samp0, uv).rg - float2(0.5, 0.5);' + #10 +
+    '  float y = saturate((yTex.Sample(samp0, uv).r - (16.0 / 255.0)) * (255.0 / 219.0));' + #10 +
+    '  float2 chroma = (uvTex.Sample(samp0, uv).rg - float2(128.0 / 255.0, 128.0 / 255.0)) * (255.0 / 224.0);' + #10 +
     '  float r = y + 1.5748 * chroma.y;' + #10 +
     '  float g = y - 0.1873 * chroma.x - 0.4681 * chroma.y;' + #10 +
     '  float b = y + 1.8556 * chroma.x;' + #10 +
@@ -888,11 +888,12 @@ begin
   GlobalD3DFramePresented := True;
   Result := True;
   WriteVideoMinerSlowLog(Format(
-    'd3d11_display_present frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d y_stride=%d uv_stride=%d recreated=%s upload_ms=%.3f clear_ms=%.3f draw_ms=%.3f present_ms=%.3f total_ms=%.3f',
+    'd3d11_display_present frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d y_stride=%d uv_stride=%d range=%d space=%d recreated=%s upload_ms=%.3f clear_ms=%.3f draw_ms=%.3f present_ms=%.3f total_ms=%.3f',
     [Frame.width, Frame.height, FTargetWidth, FTargetHeight,
      ViewLeft, ViewTop, ViewLeft + ViewWidth, ViewTop + ViewHeight,
-     Frame.linesize[0], Frame.linesize[1], BoolToStr(Recreated, True),
-     UploadMs, ClearMs, DrawMs, PresentMs, TotalWatch.Elapsed.TotalMilliseconds]));
+     Frame.linesize[0], Frame.linesize[1], Frame.color_range,
+     Frame.colorspace, BoolToStr(Recreated, True), UploadMs, ClearMs,
+     DrawMs, PresentMs, TotalWatch.Elapsed.TotalMilliseconds]));
 end;
 
 procedure TNv12TextureProbe.Probe(Frame: PAVFrame);

@@ -958,7 +958,15 @@ begin
     Exit;
 
   EffectiveRotation := DisplayRotationDegrees(Decoder.Info.RotationDegrees);
-  SetNv12TextureD3DDisplayAllowed(ConvertFrame and (EffectiveRotation = 0));
+  SetNv12TextureD3DDisplayAllowed(ConvertFrame and (EffectiveRotation = 0) and
+    (not FLoopFrameCaptureActive));
+{$IFDEF DEBUG}
+  if ConvertFrame then
+    WriteVideoMinerSlowLog(Format(
+      'decode_next_d3d_allowed allowed=%s effective_rotation=%d loop_cache_capture=%s',
+      [BoolToStr((EffectiveRotation = 0) and (not FLoopFrameCaptureActive), True),
+       EffectiveRotation, BoolToStr(FLoopFrameCaptureActive, True)]));
+{$ENDIF}
   ClearNv12TextureD3DFramePresented;
   if not Decoder.DecodeNextFrameToBgrx32Optional(Buffer, BufferStride,
     ConvertFrame, PositionMs, ErrorMessage) then
