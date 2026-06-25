@@ -26,7 +26,9 @@
    - CPU 側の変換削減として `SWS_FAST_BILINEAR`、`BGR0` 出力、単一スレッドの自前 NV12 -> BGRX32 直接変換を試したが、QSV 4K30 ではいずれも悪化したため不採用。
    - FFmpeg 同梱範囲では `sws_scale` がかなり最適化されており、外部 SIMD ライブラリを増やさない前提では CPU 変換の追加改善余地は小さい。
    - 次は、QSV/D3D11VA から GPU texture を受け取り、D3D11 swap chain や shader で表示する経路が成立するかを調査する段階。
-   - D3D 表示は overlay、ズーム、回転、シークプレビュー、フレームコピー機能への影響が大きいため、本体へ入れる前に小さいプロトタイプで速度差だけ確認する。
+   - D3D11 texture upload + shader draw の probe では現行 CPU BGRX32 変換より十分軽かったため、3D texture 表示経路を採用方針で進める。
+   - 次は `TVideoMinerVideoSurface` に小さい D3D11 swap chain 表示経路を追加し、`UpdateSubresource + shader draw + Present` の end-to-end 表示時間を測る。
+   - D3D 表示は overlay、ズーム、回転、シークプレビュー、フレームコピー機能への影響が大きいため、まずは回転なし、ズームなし、中央 fit の再生表示だけで比較する。
 
 ## 後続課題
 

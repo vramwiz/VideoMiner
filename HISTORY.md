@@ -18,6 +18,22 @@
   - まだ shader 色変換、swap chain present、overlay 合成、回転/ズーム、コピー機能との統合コストは含んでいないため、次は小さい D3D11 表示 surface で end-to-end の描画時間を測る。
 - `Debug Win64` ビルド成功。警告 0 / エラー 0。
 
+## 2026-06-25 D3D11 shader draw probe
+- `VIDEOMINER_TEXTURE_PROBE=1` の Debug 実行時だけ、Y/UV 2 枚 texture を pixel shader で NV12 -> RGB 変換して offscreen render target へ描く `nv12_shader_probe` を追加した。
+  - 表示本体はまだ VCL/BGRX32 のままにし、通常再生を壊さず shader 表示経路の中核コストだけを測る。
+  - fullscreen triangle の vertex shader と NV12 -> RGB pixel shader は `D3DCompile` で初回だけコンパイルする。
+- `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` を Debug Win64 / `VideoDecoderMode=qsv` / `VIDEOMINER_TEXTURE_PROBE=1` で約 8 秒再生して計測した。
+  - `nv12_shader_probe total_ms`: p50 約 1.69ms / p90 約 1.96ms。
+  - `nv12_shader_probe upload_draw_ms`: p50 約 1.63ms / p90 約 1.89ms。
+  - `nv12_shader_probe flush_ms`: p50 約 0.06ms / p90 約 0.07ms。
+  - 同じログの現行 CPU 変換は `bgrx32_convert total_ms` p50 約 14.38ms / p90 約 16.59ms、`sws_ms` p50 約 11.03ms、負 stride 回避 `copy_ms` p50 約 3.32ms。
+  - shader probe を追加した状態でも `playback_tick total_ms` は p50 約 27.62ms / p90 約 31.06ms、drop 最大 0。
+- 判断:
+  - QSV 4K30 では、NV12 を CPU で BGRA へ変換する現行経路より、Y/UV 2 枚 texture + shader RGB 変換の方が十分に軽い。
+  - 3D texture 表示経路は採用方針で進める。
+  - 次段階は offscreen probe ではなく、実際の `TVideoMinerVideoSurface` に D3D11 swap chain を持たせ、`UpdateSubresource + shader draw + Present` の end-to-end 表示時間を測る。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+
 ## 2026-06-25 QSV 表示経路の内訳計測と一時バッファ再利用
 - QSV/software の BGRX32 表示経路へ Debug 計測を追加した。
   - `qsv_transfer`: QSV HW frame を CPU frame へ転送した場合の時間。

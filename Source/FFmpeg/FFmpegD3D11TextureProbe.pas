@@ -14,7 +14,7 @@ procedure ProbeNv12TextureUpload(Frame: PAVFrame);
 implementation
 
 uses
-  Winapi.Windows, Winapi.D3D11, Winapi.D3DCommon, Winapi.DxgiFormat,
+  Winapi.Windows, Winapi.D3D11, Winapi.D3DCommon, Winapi.D3DCompiler, Winapi.DxgiFormat,
   System.Diagnostics, System.SysUtils, VideoMinerDebugLog;
 
 type
@@ -26,6 +26,13 @@ type
     FTexture        : ID3D11Texture2D;     // NV12 upload 先 texture
     FYTexture       : ID3D11Texture2D;     // Y plane upload 先 texture
     FUvTexture      : ID3D11Texture2D;     // UV plane upload 先 texture
+    FYResourceView  : ID3D11ShaderResourceView; // Y plane shader 入力
+    FUvResourceView : ID3D11ShaderResourceView; // UV plane shader 入力
+    FRenderTexture  : ID3D11Texture2D;     // shader 出力先 render target
+    FRenderView     : ID3D11RenderTargetView; // shader 出力先 view
+    FVertexShader   : ID3D11VertexShader;  // fullscreen triangle vertex shader
+    FPixelShader    : ID3D11PixelShader;   // NV12 -> RGB pixel shader
+    FSampler        : ID3D11SamplerState;  // texture sampler
     FTextureWidth   : Integer;             // texture 幅
     FTextureHeight  : Integer;             // texture 高さ
     FPackedBuffer   : TBytes;              // plane が連続していない時の退避バッファ
@@ -36,8 +43,10 @@ type
       out ErrorMessage: string): Boolean;
     function EnsurePlaneTextures(Width, Height: Integer; out Recreated: Boolean;
       out ErrorMessage: string): Boolean;
+    function EnsureShaderPipeline(Width, Height: Integer; out ErrorMessage: string): Boolean;
     procedure LogErrorOnce(const ErrorMessage: string);
     procedure ProbePlaneTextures(Frame: PAVFrame);
+    procedure ProbeShaderDraw(Frame: PAVFrame);
   public
     procedure Probe(Frame: PAVFrame);
   end;
@@ -134,12 +143,17 @@ begin
   Result := True;
   Recreated := False;
   ErrorMessage := '';
-  if Assigned(FYTexture) and Assigned(FUvTexture) and
+  if Assigned(FYTexture) and Assigned(FUvTexture) and Assigned(FYResourceView) and
+     Assigned(FUvResourceView) and
      (FTextureWidth = Width) and (FTextureHeight = Height) then
     Exit;
 
   FYTexture := nil;
   FUvTexture := nil;
+  FYResourceView := nil;
+  FUvResourceView := nil;
+  FRenderTexture := nil;
+  FRenderView := nil;
   FillChar(Desc, SizeOf(Desc), 0);
   Desc.Width := Width;
   Desc.Height := Height;
@@ -159,6 +173,12 @@ begin
     ErrorMessage := Format('CreateTexture2D Y plane failed. HRESULT=$%.8x', [Cardinal(Ret)]);
     Exit(False);
   end;
+  Ret := FDevice.CreateShaderResourceView(FYTexture, nil, FYResourceView);
+  if not Succeeded(Ret) then
+  begin
+    ErrorMessage := Format('CreateShaderResourceView Y plane failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+    Exit(False);
+  end;
 
   Desc.Width := (Width + 1) div 2;
   Desc.Height := (Height + 1) div 2;
@@ -169,10 +189,161 @@ begin
     ErrorMessage := Format('CreateTexture2D UV plane failed. HRESULT=$%.8x', [Cardinal(Ret)]);
     Exit(False);
   end;
+  Ret := FDevice.CreateShaderResourceView(FUvTexture, nil, FUvResourceView);
+  if not Succeeded(Ret) then
+  begin
+    ErrorMessage := Format('CreateShaderResourceView UV plane failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+    Exit(False);
+  end;
 
   FTextureWidth := Width;
   FTextureHeight := Height;
   Recreated := True;
+end;
+
+function CompileShader(const Source, EntryPoint, Target: AnsiString;
+  out Blob: ID3DBlob; out ErrorMessage: string): Boolean;
+var
+  ErrorBlob: ID3DBlob;
+  Ret: HRESULT;
+begin
+  Result := False;
+  ErrorMessage := '';
+  Blob := nil;
+  ErrorBlob := nil;
+  try
+    Ret := D3DCompile(PAnsiChar(Source), Length(Source), nil, nil, nil,
+      PAnsiChar(EntryPoint), PAnsiChar(Target), 0, 0, Blob, ErrorBlob);
+  except
+    on E: Exception do
+    begin
+      ErrorMessage := E.ClassName + ': ' + E.Message;
+      Exit;
+    end;
+  end;
+
+  if not Succeeded(Ret) then
+  begin
+    if Assigned(ErrorBlob) then
+      ErrorMessage := string(AnsiString(PAnsiChar(ErrorBlob.GetBufferPointer)))
+    else
+      ErrorMessage := Format('D3DCompile failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+    Exit;
+  end;
+  Result := True;
+end;
+
+function TNv12TextureProbe.EnsureShaderPipeline(Width, Height: Integer;
+  out ErrorMessage: string): Boolean;
+const
+  VERTEX_SHADER_SOURCE: AnsiString =
+    'struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };' + #10 +
+    'VSOut main(uint id : SV_VertexID) {' + #10 +
+    '  float2 pos[3] = { float2(-1.0, -1.0), float2(-1.0, 3.0), float2(3.0, -1.0) };' + #10 +
+    '  float2 uv[3] = { float2(0.0, 1.0), float2(0.0, -1.0), float2(2.0, 1.0) };' + #10 +
+    '  VSOut o; o.pos = float4(pos[id], 0.0, 1.0); o.uv = uv[id]; return o;' + #10 +
+    '}';
+  PIXEL_SHADER_SOURCE: AnsiString =
+    'Texture2D yTex : register(t0);' + #10 +
+    'Texture2D uvTex : register(t1);' + #10 +
+    'SamplerState samp0 : register(s0);' + #10 +
+    'float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {' + #10 +
+    '  float y = yTex.Sample(samp0, uv).r;' + #10 +
+    '  float2 chroma = uvTex.Sample(samp0, uv).rg - float2(0.5, 0.5);' + #10 +
+    '  float r = y + 1.5748 * chroma.y;' + #10 +
+    '  float g = y - 0.1873 * chroma.x - 0.4681 * chroma.y;' + #10 +
+    '  float b = y + 1.8556 * chroma.x;' + #10 +
+    '  return float4(saturate(float3(r, g, b)), 1.0);' + #10 +
+    '}';
+var
+  Desc: D3D11_TEXTURE2D_DESC;
+  PixelBlob: ID3DBlob;
+  Ret: HRESULT;
+  SamplerDesc: D3D11_SAMPLER_DESC;
+  TempVertexShader: ID3D11VertexShader;
+  VertexBlob: ID3DBlob;
+begin
+  Result := False;
+  ErrorMessage := '';
+
+  if not Assigned(FVertexShader) then
+  begin
+    if not CompileShader(VERTEX_SHADER_SOURCE, 'main', 'vs_4_0', VertexBlob, ErrorMessage) then
+      Exit;
+    TempVertexShader := nil;
+    Ret := FDevice.CreateVertexShader(VertexBlob.GetBufferPointer,
+      VertexBlob.GetBufferSize, nil, @TempVertexShader);
+    if not Succeeded(Ret) then
+    begin
+      ErrorMessage := Format('CreateVertexShader failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+      Exit;
+    end;
+    FVertexShader := TempVertexShader;
+  end;
+
+  if not Assigned(FPixelShader) then
+  begin
+    if not CompileShader(PIXEL_SHADER_SOURCE, 'main', 'ps_4_0', PixelBlob, ErrorMessage) then
+      Exit;
+    Ret := FDevice.CreatePixelShader(PixelBlob.GetBufferPointer,
+      PixelBlob.GetBufferSize, nil, FPixelShader);
+    if not Succeeded(Ret) then
+    begin
+      ErrorMessage := Format('CreatePixelShader failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+      Exit;
+    end;
+  end;
+
+  if not Assigned(FSampler) then
+  begin
+    FillChar(SamplerDesc, SizeOf(SamplerDesc), 0);
+    SamplerDesc.Filter := D3D11_FILTER_MIN_MAG_MIP_POINT;
+    SamplerDesc.AddressU := D3D11_TEXTURE_ADDRESS_CLAMP;
+    SamplerDesc.AddressV := D3D11_TEXTURE_ADDRESS_CLAMP;
+    SamplerDesc.AddressW := D3D11_TEXTURE_ADDRESS_CLAMP;
+    SamplerDesc.MinLOD := 0;
+    SamplerDesc.MaxLOD := D3D11_FLOAT32_MAX;
+    Ret := FDevice.CreateSamplerState(SamplerDesc, FSampler);
+    if not Succeeded(Ret) then
+    begin
+      ErrorMessage := Format('CreateSamplerState failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+      Exit;
+    end;
+  end;
+
+  if Assigned(FRenderTexture) and Assigned(FRenderView) and
+     (FTextureWidth = Width) and (FTextureHeight = Height) then
+    Exit(True);
+
+  FRenderTexture := nil;
+  FRenderView := nil;
+  FillChar(Desc, SizeOf(Desc), 0);
+  Desc.Width := Width;
+  Desc.Height := Height;
+  Desc.MipLevels := 1;
+  Desc.ArraySize := 1;
+  Desc.Format := DXGI_FORMAT_B8G8R8A8_UNORM;
+  Desc.SampleDesc.Count := 1;
+  Desc.SampleDesc.Quality := 0;
+  Desc.Usage := D3D11_USAGE_DEFAULT;
+  Desc.BindFlags := D3D11_BIND_RENDER_TARGET;
+  Desc.CPUAccessFlags := 0;
+  Desc.MiscFlags := 0;
+
+  Ret := FDevice.CreateTexture2D(Desc, nil, FRenderTexture);
+  if not Succeeded(Ret) then
+  begin
+    ErrorMessage := Format('CreateTexture2D render target failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+    Exit;
+  end;
+  Ret := FDevice.CreateRenderTargetView(FRenderTexture, nil, FRenderView);
+  if not Succeeded(Ret) then
+  begin
+    ErrorMessage := Format('CreateRenderTargetView failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+    Exit;
+  end;
+
+  Result := True;
 end;
 
 procedure TNv12TextureProbe.LogErrorOnce(const ErrorMessage: string);
@@ -226,6 +397,65 @@ begin
      UploadUvMs, FlushMs, TotalWatch.Elapsed.TotalMilliseconds]));
 end;
 
+procedure TNv12TextureProbe.ProbeShaderDraw(Frame: PAVFrame);
+var
+  ChromaHeight : Integer;    // NV12 UV plane の高さ
+  ErrorMessage : string;     // shader probe 失敗理由
+  FlushMs      : Double;     // Flush 呼び出し時間
+  ResourceViews: array[0..1] of ID3D11ShaderResourceView;
+  StepWatch    : TStopwatch; // 各 step の計測
+  TotalWatch   : TStopwatch; // probe 全体の計測
+  UploadMs     : Double;     // Y/UV plane upload 合計時間
+  Viewport     : D3D11_VIEWPORT;
+begin
+  if not EnsureShaderPipeline(Frame.width, Frame.height, ErrorMessage) then
+  begin
+    LogErrorOnce(ErrorMessage);
+    Exit;
+  end;
+
+  TotalWatch := TStopwatch.StartNew;
+  ChromaHeight := (Frame.height + 1) div 2;
+
+  StepWatch := TStopwatch.StartNew;
+  FDeviceContext.UpdateSubresource(FYTexture, 0, nil, Frame.data[0],
+    Cardinal(Frame.linesize[0]), Cardinal(Frame.linesize[0] * Frame.height));
+  FDeviceContext.UpdateSubresource(FUvTexture, 0, nil, Frame.data[1],
+    Cardinal(Frame.linesize[1]), Cardinal(Frame.linesize[1] * ChromaHeight));
+  UploadMs := StepWatch.Elapsed.TotalMilliseconds;
+
+  FillChar(Viewport, SizeOf(Viewport), 0);
+  Viewport.TopLeftX := 0;
+  Viewport.TopLeftY := 0;
+  Viewport.Width := Frame.width;
+  Viewport.Height := Frame.height;
+  Viewport.MinDepth := 0;
+  Viewport.MaxDepth := 1;
+  ResourceViews[0] := FYResourceView;
+  ResourceViews[1] := FUvResourceView;
+
+  StepWatch := TStopwatch.StartNew;
+  FDeviceContext.IASetInputLayout(nil);
+  FDeviceContext.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  FDeviceContext.VSSetShader(FVertexShader, nil, 0);
+  FDeviceContext.PSSetShader(FPixelShader, nil, 0);
+  FDeviceContext.PSSetShaderResources(0, Length(ResourceViews), ResourceViews[0]);
+  FDeviceContext.PSSetSamplers(0, 1, FSampler);
+  FDeviceContext.RSSetViewports(1, @Viewport);
+  FDeviceContext.OMSetRenderTargets(1, FRenderView, nil);
+  FDeviceContext.Draw(3, 0);
+  UploadMs := UploadMs + StepWatch.Elapsed.TotalMilliseconds;
+
+  StepWatch := TStopwatch.StartNew;
+  FDeviceContext.Flush;
+  FlushMs := StepWatch.Elapsed.TotalMilliseconds;
+
+  WriteVideoMinerSlowLog(Format(
+    'nv12_shader_probe frame=%dx%d y_stride=%d uv_stride=%d feature_level=$%.4x upload_draw_ms=%.3f flush_ms=%.3f total_ms=%.3f',
+    [Frame.width, Frame.height, Frame.linesize[0], Frame.linesize[1],
+     Cardinal(FFeatureLevel), UploadMs, FlushMs, TotalWatch.Elapsed.TotalMilliseconds]));
+end;
+
 procedure TNv12TextureProbe.Probe(Frame: PAVFrame);
 var
   ErrorMessage : string;     // D3D11 初期化/texture 作成失敗の理由
@@ -274,6 +504,7 @@ begin
   end;
 
   ProbePlaneTextures(Frame);
+  ProbeShaderDraw(Frame);
 
   TotalWatch := TStopwatch.StartNew;
   PackMs := 0;
