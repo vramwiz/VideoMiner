@@ -47,6 +47,8 @@ type
     // 表示サーフェスを BGRX32 デコード先として使える状態にする
     function PrepareFrameBuffer(Decoder: TFFmpegDecoder; out Buffer: Pointer;
       out BufferStride: Integer; out ErrorMessage: string): Boolean;
+    // 現在のサーフェス Bitmap を D3D BGRX32 経路へ upload して表示する
+    function TryPresentSurfaceBitmapWithD3D: Boolean;
     // 指定位置のキャッシュがあれば、デコード完了を待たずに表示する
     function TryPresentCachedFrame(PositionMs: Integer): Boolean;
     // ボスが来たモードの表示状態をサーフェスへ渡す
@@ -317,6 +319,45 @@ begin
   end;
 
   Result := True;
+end;
+
+function TVideoMinerVideoView.TryPresentSurfaceBitmapWithD3D: Boolean;
+var
+  Bitmap: TBitmap;
+  Buffer: Pointer;
+  BufferStride: Integer;
+begin
+  Result := False;
+  if FSurface = nil then
+    Exit;
+
+  Bitmap := FSurface.Bitmap;
+  if (Bitmap = nil) or (Bitmap.Width <= 0) or (Bitmap.Height <= 0) then
+    Exit;
+  if Bitmap.PixelFormat <> pf32bit then
+    Bitmap.PixelFormat := pf32bit;
+
+  Buffer := Bitmap.ScanLine[0];
+  if Bitmap.Height > 1 then
+    BufferStride := NativeInt(Bitmap.ScanLine[1]) - NativeInt(Buffer)
+  else
+    BufferStride := Bitmap.Width * 4;
+  if (Buffer = nil) or (BufferStride = 0) then
+    Exit;
+
+  Result := FSurface.PrepareD3DFramePresentation;
+  if not Result then
+    Exit;
+
+  SetNv12TextureD3DDisplayAllowed(True);
+  try
+    Result := PresentBgrx32TextureFrame(Buffer, BufferStride, Bitmap.Width,
+      Bitmap.Height);
+  finally
+    SetNv12TextureD3DDisplayAllowed(False);
+  end;
+  if Result then
+    FSurface.MarkD3DFramePresented;
 end;
 
 constructor TVideoMinerVideoView.Create(Image: TImage);
@@ -850,7 +891,10 @@ end;
 procedure TVideoMinerVideoView.EndLoadingIndicator;
 begin
   if FSurface <> nil then
+  begin
     FSurface.EndLoadingIndicator;
+    TryPresentSurfaceBitmapWithD3D;
+  end;
 end;
 
 procedure TVideoMinerVideoView.SetSeekWheelFrameStepMs(Value: Integer);
@@ -1031,6 +1075,10 @@ begin
   begin
     if Nv12TextureD3DFramePresented then
       FSurface.MarkD3DFramePresented
+    else if TryPresentSurfaceBitmapWithD3D then
+    begin
+      // D3D BGRX32 upload 済み。GDI Present へは落とさない。
+    end
     else
       PresentImmediate(FSurface.Bitmap);
 {$IFDEF DEBUG}
@@ -1146,7 +1194,8 @@ begin
 
   if ConvertFrame then
   begin
-    Present(FSurface.Bitmap);
+    if not TryPresentSurfaceBitmapWithD3D then
+      Present(FSurface.Bitmap);
     StoreLoopFrameCache(PositionMs);
   end;
 

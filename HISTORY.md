@@ -2,6 +2,34 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-26 4K30 動画で seek bar が小 fallback になる問題
+- `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` を Debug ログ有効で実行し、小さい seek bar に落ちる条件を調査した。
+- ログ上は一度 D3D overlay seek bar に乗った後、マウス位置で左右ファイル移動ボタンが表示されると `d3d_surface_state ... reason=previous_file_button_visible` になり、`seekbar_gdi_paint compact=True` へ退避していた。
+- `NeedsD3DOverlayFrame` は左右ファイル移動ボタン表示中も D3D overlay 用 frame を要求する一方、`D3DFramePresentationBlockReason` は同じ状態を D3D 禁止理由にしていたため、判定が矛盾していた。
+- 左右ファイル移動ボタンの表示を D3D frame presentation の禁止理由から外し、`Paint` 入口では seek bar / 中央 overlay / 左右ファイル移動ボタン表示中も直近 D3D frame を再表示できるようにした。
+- 修正後に同じ動画を Debug 実行し、seek bar hover 中は `seekbar_gdi_paint` が 0 件、`paint_skip_d3d_frame` が継続して出ることを確認した。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+
+## 2026-06-26 回転あり動画で seek bar が小 fallback になる問題
+- `C:\Users\vramw\Videos\test_out_r270.mp4` は `effective_rotation=270` のため、従来は `d3d_decode_state ... reason=rotation_not_zero` になり、回転後 bitmap を GDI `Present` していた。
+- その結果、D3D overlay seek bar の土台になる D3D frame が作られず、seek bar hover 中は `seekbar_gdi_paint compact=True` の小 fallback へ常に落ちていた。
+- 回転後の `FSurface.Bitmap` を `PresentBgrx32TextureFrame` へ upload する `TryPresentSurfaceBitmapWithD3D` を追加し、回転あり動画でも最終表示段階は D3D BGRX32 経路へ流すようにした。
+- 通常再生と `ShowFrameAt` の両方で、D3D BGRX32 upload に成功した場合は `MarkD3DFramePresented` して GDI `Present` へ落ちないようにした。
+- 修正後に同じ動画を Debug 実行し、`d3d11_display_present_bgrx32 ... frame=1080x1920 ... overlay=True` が継続し、`seekbar_gdi_paint` が出ないことを確認した。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+
+## 2026-06-26 再生前表示と左右ナビ矢印の D3D overlay 化
+- 動画 open 時の初回 `ShowFrameAtMs(0)` は `BeginLoadingIndicator` 中に実行されるため、`loading_active` で D3D 表示が拒否され、再生開始まで GDI 側の小 fallback が見えることがあった。
+- `EndLoadingIndicator` 後に現在の `FSurface.Bitmap` を D3D BGRX32 経路へ再 upload し、再生開始前でも D3D frame を保持できるようにした。
+- `C:\Users\vramw\Videos\videominer_4k30_debug.mp4` は初回 frame decode が重く、ロード中の一瞬だけ小 fallback が見えやすかったため、`FLoadingActive` 中は GDI 側の小 seek bar fallback を描かないようにした。
+- 左右ファイル移動ボタンは前回 D3D presentation の禁止理由から外したが、D3D overlay 側にはまだ描画していなかったため、D3D frame 維持中は hover しても矢印が表示されないことがあった。
+- `TD3D11SeekBarOverlayState` に左右ファイル移動ボタンの表示状態と矩形を追加し、D3D overlay pass で左右端の帯背景と chevron を描くようにした。
+- 左右ファイル移動ボタンの hover 表示状態が変わった時に、D3D overlay state 更新と D3D frame 再表示を行うようにした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+
 ## 2026-06-25 起動復元 skip 後のサムネイル一覧復元
 - NAS など遅いデバイス上の動画を最後に開いた場合、起動時はフリーズ防止のため前回動画を開かない。
 - その状態で右クリックからサムネイル一覧を開くと、フォルダ履歴行には前回フォルダが表示される一方、通常サムネイル一覧は現在 `MediaList` が空のため何も表示されなかった。

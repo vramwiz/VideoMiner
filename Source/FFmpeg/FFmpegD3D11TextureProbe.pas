@@ -52,6 +52,10 @@ type
     PlayPauseButton: TRect;   // 再生/一時停止中央ボタン
     SkipForwardButton: TRect; // 10 秒進み中央ボタン
     LastButton     : TRect;   // 末尾へ移動する中央ボタン
+    PreviousFileVisible: Boolean; // 左端の前ファイル移動ボタンを描くか
+    PreviousFileButton: TRect; // 左端の前ファイル移動ボタン
+    NextFileVisible: Boolean; // 右端の次ファイル移動ボタンを描くか
+    NextFileButton: TRect; // 右端の次ファイル移動ボタン
     Chapters       : TArray<TD3D11SeekBarOverlayChapter>; // D3D 側で描くチャプター目盛り
   end;
 
@@ -169,6 +173,7 @@ type
     procedure DrawTransportSkipIcon(const ButtonRect: TRect; Forward: Boolean);
     procedure DrawTransportPlayPauseIcon(const ButtonRect: TRect; Playing: Boolean);
     procedure DrawTransportOverlay(const State: TD3D11SeekBarOverlayState);
+    procedure DrawFileNavButton(const ButtonRect: TRect; Previous: Boolean);
     function DrawSeekBarOverlay(const State: TD3D11SeekBarOverlayState): Double;
   public
     destructor Destroy; override;
@@ -2156,6 +2161,51 @@ begin
   DrawTransportEdgeIcon(State.LastButton, True);
 end;
 
+procedure TNv12TextureProbe.DrawFileNavButton(const ButtonRect: TRect;
+  Previous: Boolean);
+var
+  BackgroundRect: TRect;
+  CenterX: Integer;
+  IconHeight: Integer;
+  IconTop: Integer;
+  IconWidth: Integer;
+  LineX1: Integer;
+  LineX2: Integer;
+  MidY: Integer;
+  PenWidth: Integer;
+begin
+  if ButtonRect.IsEmpty then
+    Exit;
+
+  IconWidth := Max(18, Min(36, Round(ButtonRect.Width * 0.46)));
+  IconHeight := Max(58, Min(130, Round(ButtonRect.Height * 0.34)));
+  IconTop := ButtonRect.Top + (ButtonRect.Height - IconHeight) div 2;
+  BackgroundRect := Rect(ButtonRect.Left,
+    ButtonRect.Top + Max(8, (ButtonRect.Height - IconHeight) div 2 - 28),
+    ButtonRect.Right,
+    ButtonRect.Top + Min(ButtonRect.Height - 8,
+      (ButtonRect.Height - IconHeight) div 2 + IconHeight + 28));
+  DrawOverlayRect(BackgroundRect, 0, 0, 0, 0.42);
+
+  CenterX := (ButtonRect.Left + ButtonRect.Right) div 2;
+  MidY := IconTop + IconHeight div 2;
+  PenWidth := Max(3, Round(IconWidth * 0.16));
+  if Previous then
+  begin
+    LineX1 := CenterX + IconWidth div 2;
+    LineX2 := CenterX - IconWidth div 2;
+  end
+  else
+  begin
+    LineX1 := CenterX - IconWidth div 2;
+    LineX2 := CenterX + IconWidth div 2;
+  end;
+
+  DrawOverlayLine(LineX1, IconTop, LineX2, MidY, PenWidth, 1, 1, 1, 0.78);
+  DrawOverlayLine(LineX2, MidY, LineX1, IconTop + IconHeight, PenWidth,
+    1, 1, 1, 0.78);
+end;
+
 function TNv12TextureProbe.DrawSeekBarOverlay(
   const State: TD3D11SeekBarOverlayState): Double;
 var
@@ -2182,7 +2232,8 @@ begin
   Result := 0;
   DrawSeekBar := State.Visible and (not State.Bounds.IsEmpty) and
     (not State.Track.IsEmpty) and (State.MaxMs > 0);
-  if (not DrawSeekBar) and (not State.TransportVisible) then
+  if (not DrawSeekBar) and (not State.TransportVisible) and
+     (not State.PreviousFileVisible) and (not State.NextFileVisible) then
     Exit;
   if not EnsureRectPipeline(ErrorMessage) then
   begin
@@ -2202,6 +2253,10 @@ begin
   FDeviceContext.OMSetRenderTargets(1, FDisplayRenderView, nil);
 
   DrawTransportOverlay(State);
+  if State.PreviousFileVisible then
+    DrawFileNavButton(State.PreviousFileButton, True);
+  if State.NextFileVisible then
+    DrawFileNavButton(State.NextFileButton, False);
 
   if DrawSeekBar then
   begin

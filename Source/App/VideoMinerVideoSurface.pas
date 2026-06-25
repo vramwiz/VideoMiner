@@ -570,10 +570,6 @@ begin
     Result := 'loading_active'
   else if FZoomScale > MIN_ZOOM then
     Result := 'zoom_active'
-  else if (FPreviousFileButton <> nil) and FPreviousFileButton.Visible then
-    Result := 'previous_file_button_visible'
-  else if (FNextFileButton <> nil) and FNextFileButton.Visible then
-    Result := 'next_file_button_visible';
 end;
 
 procedure TVideoMinerVideoSurface.LogD3DFramePresentationState(
@@ -1287,6 +1283,20 @@ var
   TrackRect: TRect;
 begin
   FillChar(State, SizeOf(State), 0);
+  if (FPreviousFileButton <> nil) and FPreviousFileButton.Visible and
+     (not FSafeAreaVisible) and (not FLoadingActive) then
+  begin
+    FPreviousFileButton.UpdateLayout(ClientRect);
+    State.PreviousFileVisible := not FPreviousFileButton.BoundsRect.IsEmpty;
+    State.PreviousFileButton := FPreviousFileButton.BoundsRect;
+  end;
+  if (FNextFileButton <> nil) and FNextFileButton.Visible and
+     (not FSafeAreaVisible) and (not FLoadingActive) then
+  begin
+    FNextFileButton.UpdateLayout(ClientRect);
+    State.NextFileVisible := not FNextFileButton.BoundsRect.IsEmpty;
+    State.NextFileButton := FNextFileButton.BoundsRect;
+  end;
   if FOverlayVisible and (not FSeekPreviewVisible) and
      (not FSafeAreaVisible) and (not FLoadingActive) then
   begin
@@ -1571,6 +1581,9 @@ var
   KeepAliveHit: Boolean;
   KeepSeekBarVisible: Boolean;
   MousePoint: TPoint;
+  NavOverlayChanged: Boolean;
+  NextFileVisible: Boolean;
+  PreviousFileVisible: Boolean;
   SeekBarHit: Boolean;
   SourceHeight: Double;
   SourceWidth: Double;
@@ -1625,17 +1638,39 @@ begin
       (GetTickCount64 - FSeekBarLastHitTick <= 350));
   SetSeekBarVisibleFrom('mouse_move_keepalive', KeepSeekBarVisible);
 
+  NavOverlayChanged := False;
   if FPreviousFileButton <> nil then
   begin
-    FPreviousFileButton.Visible := HitPreviousFileButton(MousePoint);
+    PreviousFileVisible := HitPreviousFileButton(MousePoint);
+    if FPreviousFileButton.Visible <> PreviousFileVisible then
+    begin
+      FPreviousFileButton.Visible := PreviousFileVisible;
+      NavOverlayChanged := True;
+    end;
     if FPreviousFileButton.MouseMove(MousePoint) then
+    begin
       InvalidateOverlayControl(FPreviousFileButton);
+      NavOverlayChanged := True;
+    end;
   end;
   if FNextFileButton <> nil then
   begin
-    FNextFileButton.Visible := HitNextFileButton(MousePoint);
+    NextFileVisible := HitNextFileButton(MousePoint);
+    if FNextFileButton.Visible <> NextFileVisible then
+    begin
+      FNextFileButton.Visible := NextFileVisible;
+      NavOverlayChanged := True;
+    end;
     if FNextFileButton.MouseMove(MousePoint) then
+    begin
       InvalidateOverlayControl(FNextFileButton);
+      NavOverlayChanged := True;
+    end;
+  end;
+  if NavOverlayChanged then
+  begin
+    UpdateD3DSeekBarOverlayState;
+    RefreshD3DFramePresentation;
   end;
 
   if FOverlayVisible then
@@ -1907,8 +1942,12 @@ begin
 
   D3DFrameCurrent := Nv12TextureD3DFramePresented and CanUseD3DFramePresentation;
   CenterOverlayDrawnByD3D := D3DFrameCurrent;
-  if (not D3DFrameCurrent) and FOverlayVisible and
-     CanUseD3DFramePresentation and D3DFrameRecentlyPresented then
+  if (not D3DFrameCurrent) and CanUseD3DFramePresentation and
+     D3DFrameRecentlyPresented and
+     (FOverlayVisible or FSeekBarVisible or
+      ((FSeekBar <> nil) and FSeekBar.Dragging) or
+      ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible) or
+      ((FNextFileButton <> nil) and FNextFileButton.Visible)) then
   begin
     D3DFrameCurrent := RefreshD3DFramePresentation;
     CenterOverlayDrawnByD3D := D3DFrameCurrent;
@@ -1948,7 +1987,7 @@ begin
         HIDE_LEGACY_SEEK_BAR_PAINT;
       FSeekBar.CompactPlaybackStyle := SeekBarCompactStyle;
       FSeekBar.UpdateLayout(SeekBarLayoutRect);
-      if FSeekBarVisible then
+      if FSeekBarVisible and (not FLoadingActive) then
       begin
         DrawMinimalSeekBarFallback(DrawCanvas);
       end;
@@ -2030,7 +2069,7 @@ begin
       HIDE_LEGACY_SEEK_BAR_PAINT;
     FSeekBar.CompactPlaybackStyle := SeekBarCompactStyle;
     LogSeekBarPaintState(SeekBarCompactStyle, D3DFrameCurrent);
-    if SeekBarCompactStyle then
+    if SeekBarCompactStyle and (not FLoadingActive) then
     begin
       DrawMinimalSeekBarFallback(DrawCanvas);
     end;

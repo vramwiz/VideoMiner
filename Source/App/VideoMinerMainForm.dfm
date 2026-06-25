@@ -1,4 +1,4 @@
-object VideoMinerMainForm: TVideoMinerMainForm
+﻿object VideoMinerMainForm: TVideoMinerMainForm
   Left = 0
   Top = 0
   BorderStyle = bsNone
