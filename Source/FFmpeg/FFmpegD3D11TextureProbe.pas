@@ -15,6 +15,7 @@ function PresentNv12TextureFrame(Frame: PAVFrame): Boolean;
 function Nv12TextureD3DDisplayEnabled: Boolean;
 function Nv12TextureD3DFramePresented: Boolean;
 procedure ClearNv12TextureD3DFramePresented;
+procedure SetNv12TextureD3DDisplayAllowed(Allowed: Boolean);
 
 implementation
 
@@ -79,6 +80,7 @@ type
 
 var
   GlobalProbe: TNv12TextureProbe;
+  GlobalD3DDisplayAllowed: Boolean;
   GlobalD3DFramePresented: Boolean;
 
 function TextureProbeEnabled: Boolean;
@@ -107,6 +109,11 @@ end;
 procedure ClearNv12TextureD3DFramePresented;
 begin
   GlobalD3DFramePresented := False;
+end;
+
+procedure SetNv12TextureD3DDisplayAllowed(Allowed: Boolean);
+begin
+  GlobalD3DDisplayAllowed := Allowed;
 end;
 
 function TNv12TextureProbe.EnsureDevice(out ErrorMessage: string): Boolean;
@@ -775,6 +782,8 @@ end;
 function TNv12TextureProbe.PresentFrame(Frame: PAVFrame): Boolean;
 var
   ChromaHeight : Integer;    // NV12 UV plane の高さ
+  ClearColor   : TFourSingleArray; // letterbox 領域を塗る黒
+  ClearMs      : Double;     // backbuffer clear 時間
   DrawMs       : Double;     // 実 backbuffer への描画時間
   ErrorMessage : string;     // D3D 表示失敗理由
   PresentMs    : Double;     // Present 呼び出し時間
@@ -783,11 +792,15 @@ var
   StepWatch    : TStopwatch; // 各 step の計測
   TotalWatch   : TStopwatch; // D3D 表示全体の計測
   UploadMs     : Double;     // Y/UV plane upload 合計時間
+  ViewHeight   : Integer;    // アスペクト比維持後の描画高さ
+  ViewLeft     : Integer;    // アスペクト比維持後の描画左位置
+  ViewTop      : Integer;    // アスペクト比維持後の描画上位置
   Viewport     : D3D11_VIEWPORT;
+  ViewWidth    : Integer;    // アスペクト比維持後の描画幅
 begin
   Result := False;
   GlobalD3DFramePresented := False;
-  if not Nv12TextureD3DDisplayEnabled then
+  if (not Nv12TextureD3DDisplayEnabled) or (not GlobalD3DDisplayAllowed) then
     Exit;
   if (Frame = nil) or (Frame.format <> AV_PIX_FMT_NV12) or
      (Frame.data[0] = nil) or (Frame.data[1] = nil) or
@@ -824,15 +837,37 @@ begin
     Cardinal(Frame.linesize[1]), Cardinal(Frame.linesize[1] * ChromaHeight));
   UploadMs := StepWatch.Elapsed.TotalMilliseconds;
 
+  ViewWidth := FTargetWidth;
+  ViewHeight := (Int64(FTargetWidth) * Frame.height) div Frame.width;
+  if ViewHeight > FTargetHeight then
+  begin
+    ViewHeight := FTargetHeight;
+    ViewWidth := (Int64(FTargetHeight) * Frame.width) div Frame.height;
+  end;
+  if ViewWidth < 1 then
+    ViewWidth := 1;
+  if ViewHeight < 1 then
+    ViewHeight := 1;
+  ViewLeft := (FTargetWidth - ViewWidth) div 2;
+  ViewTop := (FTargetHeight - ViewHeight) div 2;
+
   FillChar(Viewport, SizeOf(Viewport), 0);
-  Viewport.TopLeftX := 0;
-  Viewport.TopLeftY := 0;
-  Viewport.Width := FTargetWidth;
-  Viewport.Height := FTargetHeight;
+  Viewport.TopLeftX := ViewLeft;
+  Viewport.TopLeftY := ViewTop;
+  Viewport.Width := ViewWidth;
+  Viewport.Height := ViewHeight;
   Viewport.MinDepth := 0;
   Viewport.MaxDepth := 1;
   ResourceViews[0] := FYResourceView;
   ResourceViews[1] := FUvResourceView;
+
+  StepWatch := TStopwatch.StartNew;
+  ClearColor[0] := 0;
+  ClearColor[1] := 0;
+  ClearColor[2] := 0;
+  ClearColor[3] := 1;
+  FDeviceContext.ClearRenderTargetView(FDisplayRenderView, ClearColor);
+  ClearMs := StepWatch.Elapsed.TotalMilliseconds;
 
   StepWatch := TStopwatch.StartNew;
   FDeviceContext.IASetInputLayout(nil);
@@ -853,10 +888,11 @@ begin
   GlobalD3DFramePresented := True;
   Result := True;
   WriteVideoMinerSlowLog(Format(
-    'd3d11_display_present frame=%dx%d target=%dx%d y_stride=%d uv_stride=%d recreated=%s upload_ms=%.3f draw_ms=%.3f present_ms=%.3f total_ms=%.3f',
+    'd3d11_display_present frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d y_stride=%d uv_stride=%d recreated=%s upload_ms=%.3f clear_ms=%.3f draw_ms=%.3f present_ms=%.3f total_ms=%.3f',
     [Frame.width, Frame.height, FTargetWidth, FTargetHeight,
+     ViewLeft, ViewTop, ViewLeft + ViewWidth, ViewTop + ViewHeight,
      Frame.linesize[0], Frame.linesize[1], BoolToStr(Recreated, True),
-     UploadMs, DrawMs, PresentMs, TotalWatch.Elapsed.TotalMilliseconds]));
+     UploadMs, ClearMs, DrawMs, PresentMs, TotalWatch.Elapsed.TotalMilliseconds]));
 end;
 
 procedure TNv12TextureProbe.Probe(Frame: PAVFrame);

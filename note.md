@@ -31,7 +31,9 @@
    - 実表示 HWND に計測用 Present を混ぜると VCL/GDI 描画と競合して大きくちらつくため、この方式は不採用。
    - `VIDEOMINER_D3D11_DISPLAY=1` の実験経路で、再生中だけ NV12 を D3D11 swap chain へ直接表示し、CPU BGRX32 変換をスキップできるようにした。
    - 4K30 QSV では `next_convert` p50 が約 15.4ms から約 2.7ms、`playback_tick` p50 が約 20.5ms から約 7.9ms へ改善したため採用方針。
-   - 次は D3D 表示の品質と統合を詰める。中央 fit / letterbox、回転、overlay、ズーム、シークプレビュー、フレームコピー機能との整合を順に見る。
+   - D3D 実表示へ中央 fit / letterbox を追加した。4K30 QSV では `d3d11_display_present total_ms` p50 約 2.6ms、`playback_tick` p50 約 11.0ms で、clear 追加コストは p50 約 0.01ms。
+   - 回転が必要なフレームは現時点では D3D 実表示を使わず、既存 CPU BGRX32 経路へ戻す。
+   - 次は D3D 表示の統合を詰める。overlay、ズーム、シークプレビュー、フレームコピー機能との整合を順に見る。
 
 ## 後続課題
 

@@ -957,6 +957,8 @@ begin
      (not PrepareFrameBuffer(Decoder, Buffer, BufferStride, ErrorMessage)) then
     Exit;
 
+  EffectiveRotation := DisplayRotationDegrees(Decoder.Info.RotationDegrees);
+  SetNv12TextureD3DDisplayAllowed(ConvertFrame and (EffectiveRotation = 0));
   ClearNv12TextureD3DFramePresented;
   if not Decoder.DecodeNextFrameToBgrx32Optional(Buffer, BufferStride,
     ConvertFrame, PositionMs, ErrorMessage) then
@@ -975,7 +977,6 @@ begin
 
   if ConvertFrame then
   begin
-    EffectiveRotation := DisplayRotationDegrees(Decoder.Info.RotationDegrees);
     WriteVideoMinerSlowLog(Format(
       'decode_next_rotation position_ms=%d source_rotation=%d effective_rotation=%d before=%dx%d',
       [PositionMs, Decoder.Info.RotationDegrees, EffectiveRotation,

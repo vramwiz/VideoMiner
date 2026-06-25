@@ -65,6 +65,24 @@
   - 現段階は実験経路で、表示 target 全体への shader 描画のみ。次は中央 fit / letterbox、回転、overlay、ズーム、シークプレビュー、フレームコピーとの整合を詰める。
 - `Debug Win64` ビルド成功。警告 0 / エラー 0。
 
+## 2026-06-25 D3D11 direct display fit and rotation gate
+- `VIDEOMINER_D3D11_DISPLAY=1` の D3D11 実表示経路へ、中央 fit / letterbox 表示を追加した。
+  - swap chain backbuffer 全体を黒で clear してから、動画と表示 target のアスペクト比で viewport を計算し、その領域だけへ shader 描画する。
+  - 3840x2160 を 900x638 target に出す場合は `viewport=0,66,900,572` になり、16:9 の 900x506 表示と上下黒帯になる。
+  - `clear_ms` を `d3d11_display_present` ログへ追加した。
+- 回転が必要な再生フレームでは、現時点の D3D 実表示を使わず CPU BGRX32 経路へ戻すゲートを追加した。
+  - `TVideoMinerVideoView.DecodeNextFrame` で effective rotation が 0 の時だけ D3D 実表示を許可する。
+  - 回転対応は今後 shader 側の座標変換か表示面側の統合として別途扱う。
+- `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` を Debug Win64 / `VideoDecoderMode=qsv` / `VIDEOMINER_D3D11_DISPLAY=1` で約 8 秒再生して計測した。
+  - `d3d11_display_present total_ms` p50 約 2.59ms / p90 約 2.79ms。
+  - 内訳は `upload_ms` p50 約 2.02ms、`clear_ms` p50 約 0.01ms、`draw_ms` p50 約 0.07ms、`present_ms` p50 約 0.46ms。
+  - `next_bgrx32_detail convert_ms` p50 約 3.67ms / p90 約 4.01ms。
+  - `playback_tick total_ms` p50 約 11.02ms / p90 約 12.56ms、drop は 0。
+- 判断:
+  - 中央 fit / letterbox の追加コストは小さく、D3D11 実表示の採用方針は維持する。
+  - 次は overlay、ズーム、シークプレビュー、フレームコピー機能との統合を順に進める。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+
 ## 2026-06-25 QSV 表示経路の内訳計測と一時バッファ再利用
 - QSV/software の BGRX32 表示経路へ Debug 計測を追加した。
   - `qsv_transfer`: QSV HW frame を CPU frame へ転送した場合の時間。
