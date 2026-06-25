@@ -114,8 +114,12 @@
       - 2026-06-25: 中央ボタン表示が D3D frame 保持状態に左右されて出たり出なかったりするため、Paint 入口で D3D 再表示を試し、失敗した場合だけ旧 GDI 中央ボタンを fallback 描画するようにした。
       - 2026-06-25: 中央ボタン表示条件から `not FPlaybackActive` を外し、再生中でも中央ボタン領域へマウスを載せたら表示するようにした。
       - 2026-06-25: シークバー hover 中に一瞬のヒット判定外れで消えることがあるため、表示中の hit test に少し余白を持たせ、最終ヒットから 350ms は表示を維持するようにした。
-      - 2026-06-25: 黒縁がある動画でシークバー hover 判定が黒縁分ずれるため、シークバー配置基準を `ClientRect` ではなく動画表示矩形の `FitRect` へ戻した。
+      - 2026-06-25: 黒縁がある動画でシークバー hover 判定が黒縁分ずれるため、シークバー配置基準を一度 `ClientRect` ではなく動画表示矩形の `FitRect` へ戻した。
       - 2026-06-25: hover preview 小窓の表示中は bitmap preview を GDI で描くため `Paint` へ落ちる。その際に旧 `TVideoMinerOverlaySeekBar.Paint` を呼ぶと `Vol / Check / Loop` 付き旧パネルが出るため、preview 中だけ track / hover 線 / ノブだけの最小 fallback を描くようにした。
+      - 2026-06-25: 動画を開いた直後など hover preview 以外の GDI fallback でも旧 seek bar が出るため、`TVideoMinerVideoSurface.Paint` から旧 `TVideoMinerOverlaySeekBar.Paint` を呼ぶ入口をなくした。D3D frame が無い非常時だけ、旧パネルではなく track / 進捗 / hover 線 / ノブだけの最小 fallback を描く。
+      - 2026-06-25: `x_33.mp4` でログ調査したところ、下部へマウスが入った時の表示要求元は `mouse_move_keepalive`、実描画は旧 GDI ではなく D3D overlay だった。`seekbar_visible_change source=...` を残し、次に同種の表示が出た時は要求元を確認する。
+      - 2026-06-25: 縦長動画では `FitRect` 基準にした結果、シークバーと黒い下部パネルの幅も動画幅まで狭まり、アイコン類が消えることが分かった。配置基準は `ClientRect` に戻し、フォーム幅基準で D3D seek bar / 下段ツール行を描く。
+      - 2026-06-25: `magnific_8vzvBH6IrU.mp4` は再生 tick で `ConvertFrame=False` になり D3D present が発生せず、通常 D3D seek bar の土台が無いため最小 fallback だけになることがあった。再生中に seek bar / overlay が見えている間は、フレーム drop より音声位置への `ShowFrameAt` を優先し、D3D overlay 用の表示フレームを確保する。
       - 2026-06-25: 手動チャプターの追加/削除/右クリックトグルは固定時間幅ではなく、現在のシークバー track 幅から 8px 相当の時間幅を計算して近接判定するようにした。画面上で細かく重なって見えるチャプターが増え続けるのを抑える。
       - 次回は実画面で、ソフトウェアデコード時の seek bar が旧/GDI ではなく D3D overlay 表示になっているかを目視確認する。
    - D3D overlay 化のデバッグ方法:
@@ -137,6 +141,12 @@
 
 ## 後続課題
 
+- D3D 表示に乗らない動画・初回だけ D3D 表示に乗らない動画を切り分ける。
+  - 2026-06-25: `magnific_8vzvBH6IrU.mp4` では、再生 tick で `ConvertFrame=False` になり D3D present が発生せず、通常 D3D seek bar の土台が無いため最小 fallback だけになるケースがあった。
+  - 現時点では「動画形式・pixel format・alpha・回転・色空間などの理由で D3D 経路へ入れない動画がある」のか、「初回再生時だけ同期遅れ/drop 判定で表示用フレーム変換がスキップされる」のかを分けて確認する必要がある。
+  - 同じ動画を最初に開いた時、別動画を表示した後に再度開いた時、一時停止後に再生した時で、`d3d_decode_state`、`convert_frame_false`、`d3d11_display_present_*`、`lagging_video_sync_for_d3d_overlay` の出方を比較する。
+  - `C:\Users\zan12\Videos\magnific_8vzvBH6IrU.mp4` と `C:\Users\zan12\Videos\x_33.mp4` を比較用の代表ファイルとして扱う。
+  - D3D に入れない原因が動画仕様側なら対応形式を増やす。初回だけの同期/drop 側なら、開いた直後に D3D overlay 用の初期表示フレームを確実に作る方向で直す。
 - チェック機能の UI を育てる。
   - チャプター種別を表示する。
   - チャプターへジャンプした時に短い理由を表示する。

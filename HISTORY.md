@@ -14,10 +14,23 @@
 ## 2026-06-25 hover preview 中に旧 seek bar が出る問題
 - hover preview 小窓を表示する間は bitmap preview を GDI で描くため、D3D frame 表示を止めて `Paint` へ落ちる。
 - その GDI fallback 内で `TVideoMinerOverlaySeekBar.Paint` を呼ぶと、`Vol / 1.0x / Check / Loop` 付きの旧パネルが再表示されることがあった。
-- hover preview 表示中だけ旧 seek bar paint を呼ばず、track / 進捗 / hover 線 / ノブだけの最小 fallback を `TVideoMinerVideoSurface.DrawSeekPreviewSeekBarFallback` で描くようにした。
+- hover preview 表示中だけ旧 seek bar paint を呼ばず、track / 進捗 / hover 線 / ノブだけの最小 fallback を描くようにした。
 - これにより preview 小窓は GDI で維持しつつ、旧フル操作パネルが混ざらないようにした。
+- 動画を開いた直後など hover preview 以外の GDI fallback でも旧 seek bar が出るため、`TVideoMinerVideoSurface.Paint` から `TVideoMinerOverlaySeekBar.Paint` を呼ぶ入口をなくした。
+- 通常の動画オープン直後など hover preview 以外の GDI fallback でも、旧フル操作パネルではなく `DrawMinimalSeekBarFallback` だけを使うようにした。
+- `C:\Users\zan12\Videos\x_33.mp4` でログ調査し、シークバー表示要求は下部 hit test による `mouse_move_keepalive`、描画ルートは旧 GDI ではなく D3D overlay (`route=d3d_skip` / `d3d11_display_present_bgrx32_lite overlay=True`) であることを確認した。
+- `SetSeekBarVisibleFrom` を追加し、シークバー表示状態が実際に変わった時だけ `seekbar_visible_change source=...` を D3D log へ出すようにした。
+- 通常オープンだけの再確認では `DrawMinimalSeekBarFallback` は走らず、`x_33.mp4` は D3D BGRX32 経路で `overlay=False` のまま再生された。
+- 縦長動画では `SeekBarLayoutRect` が動画の `FitRect` 基準になっていたため、シークバー幅も動画幅まで狭まり、D3D 側で下段アイコン類が入らない幅になることが分かった。
+- シークバーと黒い下部パネルの配置基準を `ClientRect` に戻し、縦長動画でもフォーム幅基準で D3D seek bar / 下段ツール行を描くようにした。
+- `C:\Users\zan12\Videos\magnific_8vzvBH6IrU.mp4` は再生中に `d3d_decode_state ... reason=convert_frame_false` が続き、D3D present に乗らないため、GDI fallback 側で seek bar を出す必要があることが分かった。
+- D3D に乗らない再生中でも旧 `TVideoMinerOverlaySeekBar.Paint` は呼ばず、`DrawMinimalSeekBarFallback` で最小 seek bar を描くようにした。
+- ただし通常 D3D seek bar ではなく最小 fallback だけになる原因は、再生同期側が遅れたフレームを `ConvertFrame=False` で捨て、D3D overlay を重ねる表示フレーム自体が無いことだった。
+- 再生中に seek bar / overlay が見えている間は、フレーム drop より音声位置への `ShowFrameAt` を優先し、通常 D3D seek bar を描くための表示フレームを確保するようにした。
+- このルートに入った時は `lagging_video_sync_for_d3d_overlay` を D3D log へ出す。
 - 確認:
   - Win64 Debug: 成功。
+  - Win64 Release: 成功。既存の hint 警告は残る。
 
 ## 2026-06-25 D3D 再生中メモリ急増の暫定対策
 - ユーザー確認で、D3D 化前には無かった可能性が高い、再生中に数 GB 単位でメモリを一瞬で消費する問題が出ている。

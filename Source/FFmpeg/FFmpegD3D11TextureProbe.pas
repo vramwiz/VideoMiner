@@ -74,6 +74,9 @@ uses
   Winapi.D3D11, Winapi.D3DCommon, Winapi.D3DCompiler, Winapi.DXGI, Winapi.DxgiFormat,
   Winapi.DxgiType, System.Diagnostics, System.Math, System.SysUtils, VideoMinerDebugLog;
 
+const
+  DRAW_D3D_SEEKBAR_TOOL_ROW = True; // 下段の音量/速度/Check/Loop 等を D3D 側で描く
+
 type
   TNv12TextureProbe = class
   private
@@ -2291,12 +2294,15 @@ begin
     DrawOverlayCircleApprox(MarkerX, KnobCenterY, KnobInnerRadius,
       0.52, 0.82, 1.0, 1.0);
 
-    DrawSeekBarTimeText(State);
-    DrawSeekBarVolume(State);
-    DrawSeekBarPlaybackRate(State);
-    DrawSeekBarEndAction(State);
-    DrawSeekBarChapterButtons(State);
-    DrawSeekBarFullScreen(State);
+    if DRAW_D3D_SEEKBAR_TOOL_ROW then
+    begin
+      DrawSeekBarTimeText(State);
+      DrawSeekBarVolume(State);
+      DrawSeekBarPlaybackRate(State);
+      DrawSeekBarEndAction(State);
+      DrawSeekBarChapterButtons(State);
+      DrawSeekBarFullScreen(State);
+    end;
   end;
 
   FillChar(BlendFactor, SizeOf(BlendFactor), 0);

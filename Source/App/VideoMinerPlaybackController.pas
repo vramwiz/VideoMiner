@@ -462,6 +462,19 @@ begin
   if VideoMinerShouldDropFrame(CurrentVideoPositionMs, AudioPositionMs,
     DropCount, DropElapsedMs) then
   begin
+    if FVideoView.NeedsD3DOverlayFrame and
+       FVideoView.ShowFrameAt(Decoder, AudioPositionMs, ErrorMessage) then
+    begin
+      WriteVideoMinerD3DLog(Format(
+        'lagging_video_sync_for_d3d_overlay audio_ms=%d video_ms=%d lag_ms=%d drop_count=%d drop_elapsed_ms=%d',
+        [AudioPositionMs, CurrentVideoPositionMs,
+         AudioPositionMs - CurrentVideoPositionMs, DropCount, DropElapsedMs]));
+      PositionMs := AudioPositionMs;
+      CurrentVideoPositionMs := AudioPositionMs;
+      Result := lvrSyncedToAudio;
+      Exit;
+    end;
+
     ConvertFrame := False;
     Inc(DropCount);
     Result := lvrDropped;

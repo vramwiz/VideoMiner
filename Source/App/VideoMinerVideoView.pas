@@ -166,6 +166,8 @@ type
     function ChapterMarkerToleranceMs(MaxMs, PixelTolerance: Integer): Integer;
     // サーフェス上のホイール操作をズーム/シークとして処理する
     function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer;MousePos: TPoint): Boolean;
+    // 再生中 overlay を D3D で更新するため、表示用フレームを優先したいか返す
+    function NeedsD3DOverlayFrame: Boolean;
     // ズーム操作後に現在位置の CPU frame 再表示が必要なら True を返して消費する
     function ConsumeZoomFrameRefreshNeeded: Boolean;
     // 次フレームを読み込んで表示する
@@ -260,6 +262,11 @@ begin
     Result := FSurface.ChapterMarkerToleranceMs(MaxMs, PixelTolerance)
   else
     Result := 0;
+end;
+
+function TVideoMinerVideoView.NeedsD3DOverlayFrame: Boolean;
+begin
+  Result := (FSurface <> nil) and FSurface.NeedsD3DOverlayFrame;
 end;
 
 function TVideoMinerVideoView.PrepareBitmapFrameBuffer(Bitmap: TBitmap;
