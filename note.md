@@ -38,6 +38,32 @@
    - D3D 実表示後に一時停止してズームする場合は、現在位置の CPU frame を再取得してから GDI ズーム表示へ戻す。
    - D3D 実表示後に現在フレームをコピーする場合は、コピー直前に現在位置の CPU frame を再取得してから `CurrentFrameBitmap` を使う。
    - シークバー hover preview の負荷は表示反映ではなく hover 用 fast seek/decode が主因。再生中は hover preview デコードを止め、停止中のみ preview を出す。
+   - シークバー自体は再生中も必要。単なる hover ではサムネイル preview を出さないが、シークバー表示やクリック/ドラッグ/ホイール操作は維持する。
+   - 今の制約:
+     - 動画は D3D11 swap chain backbuffer へ `Present` している。
+     - overlay / seek bar / seek preview は VCL/GDI で同じ HWND へ描いている。
+     - D3D backbuffer の上へ GDI を直接重ねると、次の D3D `Present` で上書きされてちらつく。
+     - そのため上物表示が必要な状態では `CanUseD3DFramePresentation=False` になり、CPU BGRX32 + GDI 経路へ退避している。
+   - 次の本命は D3D overlay 化。
+     - 発想は「仮想画面」ではなく、同じ D3D 描画パスで動画と UI を backbuffer 上に合成し、最後に 1 回だけ `Present` する形。
+     - 最初は全部を置き換えず、D3D 実表示中だけ簡易 seek bar を D3D 側で描く。
+     - 入力判定、位置計算、進捗値、ドラッグ/ホイールのイベント処理は既存の `TVideoMinerOverlaySeekBar` / `TVideoMinerVideoSurface` 側を使い回す。
+     - 描画だけを D3D 側へ渡す。最低限は下部バー背景、再生位置、hover/drag位置、チャプター目盛り程度でよい。テキスト、アイコン、細かいボタンは後回し。
+     - D3D seek bar が出せるようになったら、`CanUseD3DFramePresentation` から `FSeekBarVisible` だけを外せるか試す。
+     - クリック/ドラッグ中の表示も D3D overlay で足りるなら、シーク操作中も CPU BGRX32 変換を避けられる可能性がある。
+   - D3D overlay 化の実装入口候補:
+     - `FFmpegD3D11TextureProbe.pas` の `PresentNv12TextureFrame` / `TVideoMinerD3D11TextureProbe.PresentDisplayFrame` 周辺へ、動画描画後・`Present` 前に overlay 用 draw call を足す。
+     - まずは shader を増やさず、単色矩形を描く専用 pass を追加するのが安全。動的 vertex buffer か小さな constant buffer で矩形を渡す。
+     - `TVideoMinerVideoSurface` から D3D 側へ seek bar state を渡す関数を作る。例: target HWND/client size、visible、progress/max、hover/drag position、chapter positions。
+     - GDI と D3D の同時描画は避ける。D3D seek bar 表示中は VCL `Paint` 側の seek bar 描画を止める。
+   - D3D overlay 化のデバッグ方法:
+     - テストファイルは `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4`。
+     - Debug Win64 / `VIDEOMINER_D3D11_DISPLAY=1` / `VIDEOMINER_DEBUG_LOG=1` / `VIDEOMINER_SLOW_LOG=1` で確認する。
+     - まずマウスを動かさない再生で、`d3d11_display_present total_ms`、`next_bgrx32_detail convert_ms`、`playback_tick total_ms`、drop を見る。
+     - 次に再生中にシークバー領域へマウスを載せて、`bgrx32_convert` が増えないか、`d3d11_display_present` が継続するか、ちらつきがないかを見る。
+     - 目安: D3D 維持時は `next_bgrx32_detail convert_ms` p50 が 3-4ms 程度、`playback_tick total_ms` p50 が 10-13ms 程度。CPU 退避時は `bgrx32_convert` が増え、`playback_tick` が 20ms 以上へ寄る。
+     - ログ比較用の保存先は `D:\Users\take6\VideoMiner\VideoMiner_playback_debug_*.log`。
+     - ちらついたら、GDI/VCL が同じ HWND へ描いていないか、`Paint` が seek bar を描いていないか、D3D `Present` と GDI overlay が混在していないかを最初に疑う。
    - 次は D3D 表示の統合を詰める。overlay、ズーム、シークプレビュー、フレームコピー機能との整合を順に見る。
 
 ## 後続課題
