@@ -71,6 +71,12 @@ const
   SINGLE_INSTANCE_MUTEX = 'Local\VideoMiner.SingleInstance';
   COPYDATA_OPEN_FILE = $564D0001;
 
+procedure EnsureDefaultD3D11DisplayFlag;
+begin
+  if GetEnvironmentVariable('VIDEOMINER_D3D11_DISPLAY') = '' then
+    SetEnvironmentVariable('VIDEOMINER_D3D11_DISPLAY', '1');
+end;
+
 function SendCommandToExistingInstance: Boolean;
 var
   TargetWindow: HWND;
@@ -113,6 +119,7 @@ var
 {$ENDIF}
 
 begin
+  EnsureDefaultD3D11DisplayFlag;
 {$IFDEF DEBUG}
   StartupWatch := TStopwatch.StartNew;
 {$ENDIF}

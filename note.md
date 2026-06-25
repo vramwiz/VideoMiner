@@ -30,6 +30,7 @@
    - `UpdateSubresource + shader draw + Present` の probe でも現行 CPU BGRX32 変換より十分軽かった。
    - 実表示 HWND に計測用 Present を混ぜると VCL/GDI 描画と競合して大きくちらつくため、この方式は不採用。
    - D3D11 実表示経路を既定で有効化し、再生中だけ NV12 を D3D11 swap chain へ直接表示し、CPU BGRX32 変換をスキップできるようにした。
+   - 起動時に `VIDEOMINER_D3D11_DISPLAY` が未指定なら `1` を設定するため、IDE/通常ビルドからの起動でも D3D11 実表示が既定になる。
    - 切り戻し確認が必要な場合だけ `VIDEOMINER_D3D11_DISPLAY=0` / `off` / `false` で D3D11 実表示を無効化する。
    - 4K30 QSV では `next_convert` p50 が約 15.4ms から約 2.7ms、`playback_tick` p50 が約 20.5ms から約 7.9ms へ改善したため採用方針。
    - D3D 実表示へ中央 fit / letterbox を追加した。4K30 QSV では `d3d11_display_present total_ms` p50 約 2.6ms、`playback_tick` p50 約 11.0ms で、clear 追加コストは p50 約 0.01ms。
@@ -52,15 +53,29 @@
      - `FFmpegD3D11TextureProbe.pas` に単色矩形 overlay pass を追加し、動画描画後・`Present` 前に下部バー背景、再生位置、チャプター目盛り、ノブを描くようにした。
      - `TVideoMinerVideoSurface` から D3D 側へ seek bar state を渡す。
      - D3D seek bar 表示中は VCL `Paint` 側の seek bar 描画を止め、`paint_skip_d3d_frame` のまま D3D 表示を継続する。
+     - D3D 簡易 seek bar には現在位置 / 動画長の 7-segment 風時刻表示を追加済み。数字は当面この簡易表現でよい。
+     - シーク位置ノブは四角ではなく丸が理想。現状は D3D 矩形 pass だけで段付きの円形近似にしている。
+     - 2026-06-25 時点のユーザー側ビルドでは、何度ビルドしても旧 VCL/GDI の下部 UI が出ると報告あり。
+       - 共有スクリーンショットでは `frame 0`、hover preview 小窓、`Vol / 1.0x / Check / Loop` 付きのフル操作 UI が表示されていた。
+       - この状態は `FPlaybackActive=False` または `FSeekPreviewVisible=True` のため、現行設計では `CanUseD3DFramePresentation=False` になり CPU BGRX32 + GDI 経路へ退避する。
+       - つまり「D3D が常に無効」とは限らず、「停止中 / hover preview 中 / フル overlay 表示中は旧 UI」が現状仕様。
+       - ただしユーザー体験としては紛らわしいため、次は旧表示に見える条件をログまたは画面上で切り分けられるようにする。
      - 次はテキスト、ボタン、音量 UI、hover 状態などを D3D 側へどこまで持っていくか決める。
    - D3D overlay 化のデバッグ方法:
      - テストファイルは `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4`。
      - Debug Win64 / `VIDEOMINER_DEBUG_LOG=1` / `VIDEOMINER_SLOW_LOG=1` で確認する。D3D11 実表示は既定で有効。
+     - VideoMiner は単一インスタンスなので、古いプロセスが残っていると新しい EXE を起動しても既存プロセスへファイルを渡すだけになる。確認前に `VideoMiner.exe` を全終了する。
+     - Release では `WriteVideoMinerSlowLog` が無効なので、D3D present の確認は Debug ログで行う。Release 側の切り分けが必要なら、D3D 有効/退避理由だけを Release でも出せる軽量ログを追加する。
      - まずマウスを動かさない再生で、`d3d11_display_present total_ms`、`next_bgrx32_detail convert_ms`、`playback_tick total_ms`、drop を見る。
      - 次に再生中にシークバー領域へマウスを載せて、`bgrx32_convert` が増えないか、`d3d11_display_present` が継続するか、ちらつきがないかを見る。
      - 目安: D3D 維持時は `next_bgrx32_detail convert_ms` p50 が 3-4ms 程度、`playback_tick total_ms` p50 が 10-13ms 程度。CPU 退避時は `bgrx32_convert` が増え、`playback_tick` が 20ms 以上へ寄る。
      - ログ比較用の保存先は `D:\Users\take6\VideoMiner\VideoMiner_playback_debug_*.log`。
      - ちらついたら、GDI/VCL が同じ HWND へ描いていないか、`Paint` が seek bar を描いていないか、D3D `Present` と GDI overlay が混在していないかを最初に疑う。
+   - 次に進めること:
+     - `CanUseD3DFramePresentation` が False になる理由を Debug/Release どちらでも確認できるように、低頻度の状態ログか画面内デバッグ表示を追加する。
+     - 再生中にシークバー hover した時だけ新 D3D seek bar を出す現状仕様を、UI 上も分かるようにするか、停止中 seek bar も D3D 側へ寄せるか決める。
+     - 停止中 seek bar を D3D 化する場合は、D3D 表示済み frame がない状態で backbuffer を更新する必要があるため、現在 CPU bitmap / preview / D3D frame の所有関係を整理してから着手する。
+     - hover preview 小窓まで D3D 化するには、preview bitmap を D3D texture 化して sprite 合成する段階が必要。これは seek bar 本体より後回しでよい。
    - 次は D3D 表示の統合を詰める。overlay、ズーム、シークプレビュー、フレームコピー機能との整合を順に見る。
 
 ## 後続課題
