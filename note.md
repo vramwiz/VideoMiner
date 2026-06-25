@@ -83,13 +83,21 @@
        - 2026-06-25: 終端 loop では EOS 検出で一度 `PlaybackActive=False` になってから loop cache を表示していたため、cache 表示前に `PlaybackActive=True` を戻し、D3D seek bar overlay state も再同期するようにした。
        - 2026-06-25: loop cache 表示直後の通常 `Paint` が 1 frame だけ GDI compact seek bar を描いていたため、直近 D3D frame の表示時刻を surface 側で保持し、再生中かつ seek bar 表示中は `paint_skip_d3d_frame` で backbuffer を維持するようにした。
        - 2026-06-25: ユーザー確認で、ループ時に旧/GDI seek bar へ一瞬切り替わる違和感は解消した。
-     - 次は旧 GDI seek bar 側に残っている機能を D3D overlay 側へ順に移行する。
+     - seek bar の今後の方針:
+       - ソフトウェアデコードとハードウェアデコードで GUI を 2 系統に分けて育てない。
+       - 本命は、ソフトウェアデコードの CPU frame も最後の表示段階で D3D texture へ upload し、ハード/ソフトどちらでも同じ D3D presenter と `DrawSeekBarOverlay` で動画本体 + seek bar を描く構成に寄せる。
+       - これは「ソフトウェアデコードをやめる」ではなく、「描画と overlay 合成を D3D に統一する」という意味。
+       - 短期的には GDI compact seek bar は暫定 fallback として最低限残すが、見た目や機能追加を GDI 側へ積み増していかない。
+       - 避けること: D3D seek bar と GDI seek bar の両方に音量、速度、Loop、Check、チャプター、全画面、DPI 対応を個別実装していくこと。
+       - 移行手順の目安:
+         - 1. 旧/GDI 通常 seek bar の描画入口を閉じ、残す場合も暫定 fallback であることを明確にする。
+         - 2. ソフトウェアデコード用に CPU BGRX/BGRA frame -> D3D texture -> Present の経路を追加する。
+         - 3. ハード/ソフト両方で同じ `TD3D11SeekBarOverlayState` と `DrawSeekBarOverlay` を使う。
+         - 4. 安定後、GDI seek bar 描画は非常用 fallback だけに縮小または削除する。
+     - 次は旧 GDI seek bar 側に残っている入力処理を、D3D overlay 表示と矛盾しない形で整理する。
        - 現状、表示はおおむね D3D 側へ寄ってきたが、実操作はまだ旧 seek bar の hit test / callbacks に依存している。
        - 次の優先は「仮表示だけになっている箇所がないか」を確認し、Vol drag、mute、速度切替、Loop/Stop/Next、Check、`+`/`-`、全画面、seek drag を D3D 表示と同じ位置・状態で動くように詰める。
-       - 再生中/停止中の seek bar 表示を D3D 側へ寄せる。
-       - 右側操作表示の細かい位置関係を基準画像に合わせて調整する。
        - hover preview 小窓は bitmap/texture 合成が必要なので、seek bar 本体と基本操作の後で扱う。
-     - 旧 GDI seek bar は移行完了までは停止中/fallback 用として残し、D3D 側が十分揃ったら削除対象にする。
      - 2026-06-25: 旧 GDI / fallback seek bar の描画入口を塞いだ結果、余計な旧表示は消えたが、起動直後の停止状態ではマウスを動かしても新 D3D seek bar が表示されない。
        - 試したこと:
          - `ShowFrameAt` の指定位置デコードでも、回転なしなら NV12 frame を D3D backbuffer へ同時に Present する変更を入れた。

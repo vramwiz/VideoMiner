@@ -70,6 +70,7 @@ uses
 const
   SINGLE_INSTANCE_MUTEX = 'Local\VideoMiner.SingleInstance';
   COPYDATA_OPEN_FILE = $564D0001;
+  EXISTING_INSTANCE_TIMEOUT_MS = 3000;
 
 procedure EnsureDefaultD3D11DisplayFlag;
 begin
@@ -83,6 +84,7 @@ var
   CopyData: TCopyDataStruct;
   FileName: string;
   I: Integer;
+  SendResult: DWORD_PTR;
 begin
   Result := False;
   for I := 0 to 49 do
@@ -106,8 +108,10 @@ begin
   CopyData.cbData := (Length(FileName) + 1) * SizeOf(Char);
   CopyData.lpData := PChar(FileName);
 
-  SendMessage(TargetWindow, WM_COPYDATA, 0, LPARAM(@CopyData));
-  Result := True;
+  SendResult := 0;
+  Result := SendMessageTimeout(TargetWindow, WM_COPYDATA, 0, LPARAM(@CopyData),
+    SMTO_ABORTIFHUNG or SMTO_BLOCK, EXISTING_INSTANCE_TIMEOUT_MS,
+    @SendResult) <> 0;
 end;
 
 var
@@ -120,15 +124,22 @@ var
 
 begin
   EnsureDefaultD3D11DisplayFlag;
+  WriteVideoMinerStartupLog(Format('startup_process_enter exe="%s" param_count=%d',
+    [ParamStr(0), ParamCount]));
 {$IFDEF DEBUG}
   StartupWatch := TStopwatch.StartNew;
 {$ENDIF}
   InstanceMutex := CreateMutex(nil, True, PChar(SINGLE_INSTANCE_MUTEX));
   AlreadyRunning := (InstanceMutex <> 0) and (GetLastError = ERROR_ALREADY_EXISTS);
+  WriteVideoMinerStartupLog(Format('startup_mutex already_running=%s',
+    [BoolToStr(AlreadyRunning, True)]));
 
   if AlreadyRunning then
   begin
-    SendCommandToExistingInstance;
+    if SendCommandToExistingInstance then
+      WriteVideoMinerStartupLog('startup_forward_existing result=sent')
+    else
+      WriteVideoMinerStartupLog('startup_forward_existing result=timeout_or_missing_window');
     if InstanceMutex <> 0 then
       CloseHandle(InstanceMutex);
     Halt(0);
@@ -165,8 +176,20 @@ begin
     [StepWatch.Elapsed.TotalMilliseconds, StartupWatch.Elapsed.TotalMilliseconds]));
 {$ENDIF}
   try
-    Application.Run;
+    try
+      WriteVideoMinerStartupLog('startup_application_run_enter');
+      Application.Run;
+      WriteVideoMinerStartupLog('startup_application_run_leave');
+    except
+      on E: Exception do
+      begin
+        WriteVideoMinerStartupLog('startup_unhandled_exception class="' +
+          E.ClassName + '" message="' + E.Message + '"');
+        raise;
+      end;
+    end;
   finally
+    WriteVideoMinerStartupLog('startup_process_leave');
     if InstanceMutex <> 0 then
       CloseHandle(InstanceMutex);
   end;

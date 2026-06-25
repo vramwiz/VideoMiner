@@ -2351,6 +2351,15 @@ end;
 initialization
 
 finalization
-  GlobalProbe.Free;
+  try
+    WriteVideoMinerStartupLog('d3d11_texture_probe_finalization begin');
+    GlobalProbe.Free;
+    GlobalProbe := nil;
+    WriteVideoMinerStartupLog('d3d11_texture_probe_finalization done');
+  except
+    on E: Exception do
+      WriteVideoMinerStartupLog('d3d11_texture_probe_finalization_exception class="' +
+        E.ClassName + '" message="' + E.Message + '"');
+  end;
 
 end.

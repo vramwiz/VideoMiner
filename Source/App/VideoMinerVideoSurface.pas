@@ -1784,7 +1784,7 @@ begin
       HIDE_LEGACY_SEEK_BAR_PAINT;
     FSeekBar.CompactPlaybackStyle := SeekBarCompactStyle;
     LogSeekBarPaintState(SeekBarCompactStyle, D3DFrameCurrent);
-    if not HIDE_LEGACY_SEEK_BAR_PAINT then
+    if SeekBarCompactStyle then
       FSeekBar.Paint(DrawCanvas);
   end;
   DrawSeekHoverPreview(DrawCanvas);

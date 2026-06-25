@@ -15,6 +15,8 @@ procedure WriteVideoMinerSlowLog(const Msg: string);
 procedure WriteVideoMinerRateLog(const Msg: string);
 // D3D 表示経路の軽量調査ログが有効な場合だけ 1 行出力する
 procedure WriteVideoMinerD3DLog(const Msg: string);
+// 起動・終了・クラッシュ調査用の最小ログを必要な時だけ出力する
+procedure WriteVideoMinerStartupLog(const Msg: string);
 // 詳細調査用ログが有効か返す
 function VideoMinerDebugLogEnabled: Boolean;
 // slow log が有効か返す
@@ -159,6 +161,16 @@ procedure WriteVideoMinerD3DLog(const Msg: string);
 begin
   if VideoMinerD3DLogEnabled then
     WriteVideoMinerLogLine(Msg);
+end;
+
+procedure WriteVideoMinerStartupLog(const Msg: string);
+begin
+{$IFDEF DEBUG}
+  WriteVideoMinerLogLine(Msg);
+{$ELSE}
+  if SameText(GetEnvironmentVariable('VIDEOMINER_STARTUP_LOG'), '1') then
+    WriteVideoMinerLogLine(Msg);
+{$ENDIF}
 end;
 
 end.

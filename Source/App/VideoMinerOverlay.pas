@@ -2140,6 +2140,53 @@ begin
     TextTop := Bounds.Height - 38 + (17 - TextSize.cy) div 2;
     Canvas.TextOut(Bounds.Left + (Track.Left + Track.Right - TextSize.cx) div 2,
       Bounds.Top + TextTop, Text);
+
+    VolumeTrack := VolumeTrackRect;
+    VolumeLabel := VolumeLabelRect;
+    VolumeText := Format('Vol %d%%', [FVolumePercent]);
+    TextSize := Canvas.TextExtent(VolumeText);
+    Canvas.TextOut(Bounds.Left + VolumeLabel.Left,
+      Bounds.Top + VolumeLabel.Top + (VolumeLabel.Height - TextSize.cy) div 2,
+      VolumeText);
+    DrawAlphaRoundRect(Canvas, VolumeTrack, VolumeTrack.Height, 72);
+    VolumeFilledRect := VolumeTrack;
+    VolumeFilledRect.Right := VolumeTrack.Left +
+      Round(VolumeTrack.Width * Max(0, Min(100, FVolumePercent)) / 100);
+    if VolumeFilledRect.Right > VolumeFilledRect.Left then
+      DrawAlphaRoundRect(Canvas, VolumeFilledRect, VolumeTrack.Height, 210);
+
+    if FMuteButtonHovered or FMuteButtonPressed or FMuted then
+      DrawAlphaRoundRect(Canvas, MuteRect, 8, 38);
+    DrawMuteIcon(Canvas, MuteRect, MuteButtonAlpha);
+
+    Text := FPlaybackRateText;
+    if Text = '' then
+      Text := '1.0x';
+    DrawTextButton(Canvas, PlaybackRateRect, Text, Text <> '1.0x',
+      FPlaybackRateButtonHovered, FPlaybackRateButtonPressed, $0024D9F0);
+
+    if FFullScreenButtonHovered or FFullScreenButtonPressed then
+      DrawAlphaRoundRect(Canvas, ButtonRect, 8, 38);
+    DrawFullScreenIcon(Canvas, ButtonRect, FullScreenButtonAlpha);
+
+    if FEndActionButtonHovered or FEndActionButtonPressed then
+      DrawAlphaRoundRect(Canvas, EndActionRect, 8, 38);
+    Text := FEndActionText;
+    if Text = '' then
+      Text := 'Stop';
+    Canvas.Font.Size := 9;
+    TextSize := Canvas.TextExtent(Text);
+    Canvas.TextOut(Bounds.Left + EndActionRect.Left +
+      (EndActionRect.Width - TextSize.cx) div 2,
+      Bounds.Top + EndActionRect.Top + (EndActionRect.Height - TextSize.cy) div 2,
+      Text);
+
+    DrawTextButton(Canvas, CheckRect, 'Check', FCheckEnabled,
+      FCheckButtonHovered, FCheckButtonPressed, $002424E8);
+    DrawTextButton(Canvas, DeleteChapterRect, '-', False,
+      FDeleteChapterButtonHovered, FDeleteChapterButtonPressed, clWhite);
+    DrawTextButton(Canvas, AddChapterRect, '+', False,
+      FAddChapterButtonHovered, FAddChapterButtonPressed, clWhite);
     Exit;
   end;
 

@@ -512,49 +512,57 @@ end;
 // フォーム破棄時にデコーダを解放する
 procedure TVideoMinerMainForm.FormDestroy(Sender: TObject);
 begin
-  Application.OnMessage := FPreviousApplicationOnMessage;
-  if FChapterController <> nil then
-  begin
-    FChapterController.SaveManualChapterState;
-    FChapterController.SaveLoopPlaybackPosition;
+  WriteVideoMinerStartupLog('form_destroy begin');
+  try
+    Application.OnMessage := FPreviousApplicationOnMessage;
+    if FChapterController <> nil then
+    begin
+      FChapterController.SaveManualChapterState;
+      FChapterController.SaveLoopPlaybackPosition;
+    end;
+    SaveAudioPlaybackSettings;
+    if TimerPlayback <> nil then
+      TimerPlayback.Enabled := False;
+    if FVideoView <> nil then
+      FVideoView.PlaybackActive := False;
+    if FRestartPlaybackTimer <> nil then
+      FRestartPlaybackTimer.Enabled := False;
+    if FStartupOpenTimer <> nil then
+      FStartupOpenTimer.Enabled := False;
+    if FCurrentFileReloadController <> nil then
+      FCurrentFileReloadController.Stop;
+    if FAudioPlayback <> nil then
+      FAudioPlayback.Stop;
+    FCommandController.Free;
+    FShortcuts.Free;
+    FExternalOpenController.Free;
+    FMediaLoadController.Free;
+    FPlaybackController.Free;
+    FCurrentFileReloadController.Free;
+    if FWindowModeController <> nil then
+      FWindowModeController.SaveWindowBounds;
+    SaveEndAction(FMediaSession.EndAction);
+    FFrameGuideController.Free;
+    FWindowModeController.Free;
+    FThumbnailBrowserController.Free;
+    FSeekHoverPreviewController.Free;
+    FChapterController.Free;
+    FNavigationController.Free;
+    FInfoController.Free;
+    FVideoView.Free;
+    FMediaList.Free;
+    FMediaSession.Free;
+    FAudioPlayback.Free;
+    FSeekHoverPreviewDecoder.Free;
+    FPreviewDecoder.Free;
+    FDecoder.Free;
+    FTitleIcon.Free;
+    WriteVideoMinerStartupLog('form_destroy done');
+  except
+    on E: Exception do
+      WriteVideoMinerStartupLog('form_destroy_exception class="' + E.ClassName +
+        '" message="' + E.Message + '"');
   end;
-  SaveAudioPlaybackSettings;
-  if TimerPlayback <> nil then
-    TimerPlayback.Enabled := False;
-  if FVideoView <> nil then
-    FVideoView.PlaybackActive := False;
-  if FRestartPlaybackTimer <> nil then
-    FRestartPlaybackTimer.Enabled := False;
-  if FStartupOpenTimer <> nil then
-    FStartupOpenTimer.Enabled := False;
-  if FCurrentFileReloadController <> nil then
-    FCurrentFileReloadController.Stop;
-  if FAudioPlayback <> nil then
-    FAudioPlayback.Stop;
-  FCommandController.Free;
-  FShortcuts.Free;
-  FExternalOpenController.Free;
-  FMediaLoadController.Free;
-  FPlaybackController.Free;
-  FCurrentFileReloadController.Free;
-  if FWindowModeController <> nil then
-    FWindowModeController.SaveWindowBounds;
-  SaveEndAction(FMediaSession.EndAction);
-  FFrameGuideController.Free;
-  FWindowModeController.Free;
-  FThumbnailBrowserController.Free;
-  FSeekHoverPreviewController.Free;
-  FChapterController.Free;
-  FNavigationController.Free;
-  FInfoController.Free;
-  FVideoView.Free;
-  FMediaList.Free;
-  FMediaSession.Free;
-  FAudioPlayback.Free;
-  FSeekHoverPreviewDecoder.Free;
-  FPreviewDecoder.Free;
-  FDecoder.Free;
-  FTitleIcon.Free;
 end;
 
 procedure TVideoMinerMainForm.ToggleFullScreen;
@@ -972,6 +980,11 @@ begin
   end;
   FLoadingVideo := True;
   try
+    try
+      WriteVideoMinerStartupLog(Format(
+        'open_begin file="%s" drive="%s" autoplay=%s restore_loop=%s',
+        [ExtractFileName(FileName), ExtractFileDrive(FileName),
+         BoolToStr(AutoPlay, True), BoolToStr(RestoreLoopPosition, True)]));
 {$IFDEF DEBUG}
   TotalWatch := TStopwatch.StartNew;
 
@@ -1047,6 +1060,10 @@ begin
 
     RememberVideoMinerMediaFile(OpenResult.FileName);
     Result := True;
+    WriteVideoMinerStartupLog(Format(
+      'open_done_release file="%s" duration_ms=%d fps=%.3f',
+      [ExtractFileName(FMediaSession.VideoFile), FMediaSession.SeekMaxMs,
+       FMediaSession.VideoInfo.Fps]));
 {$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
       'open_done file="%s" drive="%s" autoplay=%s restore_loop=%s validate_ms=%.3f cleanup_ms=%.3f open_ms=%.3f first_frame_ms=%.3f autoplay_ms=%.3f total_ms=%.3f duration_ms=%d fps=%.3f',
@@ -1059,6 +1076,17 @@ begin
     if FVideoView <> nil then
       FVideoView.EndLoadingIndicator;
   end;
+    except
+      on E: Exception do
+      begin
+        ErrorMessage := E.ClassName + ': ' + E.Message;
+        WriteVideoMinerStartupLog('open_exception file="' +
+          ExtractFileName(FileName) + '" message="' + ErrorMessage + '"');
+        if FInfoController <> nil then
+          FInfoController.SetStatusCaption(ErrorMessage);
+        Result := False;
+      end;
+    end;
   finally
     FLoadingVideo := False;
   end;
@@ -1078,6 +1106,7 @@ var
 {$ENDIF}
 begin
   Result := False;
+  WriteVideoMinerStartupLog('startup_remembered_resolve_begin');
 
 {$IFDEF DEBUG}
   ResolveWatch := TStopwatch.StartNew;
@@ -1089,10 +1118,14 @@ begin
       'startup remembered_resolve_failed resolve_ms=%.3f err="%s"',
       [ResolveWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
 {$ENDIF}
+    WriteVideoMinerStartupLog('startup_remembered_resolve_failed err="' +
+      ErrorMessage + '"');
     if ErrorMessage <> '' then
       FInfoController.SetStatusCaption(ErrorMessage);
     Exit;
   end;
+  WriteVideoMinerStartupLog('startup_remembered_resolve_done file="' +
+    ExtractFileName(FileName) + '" drive="' + ExtractFileDrive(FileName) + '"');
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format(
     'startup remembered_resolve_done file="%s" drive="%s" resolve_ms=%.3f',
@@ -1114,6 +1147,12 @@ end;
 
 procedure TVideoMinerMainForm.QueueStartupOpenRemembered;
 begin
+  if SameText(GetEnvironmentVariable('VIDEOMINER_DISABLE_STARTUP_RESTORE'), '1') then
+  begin
+    WriteVideoMinerStartupLog('startup_remembered_skip disabled_by_env');
+    Exit;
+  end;
+
   FStartupOpenFile := '';
   FStartupOpenAutoPlay := False;
   FStartupOpenRemembered := True;
@@ -1562,25 +1601,38 @@ var
   FileName: string;
   OpenRemembered: Boolean;
 begin
-  if FStartupOpenTimer <> nil then
-    FStartupOpenTimer.Enabled := False;
+  WriteVideoMinerStartupLog('startup_open_timer begin');
+  try
+    if FStartupOpenTimer <> nil then
+      FStartupOpenTimer.Enabled := False;
 
-  FileName := FStartupOpenFile;
-  AutoPlay := FStartupOpenAutoPlay;
-  OpenRemembered := FStartupOpenRemembered;
-  FStartupOpenFile := '';
-  FStartupOpenAutoPlay := False;
-  FStartupOpenRemembered := False;
+    FileName := FStartupOpenFile;
+    AutoPlay := FStartupOpenAutoPlay;
+    OpenRemembered := FStartupOpenRemembered;
+    FStartupOpenFile := '';
+    FStartupOpenAutoPlay := False;
+    FStartupOpenRemembered := False;
 
-  if OpenRemembered then
-  begin
-    FInfoController.SetStatusCaption('Loading last video...');
-    OpenRememberedFile;
-  end
-  else if FileName <> '' then
-  begin
-    FInfoController.SetStatusCaption('Loading video...');
-    LoadVideoFile(FileName, AutoPlay);
+    if OpenRemembered then
+    begin
+      WriteVideoMinerStartupLog('startup_open_timer mode=remembered');
+      FInfoController.SetStatusCaption('Loading last video...');
+      OpenRememberedFile;
+    end
+    else if FileName <> '' then
+    begin
+      WriteVideoMinerStartupLog('startup_open_timer mode=file file="' +
+        ExtractFileName(FileName) + '"');
+      FInfoController.SetStatusCaption('Loading video...');
+      LoadVideoFile(FileName, AutoPlay);
+    end
+    else
+      WriteVideoMinerStartupLog('startup_open_timer mode=none');
+    WriteVideoMinerStartupLog('startup_open_timer done');
+  except
+    on E: Exception do
+      WriteVideoMinerStartupLog('startup_open_timer_exception class="' +
+        E.ClassName + '" message="' + E.Message + '"');
   end;
 end;
 

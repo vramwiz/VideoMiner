@@ -7,11 +7,8 @@
 interface
 
 uses
-  System.Diagnostics, System.SysUtils, FFmpegDecoder, FFmpegDecoderTypes,
-  VideoMinerDebugLog, VideoMinerMediaList, VideoMinerSettings
-{$IFDEF DEBUG}
-  , Winapi.Windows
-{$ENDIF}
+  System.Diagnostics, System.SysUtils, Winapi.Windows, FFmpegDecoder,
+  FFmpegDecoderTypes, VideoMinerDebugLog, VideoMinerMediaList, VideoMinerSettings
   ;
 
 type
@@ -42,6 +39,21 @@ function OpenVideoMinerMediaFile(const FileName: string; Decoder,
   out OpenResult: TVideoMinerMediaOpenResult): Boolean;
 
 implementation
+
+function VideoMinerPathLooksNetwork(const Path: string): Boolean;
+var
+  DriveRoot: string;
+begin
+  Result := False;
+  if Path = '' then
+    Exit;
+
+  if Pos('\\', Path) = 1 then
+    Exit(True);
+
+  DriveRoot := IncludeTrailingPathDelimiter(ExtractFileDrive(Path));
+  Result := (DriveRoot <> '') and (GetDriveType(PChar(DriveRoot)) = DRIVE_REMOTE);
+end;
 
 {$IFDEF DEBUG}
 function VideoMinerPathKindText(const FileName: string): string;
@@ -175,6 +187,16 @@ begin
   if (FileName <> '') and (ExtractFilePath(FileName) = '') and
      (Folder <> '') then
     FileName := IncludeTrailingPathDelimiter(Folder) + FileName;
+
+  if (not SameText(GetEnvironmentVariable(
+       'VIDEOMINER_ALLOW_NETWORK_STARTUP_RESTORE'), '1')) and
+     (VideoMinerPathLooksNetwork(Folder) or
+      VideoMinerPathLooksNetwork(FileName)) then
+  begin
+    ErrorMessage := 'Last file is on a network path. Startup restore skipped: ' +
+      FileName;
+    Exit;
+  end;
 
   if (Folder <> '') and (not DirectoryExists(Folder)) then
   begin
