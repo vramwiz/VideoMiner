@@ -964,6 +964,16 @@ begin
     Result := False;
     Exit;
   end;
+  if PresentFrame and D3DAllowed and (not Nv12TextureD3DFramePresented) then
+  begin
+    SetNv12TextureD3DDisplayAllowed(True);
+    try
+      PresentBgrx32TextureFrame(Buffer, BufferStride, FSurface.Bitmap.Width,
+        FSurface.Bitmap.Height);
+    finally
+      SetNv12TextureD3DDisplayAllowed(False);
+    end;
+  end;
 {$IFDEF DEBUG}
   if PresentFrame then
   begin
@@ -1028,6 +1038,7 @@ var
   Buffer: Pointer;
   BufferStride: Integer;
   D3DAllowed: Boolean;
+  D3DPresented: Boolean;
   EffectiveRotation: Integer;
 begin
   ErrorMessage := '';
@@ -1073,6 +1084,30 @@ begin
 {$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
       'decode_next_d3d_presented position_ms=%d source_rotation=%d display_rotation_offset=%d',
+      [PositionMs, Decoder.Info.RotationDegrees, FDisplayRotationOffset]));
+{$ENDIF}
+    Result := True;
+    Exit;
+  end;
+
+  D3DPresented := False;
+  if ConvertFrame and D3DAllowed then
+  begin
+    SetNv12TextureD3DDisplayAllowed(True);
+    try
+      D3DPresented := PresentBgrx32TextureFrame(Buffer, BufferStride,
+        FSurface.Bitmap.Width, FSurface.Bitmap.Height);
+    finally
+      SetNv12TextureD3DDisplayAllowed(False);
+    end;
+  end;
+  if D3DPresented then
+  begin
+    FSurface.MarkD3DFramePresented;
+    StoreLoopFrameCache(PositionMs);
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format(
+      'decode_next_d3d_presented_bgrx32 position_ms=%d source_rotation=%d display_rotation_offset=%d',
       [PositionMs, Decoder.Info.RotationDegrees, FDisplayRotationOffset]));
 {$ENDIF}
     Result := True;

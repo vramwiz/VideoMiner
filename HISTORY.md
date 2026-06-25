@@ -2,6 +2,20 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-25 ソフトウェアデコード表示の D3D 経路追加
+- ソフトウェアデコードとハードウェアデコードで seek bar / overlay GUI を二重実装しない方針に合わせ、CPU BGRX32 frame を D3D texture へ upload して表示する経路を追加した。
+- 既存の NV12 D3D 表示が成功した場合はそのまま使い、NV12 D3D 表示に乗らなかった CPU fallback frame だけを `DXGI_FORMAT_B8G8R8A8_UNORM` texture として D3D backbuffer へ描く。
+- BGRX32 表示でも既存の `TD3D11SeekBarOverlayState` と `DrawSeekBarOverlay` を使い、動画本体と seek bar を D3D 側で合成してから `Present` する。
+- `PresentCurrentNv12TextureFrame` は直近 frame が BGRX32 upload 由来の場合も再描画できるようにし、停止中 hover などの overlay 再 Present でも同じ保持 frame を使えるようにした。
+- VCL `TBitmap.ScanLine` の負 stride に備え、BGRX32 upload 前に必要な場合だけ連続バッファへ詰め直す。
+- 初回実行ログで `d3d_decode_state allowed=True` なのに `d3d11_display_present_bgrx32` が出ない状態を確認した。原因は、デコード呼び出し終了時の `SetNv12TextureD3DDisplayAllowed(False)` の後に BGRX32 D3D Present を呼んでいたため、BGRX32 Present が入口で拒否されていたこと。
+- BGRX32 Present 呼び出し中だけ D3D display allowed を再度有効にし、失敗時は従来どおり CPU/GDI fallback へ進むようにした。
+- `C:\Users\zan12\Videos\x_31.mp4` で Debug 実行し、再生中のソフトウェアデコード経路でも `d3d11_display_present_bgrx32 ... overlay=True` と `paint_skip_d3d_frame` が出ることを確認した。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、エラー 0。既存の hint 警告は残る。
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 既存の `Source/App/VideoMinerMainForm.dfm` が UTF-8 BOM ではないため失敗。今回変更したファイルは該当しない。
+
 ## 2026-06-25 終端停止後の再生再開
 - 終端到達で停止した後に Space または再生ボタンを押しても反応がないように見える問題を修正した。
 - 終端停止時の表示位置は `SeekMaxMs` ではなく `LastFrameSeekPositionMs` になるため、`PlayFromCurrentPosition` の先頭戻し判定を `SeekMaxMs` 以上から最終フレーム表示位置以上へ変更した。

@@ -52,6 +52,8 @@ type
 procedure ProbeNv12TextureUpload(Frame: PAVFrame);
 procedure SetNv12TextureProbeTargetWindow(WindowHandle: HWND; Width, Height: Integer);
 function PresentNv12TextureFrame(Frame: PAVFrame): Boolean;
+function PresentBgrx32TextureFrame(Buffer: Pointer; BufferStride, Width,
+  Height: Integer): Boolean;
 function PresentCurrentNv12TextureFrame: Boolean;
 function Nv12TextureD3DDisplayEnabled: Boolean;
 function Nv12TextureD3DFramePresented: Boolean;
@@ -76,6 +78,9 @@ type
     FUvTexture      : ID3D11Texture2D;     // UV plane upload 先 texture
     FYResourceView  : ID3D11ShaderResourceView; // Y plane shader 入力
     FUvResourceView : ID3D11ShaderResourceView; // UV plane shader 入力
+    FBgrxTexture    : ID3D11Texture2D;     // CPU BGRX32 upload 先 texture
+    FBgrxResourceView: ID3D11ShaderResourceView; // CPU BGRX32 shader 入力
+    FBgrxPixelShader: ID3D11PixelShader;   // BGRX32 texture 表示用 pixel shader
     FRenderTexture  : ID3D11Texture2D;     // shader 出力先 render target
     FRenderView     : ID3D11RenderTargetView; // shader 出力先 view
     FSwapChain      : IDXGISwapChain;      // 非表示 window への Present 計測用 swap chain
@@ -101,7 +106,11 @@ type
     FDisplayHeight  : Integer;             // 実表示 swap chain 高さ
     FTextureWidth   : Integer;             // texture 幅
     FTextureHeight  : Integer;             // texture 高さ
+    FBgrxWidth      : Integer;             // BGRX32 texture 幅
+    FBgrxHeight     : Integer;             // BGRX32 texture 高さ
     FPackedBuffer   : TBytes;              // plane が連続していない時の退避バッファ
+    FBgrxPackedBuffer: TBytes;             // 負 stride の BGRX32 を詰め直す退避バッファ
+    FCurrentFrameIsBgrx32: Boolean;        // 保持中 frame が BGRX32 upload 由来か
     FLastError      : string;              // 同じ失敗を毎 frame 出さないための記録
     FLoggedDisabled : Boolean;             // 非 NV12 などのスキップ理由を一度だけ出す
     function EnsureDevice(out ErrorMessage: string): Boolean;
@@ -110,6 +119,9 @@ type
     function EnsurePlaneTextures(Width, Height: Integer; out Recreated: Boolean;
       out ErrorMessage: string): Boolean;
     function EnsureShaderPipeline(Width, Height: Integer; out ErrorMessage: string): Boolean;
+    function EnsureBgrxTexture(Width, Height: Integer; out Recreated: Boolean;
+      out ErrorMessage: string): Boolean;
+    function EnsureBgrxShaderPipeline(out ErrorMessage: string): Boolean;
     function EnsureRectPipeline(out ErrorMessage: string): Boolean;
     function EnsureProbeWindow(out ErrorMessage: string): Boolean;
     function EnsureSwapChain(out Recreated: Boolean; out ErrorMessage: string): Boolean;
@@ -145,6 +157,8 @@ type
     destructor Destroy; override;
     procedure Probe(Frame: PAVFrame);
     function PresentFrame(Frame: PAVFrame): Boolean;
+    function PresentBgrx32Frame(Buffer: Pointer; BufferStride, Width,
+      Height: Integer): Boolean;
     function PresentCurrentFrame: Boolean;
     procedure SetTargetWindow(WindowHandle: HWND; Width, Height: Integer);
   end;
@@ -475,6 +489,127 @@ begin
   begin
     ErrorMessage := Format('CreateRenderTargetView failed. HRESULT=$%.8x', [Cardinal(Ret)]);
     Exit;
+  end;
+
+  Result := True;
+end;
+
+function TNv12TextureProbe.EnsureBgrxTexture(Width, Height: Integer;
+  out Recreated: Boolean; out ErrorMessage: string): Boolean;
+var
+  Desc: D3D11_TEXTURE2D_DESC;
+  Ret: HRESULT;
+begin
+  Result := True;
+  Recreated := False;
+  ErrorMessage := '';
+  if Assigned(FBgrxTexture) and Assigned(FBgrxResourceView) and
+     (FBgrxWidth = Width) and (FBgrxHeight = Height) then
+    Exit;
+
+  FBgrxTexture := nil;
+  FBgrxResourceView := nil;
+  FillChar(Desc, SizeOf(Desc), 0);
+  Desc.Width := Width;
+  Desc.Height := Height;
+  Desc.MipLevels := 1;
+  Desc.ArraySize := 1;
+  Desc.Format := DXGI_FORMAT_B8G8R8A8_UNORM;
+  Desc.SampleDesc.Count := 1;
+  Desc.SampleDesc.Quality := 0;
+  Desc.Usage := D3D11_USAGE_DEFAULT;
+  Desc.BindFlags := D3D11_BIND_SHADER_RESOURCE;
+  Desc.CPUAccessFlags := 0;
+  Desc.MiscFlags := 0;
+
+  Ret := FDevice.CreateTexture2D(Desc, nil, FBgrxTexture);
+  if not Succeeded(Ret) then
+  begin
+    ErrorMessage := Format('CreateTexture2D BGRX32 failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+    Exit(False);
+  end;
+  Ret := FDevice.CreateShaderResourceView(FBgrxTexture, nil, FBgrxResourceView);
+  if not Succeeded(Ret) then
+  begin
+    ErrorMessage := Format('CreateShaderResourceView BGRX32 failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+    Exit(False);
+  end;
+
+  FBgrxWidth := Width;
+  FBgrxHeight := Height;
+  Recreated := True;
+end;
+
+function TNv12TextureProbe.EnsureBgrxShaderPipeline(out ErrorMessage: string): Boolean;
+const
+  VERTEX_SHADER_SOURCE: AnsiString =
+    'struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };' + #10 +
+    'VSOut main(uint id : SV_VertexID) {' + #10 +
+    '  float2 pos[3] = { float2(-1.0, -1.0), float2(-1.0, 3.0), float2(3.0, -1.0) };' + #10 +
+    '  float2 uv[3] = { float2(0.0, 1.0), float2(0.0, -1.0), float2(2.0, 1.0) };' + #10 +
+    '  VSOut o; o.pos = float4(pos[id], 0.0, 1.0); o.uv = uv[id]; return o;' + #10 +
+    '}';
+  PIXEL_SHADER_SOURCE: AnsiString =
+    'Texture2D frameTex : register(t0);' + #10 +
+    'SamplerState samp0 : register(s0);' + #10 +
+    'float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {' + #10 +
+    '  return float4(frameTex.Sample(samp0, uv).rgb, 1.0);' + #10 +
+    '}';
+var
+  PixelBlob: ID3DBlob;
+  Ret: HRESULT;
+  SamplerDesc: D3D11_SAMPLER_DESC;
+  TempVertexShader: ID3D11VertexShader;
+  VertexBlob: ID3DBlob;
+begin
+  Result := False;
+  ErrorMessage := '';
+
+  if not Assigned(FVertexShader) then
+  begin
+    if not CompileShader(VERTEX_SHADER_SOURCE, 'main', 'vs_4_0',
+      VertexBlob, ErrorMessage) then
+      Exit;
+    TempVertexShader := nil;
+    Ret := FDevice.CreateVertexShader(VertexBlob.GetBufferPointer,
+      VertexBlob.GetBufferSize, nil, @TempVertexShader);
+    if not Succeeded(Ret) then
+    begin
+      ErrorMessage := Format('CreateVertexShader BGRX32 failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+      Exit;
+    end;
+    FVertexShader := TempVertexShader;
+  end;
+
+  if not Assigned(FBgrxPixelShader) then
+  begin
+    if not CompileShader(PIXEL_SHADER_SOURCE, 'main', 'ps_4_0',
+      PixelBlob, ErrorMessage) then
+      Exit;
+    Ret := FDevice.CreatePixelShader(PixelBlob.GetBufferPointer,
+      PixelBlob.GetBufferSize, nil, FBgrxPixelShader);
+    if not Succeeded(Ret) then
+    begin
+      ErrorMessage := Format('CreatePixelShader BGRX32 failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+      Exit;
+    end;
+  end;
+
+  if not Assigned(FSampler) then
+  begin
+    FillChar(SamplerDesc, SizeOf(SamplerDesc), 0);
+    SamplerDesc.Filter := D3D11_FILTER_MIN_MAG_MIP_POINT;
+    SamplerDesc.AddressU := D3D11_TEXTURE_ADDRESS_CLAMP;
+    SamplerDesc.AddressV := D3D11_TEXTURE_ADDRESS_CLAMP;
+    SamplerDesc.AddressW := D3D11_TEXTURE_ADDRESS_CLAMP;
+    SamplerDesc.MinLOD := 0;
+    SamplerDesc.MaxLOD := D3D11_FLOAT32_MAX;
+    Ret := FDevice.CreateSamplerState(SamplerDesc, FSampler);
+    if not Succeeded(Ret) then
+    begin
+      ErrorMessage := Format('CreateSamplerState BGRX32 failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+      Exit;
+    end;
   end;
 
   Result := True;
@@ -2059,6 +2194,7 @@ begin
   FDisplaySwapChain.Present(0, 0);
   PresentMs := StepWatch.Elapsed.TotalMilliseconds;
 
+  FCurrentFrameIsBgrx32 := False;
   GlobalD3DFramePresented := True;
   Result := True;
   if VideoMinerSlowLogEnabled then
@@ -2088,6 +2224,158 @@ begin
   end;
 end;
 
+function TNv12TextureProbe.PresentBgrx32Frame(Buffer: Pointer;
+  BufferStride, Width, Height: Integer): Boolean;
+var
+  ClearColor   : TFourSingleArray; // letterbox 領域を塗る黒
+  DrawMs       : Double;           // 実 backbuffer への描画時間
+  ErrorMessage : string;           // D3D 表示失敗理由
+  OverlayMs    : Double;           // D3D overlay 描画時間
+  PresentMs    : Double;           // Present 呼び出し時間
+  Recreated    : Boolean;          // swap chain または texture を今回作り直したか
+  ResourceView : ID3D11ShaderResourceView;
+  RowBytes     : Integer;          // BGRX32 1 行の byte 数
+  SrcData      : Pointer;          // UpdateSubresource に渡す先頭
+  SrcPitch     : Cardinal;         // UpdateSubresource に渡す row pitch
+  StepWatch    : TStopwatch;       // 各 step の計測
+  TextureRecreated: Boolean;       // BGRX32 texture を今回作り直したか
+  TotalWatch   : TStopwatch;       // D3D 表示全体の計測
+  UploadMs     : Double;           // BGRX32 upload 時間
+  ViewHeight   : Integer;          // アスペクト比維持後の描画高さ
+  ViewLeft     : Integer;          // アスペクト比維持後の描画左位置
+  ViewTop      : Integer;          // アスペクト比維持後の描画上位置
+  Viewport     : D3D11_VIEWPORT;
+  ViewWidth    : Integer;          // アスペクト比維持後の描画幅
+  Y            : Integer;          // 負 stride 詰め直し中の行番号
+begin
+  Result := False;
+  GlobalD3DFramePresented := False;
+  if (not Nv12TextureD3DDisplayEnabled) or (not GlobalD3DDisplayAllowed) then
+    Exit;
+  if (Buffer = nil) or (Width <= 0) or (Height <= 0) then
+    Exit;
+
+  RowBytes := Width * 4;
+  if Abs(BufferStride) < RowBytes then
+    Exit;
+  if not EnsureDevice(ErrorMessage) then
+  begin
+    LogErrorOnce(ErrorMessage);
+    Exit;
+  end;
+  if not EnsureBgrxTexture(Width, Height, TextureRecreated, ErrorMessage) then
+  begin
+    LogErrorOnce(ErrorMessage);
+    Exit;
+  end;
+  if not EnsureBgrxShaderPipeline(ErrorMessage) then
+  begin
+    LogErrorOnce(ErrorMessage);
+    Exit;
+  end;
+  if not EnsureDisplaySwapChain(Recreated, ErrorMessage) then
+  begin
+    LogErrorOnce(ErrorMessage);
+    Exit;
+  end;
+  Recreated := Recreated or TextureRecreated;
+  if not EnsureRectPipeline(ErrorMessage) then
+    LogErrorOnce(ErrorMessage);
+
+  TotalWatch := TStopwatch.StartNew;
+  SrcData := Buffer;
+  SrcPitch := Cardinal(BufferStride);
+  if BufferStride < 0 then
+  begin
+    SetLength(FBgrxPackedBuffer, RowBytes * Height);
+    for Y := 0 to Height - 1 do
+      Move(PByte(NativeInt(Buffer) + NativeInt(Y) * BufferStride)^,
+        FBgrxPackedBuffer[Y * RowBytes], RowBytes);
+    SrcData := @FBgrxPackedBuffer[0];
+    SrcPitch := Cardinal(RowBytes);
+  end;
+
+  StepWatch := TStopwatch.StartNew;
+  FDeviceContext.UpdateSubresource(FBgrxTexture, 0, nil, SrcData, SrcPitch,
+    Cardinal(SrcPitch * Cardinal(Height)));
+  UploadMs := StepWatch.Elapsed.TotalMilliseconds;
+
+  ViewWidth := FTargetWidth;
+  ViewHeight := (Int64(FTargetWidth) * Height) div Width;
+  if ViewHeight > FTargetHeight then
+  begin
+    ViewHeight := FTargetHeight;
+    ViewWidth := (Int64(FTargetHeight) * Width) div Height;
+  end;
+  if ViewWidth < 1 then
+    ViewWidth := 1;
+  if ViewHeight < 1 then
+    ViewHeight := 1;
+  ViewLeft := (FTargetWidth - ViewWidth) div 2;
+  ViewTop := (FTargetHeight - ViewHeight) div 2;
+
+  FillChar(Viewport, SizeOf(Viewport), 0);
+  Viewport.TopLeftX := ViewLeft;
+  Viewport.TopLeftY := ViewTop;
+  Viewport.Width := ViewWidth;
+  Viewport.Height := ViewHeight;
+  Viewport.MinDepth := 0;
+  Viewport.MaxDepth := 1;
+  ResourceView := FBgrxResourceView;
+
+  ClearColor[0] := 0;
+  ClearColor[1] := 0;
+  ClearColor[2] := 0;
+  ClearColor[3] := 1;
+  FDeviceContext.ClearRenderTargetView(FDisplayRenderView, ClearColor);
+
+  StepWatch := TStopwatch.StartNew;
+  FDeviceContext.IASetInputLayout(nil);
+  FDeviceContext.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  FDeviceContext.VSSetShader(FVertexShader, nil, 0);
+  FDeviceContext.PSSetShader(FBgrxPixelShader, nil, 0);
+  FDeviceContext.PSSetShaderResources(0, 1, ResourceView);
+  FDeviceContext.PSSetSamplers(0, 1, FSampler);
+  FDeviceContext.RSSetViewports(1, @Viewport);
+  FDeviceContext.OMSetRenderTargets(1, FDisplayRenderView, nil);
+  FDeviceContext.Draw(3, 0);
+  DrawMs := StepWatch.Elapsed.TotalMilliseconds;
+
+  OverlayMs := DrawSeekBarOverlay(GlobalD3DSeekBarOverlay);
+
+  StepWatch := TStopwatch.StartNew;
+  FDisplaySwapChain.Present(0, 0);
+  PresentMs := StepWatch.Elapsed.TotalMilliseconds;
+
+  FCurrentFrameIsBgrx32 := True;
+  GlobalD3DFramePresented := True;
+  Result := True;
+  if VideoMinerSlowLogEnabled then
+    WriteVideoMinerSlowLog(Format(
+      'd3d11_display_present_bgrx32 frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d stride=%d recreated=%s overlay=%s dragging=%s upload_ms=%.3f draw_ms=%.3f overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
+      [Width, Height, FTargetWidth, FTargetHeight, ViewLeft, ViewTop,
+       ViewLeft + ViewWidth, ViewTop + ViewHeight, BufferStride,
+       BoolToStr(Recreated, True),
+       BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
+       BoolToStr(GlobalD3DSeekBarOverlay.Dragging, True), UploadMs, DrawMs,
+       OverlayMs, PresentMs, TotalWatch.Elapsed.TotalMilliseconds]))
+  else if Recreated or
+          (LastD3DPresentOverlayVisible <> GlobalD3DSeekBarOverlay.Visible) or
+          (LastD3DPresentDragging <> GlobalD3DSeekBarOverlay.Dragging) or
+          (GetTickCount64 - LastD3DPresentLogTick >= 1000) then
+  begin
+    LastD3DPresentLogTick := GetTickCount64;
+    LastD3DPresentOverlayVisible := GlobalD3DSeekBarOverlay.Visible;
+    LastD3DPresentDragging := GlobalD3DSeekBarOverlay.Dragging;
+    WriteVideoMinerD3DLog(Format(
+      'd3d11_display_present_bgrx32_lite frame=%dx%d target=%dx%d overlay=%s dragging=%s recreated=%s total_ms=%.3f',
+      [Width, Height, FTargetWidth, FTargetHeight,
+       BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
+       BoolToStr(GlobalD3DSeekBarOverlay.Dragging, True),
+       BoolToStr(Recreated, True), TotalWatch.Elapsed.TotalMilliseconds]));
+  end;
+end;
+
 function TNv12TextureProbe.PresentCurrentFrame: Boolean;
 var
   ClearColor   : TFourSingleArray; // letterbox 領域を塗る黒
@@ -2095,6 +2383,7 @@ var
   OverlayMs    : Double;           // D3D overlay 描画時間
   PresentMs    : Double;           // Present 呼び出し時間
   Recreated    : Boolean;          // swap chain を今回作り直したか
+  ResourceView : ID3D11ShaderResourceView;
   ResourceViews: array[0..1] of ID3D11ShaderResourceView;
   StepWatch    : TStopwatch;       // 各 step の計測
   TotalWatch   : TStopwatch;       // D3D 表示全体の計測
@@ -2106,9 +2395,92 @@ var
 begin
   Result := False;
   GlobalD3DFramePresented := False;
-  if (not Nv12TextureD3DDisplayEnabled) or (FTextureWidth <= 0) or
-     (FTextureHeight <= 0) or (not Assigned(FYResourceView)) or
-     (not Assigned(FUvResourceView)) then
+  if not Nv12TextureD3DDisplayEnabled then
+    Exit;
+  if FCurrentFrameIsBgrx32 then
+  begin
+    if (FBgrxWidth <= 0) or (FBgrxHeight <= 0) or
+       (not Assigned(FBgrxResourceView)) then
+      Exit;
+    if not EnsureDevice(ErrorMessage) then
+    begin
+      LogErrorOnce(ErrorMessage);
+      Exit;
+    end;
+    if not EnsureBgrxShaderPipeline(ErrorMessage) then
+    begin
+      LogErrorOnce(ErrorMessage);
+      Exit;
+    end;
+    if not EnsureDisplaySwapChain(Recreated, ErrorMessage) then
+    begin
+      LogErrorOnce(ErrorMessage);
+      Exit;
+    end;
+    if not EnsureRectPipeline(ErrorMessage) then
+      LogErrorOnce(ErrorMessage);
+
+    TotalWatch := TStopwatch.StartNew;
+    ViewWidth := FTargetWidth;
+    ViewHeight := (Int64(FTargetWidth) * FBgrxHeight) div FBgrxWidth;
+    if ViewHeight > FTargetHeight then
+    begin
+      ViewHeight := FTargetHeight;
+      ViewWidth := (Int64(FTargetHeight) * FBgrxWidth) div FBgrxHeight;
+    end;
+    if ViewWidth < 1 then
+      ViewWidth := 1;
+    if ViewHeight < 1 then
+      ViewHeight := 1;
+    ViewLeft := (FTargetWidth - ViewWidth) div 2;
+    ViewTop := (FTargetHeight - ViewHeight) div 2;
+
+    FillChar(Viewport, SizeOf(Viewport), 0);
+    Viewport.TopLeftX := ViewLeft;
+    Viewport.TopLeftY := ViewTop;
+    Viewport.Width := ViewWidth;
+    Viewport.Height := ViewHeight;
+    Viewport.MinDepth := 0;
+    Viewport.MaxDepth := 1;
+    ResourceView := FBgrxResourceView;
+
+    ClearColor[0] := 0;
+    ClearColor[1] := 0;
+    ClearColor[2] := 0;
+    ClearColor[3] := 1;
+    FDeviceContext.ClearRenderTargetView(FDisplayRenderView, ClearColor);
+
+    FDeviceContext.IASetInputLayout(nil);
+    FDeviceContext.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    FDeviceContext.VSSetShader(FVertexShader, nil, 0);
+    FDeviceContext.PSSetShader(FBgrxPixelShader, nil, 0);
+    FDeviceContext.PSSetShaderResources(0, 1, ResourceView);
+    FDeviceContext.PSSetSamplers(0, 1, FSampler);
+    FDeviceContext.RSSetViewports(1, @Viewport);
+    FDeviceContext.OMSetRenderTargets(1, FDisplayRenderView, nil);
+    FDeviceContext.Draw(3, 0);
+
+    OverlayMs := DrawSeekBarOverlay(GlobalD3DSeekBarOverlay);
+
+    StepWatch := TStopwatch.StartNew;
+    FDisplaySwapChain.Present(0, 0);
+    PresentMs := StepWatch.Elapsed.TotalMilliseconds;
+
+    GlobalD3DFramePresented := True;
+    Result := True;
+    if VideoMinerSlowLogEnabled then
+      WriteVideoMinerSlowLog(Format(
+        'd3d11_display_represent_bgrx32 frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d overlay=%s dragging=%s overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
+        [FBgrxWidth, FBgrxHeight, FTargetWidth, FTargetHeight,
+         ViewLeft, ViewTop, ViewLeft + ViewWidth, ViewTop + ViewHeight,
+         BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
+         BoolToStr(GlobalD3DSeekBarOverlay.Dragging, True), OverlayMs,
+         PresentMs, TotalWatch.Elapsed.TotalMilliseconds]));
+    Exit;
+  end;
+
+  if (FTextureWidth <= 0) or (FTextureHeight <= 0) or
+     (not Assigned(FYResourceView)) or (not Assigned(FUvResourceView)) then
     Exit;
   if not EnsureDevice(ErrorMessage) then
   begin
@@ -2327,6 +2699,17 @@ begin
   if GlobalProbe = nil then
     GlobalProbe := TNv12TextureProbe.Create;
   Result := GlobalProbe.PresentFrame(Frame);
+end;
+
+function PresentBgrx32TextureFrame(Buffer: Pointer; BufferStride, Width,
+  Height: Integer): Boolean;
+begin
+  Result := False;
+  if not Nv12TextureD3DDisplayEnabled then
+    Exit;
+  if GlobalProbe = nil then
+    GlobalProbe := TNv12TextureProbe.Create;
+  Result := GlobalProbe.PresentBgrx32Frame(Buffer, BufferStride, Width, Height);
 end;
 
 function PresentCurrentNv12TextureFrame: Boolean;
