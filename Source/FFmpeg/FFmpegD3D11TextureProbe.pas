@@ -126,12 +126,12 @@ begin
 end;
 
 function Nv12TextureD3DDisplayEnabled: Boolean;
+var
+  DisplayFlag: string;
 begin
-{$IFDEF DEBUG}
-  Result := SameText(GetEnvironmentVariable('VIDEOMINER_D3D11_DISPLAY'), '1');
-{$ELSE}
-  Result := False;
-{$ENDIF}
+  DisplayFlag := GetEnvironmentVariable('VIDEOMINER_D3D11_DISPLAY');
+  Result := not (SameText(DisplayFlag, '0') or SameText(DisplayFlag, 'off') or
+    SameText(DisplayFlag, 'false'));
 end;
 
 function Nv12TextureD3DFramePresented: Boolean;

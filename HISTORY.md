@@ -3,6 +3,11 @@
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
 ## 2026-06-25 D3D11 seek bar overlay
+- D3D11 実表示を既定で有効にした。
+  - これまでは Debug 実行時に `VIDEOMINER_D3D11_DISPLAY=1` が必要だったが、通常起動でも D3D11 実表示経路を試すようにした。
+  - 切り戻し用に `VIDEOMINER_D3D11_DISPLAY=0` / `off` / `false` の明示指定では D3D11 実表示を無効化できる。
+  - env なしの起動で `d3d11_display_present` 188 回、`d3d_presented=True` 188 回を確認した。
+  - `VIDEOMINER_D3D11_DISPLAY=0` では `d3d11_display_present` 0 回、`d3d_presented=True` 0 回で、従来描画へ戻ることを確認した。
 - `VIDEOMINER_D3D11_DISPLAY=1` の D3D11 実表示中に、再生中の簡易 seek bar を D3D backbuffer 上へ合成する経路を追加した。
   - `FFmpegD3D11TextureProbe.pas` に単色矩形描画用の vertex/pixel shader、constant buffer、alpha blend state を追加した。
   - `TVideoMinerVideoSurface` から seek bar の bounds、track、現在位置、動画長、チャプター位置を D3D 側へ渡すようにした。

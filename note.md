@@ -29,7 +29,8 @@
    - D3D11 texture upload + shader draw の probe では現行 CPU BGRX32 変換より十分軽かったため、3D texture 表示経路を採用方針で進める。
    - `UpdateSubresource + shader draw + Present` の probe でも現行 CPU BGRX32 変換より十分軽かった。
    - 実表示 HWND に計測用 Present を混ぜると VCL/GDI 描画と競合して大きくちらつくため、この方式は不採用。
-   - `VIDEOMINER_D3D11_DISPLAY=1` の実験経路で、再生中だけ NV12 を D3D11 swap chain へ直接表示し、CPU BGRX32 変換をスキップできるようにした。
+   - D3D11 実表示経路を既定で有効化し、再生中だけ NV12 を D3D11 swap chain へ直接表示し、CPU BGRX32 変換をスキップできるようにした。
+   - 切り戻し確認が必要な場合だけ `VIDEOMINER_D3D11_DISPLAY=0` / `off` / `false` で D3D11 実表示を無効化する。
    - 4K30 QSV では `next_convert` p50 が約 15.4ms から約 2.7ms、`playback_tick` p50 が約 20.5ms から約 7.9ms へ改善したため採用方針。
    - D3D 実表示へ中央 fit / letterbox を追加した。4K30 QSV では `d3d11_display_present total_ms` p50 約 2.6ms、`playback_tick` p50 約 11.0ms で、clear 追加コストは p50 約 0.01ms。
    - 回転が必要なフレームは現時点では D3D 実表示を使わず、既存 CPU BGRX32 経路へ戻す。
@@ -54,7 +55,7 @@
      - 次はテキスト、ボタン、音量 UI、hover 状態などを D3D 側へどこまで持っていくか決める。
    - D3D overlay 化のデバッグ方法:
      - テストファイルは `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4`。
-     - Debug Win64 / `VIDEOMINER_D3D11_DISPLAY=1` / `VIDEOMINER_DEBUG_LOG=1` / `VIDEOMINER_SLOW_LOG=1` で確認する。
+     - Debug Win64 / `VIDEOMINER_DEBUG_LOG=1` / `VIDEOMINER_SLOW_LOG=1` で確認する。D3D11 実表示は既定で有効。
      - まずマウスを動かさない再生で、`d3d11_display_present total_ms`、`next_bgrx32_detail convert_ms`、`playback_tick total_ms`、drop を見る。
      - 次に再生中にシークバー領域へマウスを載せて、`bgrx32_convert` が増えないか、`d3d11_display_present` が継続するか、ちらつきがないかを見る。
      - 目安: D3D 維持時は `next_bgrx32_detail convert_ms` p50 が 3-4ms 程度、`playback_tick total_ms` p50 が 10-13ms 程度。CPU 退避時は `bgrx32_convert` が増え、`playback_tick` が 20ms 以上へ寄る。
