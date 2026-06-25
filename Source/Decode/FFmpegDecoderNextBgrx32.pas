@@ -21,7 +21,7 @@ function DecodeNextFrameToBgrx32Optional(
 implementation
 
 uses
-  System.Diagnostics, System.SysUtils, FFmpegApi, FFmpegFrameConvert,
+  System.Diagnostics, System.SysUtils, FFmpegApi, FFmpegD3D11TextureProbe, FFmpegFrameConvert,
   FFmpegQsvDecode, FFmpegStreamInfo, VideoMinerDebugLog;
 
 
@@ -73,6 +73,7 @@ var
       TransferMs := TransferWatch.Elapsed.TotalMilliseconds;
       ConvertWatch := TStopwatch.StartNew;
 {$ENDIF}
+      ProbeNv12TextureUpload(ConvertSourceFrame);
       CopyFrameToBgrx32BufferCached(ConvertSourceFrame, Buffer, BufferStride,
         Context.DirectSwsContext, Context.DirectSwsSrcWidth, Context.DirectSwsSrcHeight,
         Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat,

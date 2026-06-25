@@ -2,6 +2,22 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-25 D3D11 texture upload probe
+- `VIDEOMINER_TEXTURE_PROBE=1` の Debug 実行時だけ、QSV の NV12 frame を D3D11 texture へアップロードする計測を追加した。
+  - `nv12_texture_probe`: `DXGI_FORMAT_NV12` 1 枚 texture へ渡す方式。FFmpeg の Y/UV plane が連続していない場合は packed buffer へ詰め直してから `UpdateSubresource` する。
+  - `nv12_plane_texture_probe`: Y を `DXGI_FORMAT_R8_UNORM`、UV を `DXGI_FORMAT_R8G8_UNORM` の 2 枚 texture へ分けて `UpdateSubresource` する方式。plane 連続化コピーを避けるための比較対象。
+- `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` を Debug Win64 / `VideoDecoderMode=qsv` / `VIDEOMINER_SLOW_LOG=1` / `VIDEOMINER_DEBUG_LOG=1` で約 8 秒再生して計測した。
+  - 2 枚 texture upload: `nv12_plane_texture_probe total_ms` p50 約 1.46ms / p90 約 1.78ms、`upload_y_ms` p50 約 0.96ms、`upload_uv_ms` p50 約 0.45ms、`flush_ms` p50 約 0.04ms。
+  - 1 枚 NV12 texture upload: `nv12_texture_probe total_ms` p50 約 2.61ms / p90 約 3.16ms。内訳は `pack_ms` p50 約 1.52ms、`upload_ms` p50 約 1.01ms。
+  - 同じ QSV 再生中の CPU BGRX32 変換は `bgrx32_convert total_ms` p50 約 14.46ms / p90 約 15.46ms、`sws_ms` p50 約 11.02ms、負 stride 回避 `copy_ms` p50 約 3.35ms。
+  - `playback_tick total_ms` は p50 約 25.03ms / p90 約 27.06ms、drop 最大 0。
+- `VideoDecoderMode=software` では frame format が `YUV420P(fmt=0)` で、NV12 texture probe は `nv12_texture_probe_skip` になった。
+- 判断:
+  - QSV の NV12 を CPU BGRA へ変換せず、D3D11 shader 表示へ進める価値は高い。CPU 側だけ見ると、2 枚 texture upload は現行の `sws_scale + copy` より p50 で約 13ms 軽い。
+  - 実表示へ入れる場合は、Y/UV 2 枚 texture + shader 合成を第一候補にする。NV12 1 枚 texture は packed buffer が必要になりやすく、今回の入力では余分に約 1.5ms かかった。
+  - まだ shader 色変換、swap chain present、overlay 合成、回転/ズーム、コピー機能との統合コストは含んでいないため、次は小さい D3D11 表示 surface で end-to-end の描画時間を測る。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+
 ## 2026-06-25 QSV 表示経路の内訳計測と一時バッファ再利用
 - QSV/software の BGRX32 表示経路へ Debug 計測を追加した。
   - `qsv_transfer`: QSV HW frame を CPU frame へ転送した場合の時間。

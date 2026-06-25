@@ -41,6 +41,7 @@ uses
   ShortcutAction in 'Source\Lib\ShortcutAction\ShortcutAction.pas',
   FFmpegApi in 'Source\FFmpeg\FFmpegApi.pas',
   FFmpegAudioTempo in 'Source\FFmpeg\FFmpegAudioTempo.pas',
+  FFmpegD3D11TextureProbe in 'Source\FFmpeg\FFmpegD3D11TextureProbe.pas',
   FFmpegFrameConvert in 'Source\FFmpeg\FFmpegFrameConvert.pas',
   FFmpegQsvDecode in 'Source\FFmpeg\FFmpegQsvDecode.pas',
   FFmpegStreamInfo in 'Source\FFmpeg\FFmpegStreamInfo.pas',
