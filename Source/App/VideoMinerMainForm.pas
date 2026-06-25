@@ -745,11 +745,18 @@ procedure TVideoMinerMainForm.CopyCurrentFrameToClipboard;
 var
   ErrorMessage: string;
   FrameBitmap: TBitmap;
+  PositionMs: Integer;
 begin
   if PlaybackActiveOrPending then
   begin
     FInfoController.SetStatusCaption('Pause video before copying frame.');
     Exit;
+  end;
+
+  if FMediaSession.VideoFile <> '' then
+  begin
+    PositionMs := CurrentPlaybackPositionMs;
+    ShowFrameAtMs(PositionMs);
   end;
 
   FrameBitmap := nil;

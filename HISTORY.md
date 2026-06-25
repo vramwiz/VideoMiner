@@ -28,6 +28,15 @@
   - D3D 側でズーム表示まで行う場合は、shader のサンプリング座標へズーム中心/倍率を渡す段階で再検討する。
 - `Debug Win64` ビルド成功。警告 0 / エラー 0。
 
+## 2026-06-25 D3D11 direct display frame copy refresh
+- D3D11 実表示中は CPU 側の `CurrentFrameBitmap` が直近表示フレームではない可能性があるため、現在フレームをクリップボードへコピーする直前に現在位置を CPU BGRX32 経路で再表示するようにした。
+  - `TVideoMinerMainForm.CopyCurrentFrameToClipboard` で、停止中かつ動画が開かれている場合に `ShowFrameAtMs(CurrentPlaybackPositionMs)` を呼んでから `CurrentFrameBitmap` を参照する。
+  - コピーは元々一時停止中限定のユーザー操作なので、4K の CPU 再変換コストは通常再生の D3D 高速化とは切り分ける。
+- `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` を Debug Win64 / `VIDEOMINER_D3D11_DISPLAY=1` で確認した。
+  - 再生中に Space で停止して Ctrl+C したところ、コピー直前に `main_show_frame_at_begin requested_ms=1753`、`bgrx32_convert total_ms` 約 14.07ms、`surface_present_immediate`、`main_show_frame_at_done requested_ms=1753 shown_ms=1753` が出た。
+  - D3D 表示済みフラグが残ったまま古い CPU bitmap をコピーする経路ではなく、現在位置の CPU frame を再取得してからコピーへ進むことをログで確認した。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+
 ## 2026-06-25 D3D11 texture upload probe
 - `VIDEOMINER_TEXTURE_PROBE=1` の Debug 実行時だけ、QSV の NV12 frame を D3D11 texture へアップロードする計測を追加した。
   - `nv12_texture_probe`: `DXGI_FORMAT_NV12` 1 枚 texture へ渡す方式。FFmpeg の Y/UV plane が連続していない場合は packed buffer へ詰め直してから `UpdateSubresource` する。

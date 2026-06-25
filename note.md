@@ -36,6 +36,7 @@
    - D3D shader の NV12 -> RGB を BT.709 limited range 前提に補正した。4K30 QSV のログでは `range=1`、`space=2`。色空間が未指定扱いの可能性があるため、BT.601 / BT.709 / BT.2020 / full range の分岐は後続課題。
    - D3D backbuffer の上へ VCL/GDI overlay を直接重ねるとちらつくため不採用。overlay / seek bar / seek preview / safe area / loading / zoom が必要な間は CPU BGRX32 + GDI 描画へ戻す。
    - D3D 実表示後に一時停止してズームする場合は、現在位置の CPU frame を再取得してから GDI ズーム表示へ戻す。
+   - D3D 実表示後に現在フレームをコピーする場合は、コピー直前に現在位置の CPU frame を再取得してから `CurrentFrameBitmap` を使う。
    - 次は D3D 表示の統合を詰める。overlay、ズーム、シークプレビュー、フレームコピー機能との整合を順に見る。
 
 ## 後続課題
