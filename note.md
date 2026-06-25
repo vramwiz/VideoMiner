@@ -66,8 +66,13 @@
        - 2026-06-25: ループや内部再開では seek bar を消さないよう、上記の掃除処理は `SetPlaybackActive(True)` ではなく `PlayFromCurrentPosition` 直前に限定した。
        - 2026-06-25: ループ先頭フレームキャッシュの `PresentImmediate` は CPU/GDI paint を通るため、再生中でも一瞬だけ旧フル seek bar が出ることがあった。再生中の CPU/GDI fallback では `CompactPlaybackStyle` で D3D 風の簡易 seek bar を描くようにした。
        - 2026-06-25: 終端 loop では EOS 検出で一度 `PlaybackActive=False` になってから loop cache を表示していたため、cache 表示前に `PlaybackActive=True` を戻し、D3D seek bar overlay state も再同期するようにした。
-       - 次はユーザー環境で「前回ファイル復元後に再生開始してから hover」で `overlay=True` が出るか確認する。
-     - 次はテキスト、ボタン、音量 UI、hover 状態などを D3D 側へどこまで持っていくか決める。
+       - 2026-06-25: loop cache 表示直後の通常 `Paint` が 1 frame だけ GDI compact seek bar を描いていたため、直近 D3D frame の表示時刻を surface 側で保持し、再生中かつ seek bar 表示中は `paint_skip_d3d_frame` で backbuffer を維持するようにした。
+       - 2026-06-25: ユーザー確認で、ループ時に旧/GDI seek bar へ一瞬切り替わる違和感は解消した。
+     - 次は旧 GDI seek bar 側に残っている機能を D3D overlay 側へ順に移行する。
+       - 再生中/停止中の seek bar 表示を D3D 側へ寄せる。
+       - 音量、速度、Check、Loop、チャプター追加/削除、全画面などの操作表示を D3D 側へ移す。
+       - hover preview 小窓は bitmap/texture 合成が必要なので、seek bar 本体と基本操作の後で扱う。
+       - 旧 GDI seek bar は移行完了までは停止中/fallback 用として残し、D3D 側が十分揃ったら削除対象にする。
    - D3D overlay 化のデバッグ方法:
      - テストファイルは `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4`。
      - Debug Win64 / `VIDEOMINER_DEBUG_LOG=1` / `VIDEOMINER_SLOW_LOG=1` で確認する。D3D11 実表示は既定で有効。
@@ -79,9 +84,8 @@
      - ログ比較用の保存先は `D:\Users\take6\VideoMiner\VideoMiner_playback_debug_*.log`。
      - ちらついたら、GDI/VCL が同じ HWND へ描いていないか、`Paint` が seek bar を描いていないか、D3D `Present` と GDI overlay が混在していないかを最初に疑う。
    - 次に進めること:
-     - ユーザー環境の `マイドキュメント\VideoMiner\VideoMiner_playback_debug.log` で `d3d_surface_state`、`d3d_decode_state`、`d3d11_display_present_lite` を確認する。
-     - `d3d11_display_present_lite overlay=True` が出ない場合は、同じ近辺の `reason=` を見て、停止中仕様なのか、hover preview / rotation / overlay / loading / zoom / nav 表示で退避しているのかを切り分ける。
-     - 起動時復元直後の停止状態でも新 UI に見せたい場合は、停止中 seek bar も D3D 側へ寄せるか、停止中用の見た目を D3D seek bar に合わせるか決める。
+     - 旧 GDI seek bar の残機能を D3D overlay 側へ移す順番を決める。
+     - 最初は停止中 seek bar の見た目を D3D seek bar に合わせるか、停止中も D3D backbuffer を更新できる設計へ寄せる。
      - 停止中 seek bar を D3D 化する場合は、D3D 表示済み frame がない状態で backbuffer を更新する必要があるため、現在 CPU bitmap / preview / D3D frame の所有関係を整理してから着手する。
      - hover preview 小窓まで D3D 化するには、preview bitmap を D3D texture 化して sprite 合成する段階が必要。これは seek bar 本体より後回しでよい。
    - 次は D3D 表示の統合を詰める。overlay、ズーム、シークプレビュー、フレームコピー機能との整合を順に見る。
