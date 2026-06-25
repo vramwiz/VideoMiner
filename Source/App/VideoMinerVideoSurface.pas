@@ -116,6 +116,8 @@ type
     function HitSeekBar(const Point: TPoint): Boolean;
     // 下側シークバーを配置するフォーム側の基準領域を返す
     function SeekBarLayoutRect: TRect;
+    // D3D 表示中に backbuffer 上へ描く簡易シークバー状態を更新する
+    procedure UpdateD3DSeekBarOverlayState;
     // クライアント座標を現在のズーム状態の画像座標へ変換する
     function ImagePointFromClient(const Point: TPoint; out ImageX, ImageY: Double): Boolean;
     // overlay 部品をまとめて再描画対象にする
@@ -238,6 +240,8 @@ type
     function CurrentFrameSignature(out Signature: TVideoMinerFrameSignature): Boolean;
     // D3D11 直接表示で動画本体だけを描いてよい状態か返す
     function CanUseD3DFramePresentation: Boolean;
+    // D3D11 直接表示直前に target window と overlay 座標を同期する
+    function PrepareD3DFramePresentation: Boolean;
     // ズーム操作後に現在位置の CPU frame 再表示が必要なら True を返して消費する
     function ConsumeZoomFrameRefreshNeeded: Boolean;
     // FBitmap を BGRX32 の direct デコード先として使える状態にする
@@ -486,6 +490,7 @@ begin
   if (FBitmap.Width <> Width) or (FBitmap.Height <> Height) then
     FBitmap.SetSize(Width, Height);
   SetNv12TextureProbeTargetWindow(Handle, ClientWidth, ClientHeight);
+  UpdateD3DSeekBarOverlayState;
 
   Buffer := FBitmap.ScanLine[0];
   if Height > 1 then
@@ -511,11 +516,25 @@ end;
 function TVideoMinerVideoSurface.CanUseD3DFramePresentation: Boolean;
 begin
   Result := (not FSourceHasAlpha) and (not FOverlayVisible) and
-    (not FSeekBarVisible) and (not FSeekPreviewVisible) and
+    ((not FSeekBarVisible) or FPlaybackActive) and (not FSeekPreviewVisible) and
     (not FSafeAreaVisible) and (not FLoadingActive) and
     (FZoomScale <= MIN_ZOOM) and
     ((FPreviousFileButton = nil) or (not FPreviousFileButton.Visible)) and
     ((FNextFileButton = nil) or (not FNextFileButton.Visible));
+end;
+
+function TVideoMinerVideoSurface.PrepareD3DFramePresentation: Boolean;
+begin
+  Result := CanUseD3DFramePresentation and (ClientWidth > 0) and
+    (ClientHeight > 0) and HandleAllocated;
+  if not Result then
+  begin
+    SetNv12TextureD3DSeekBarOverlay(Default(TD3D11SeekBarOverlayState));
+    Exit;
+  end;
+
+  SetNv12TextureProbeTargetWindow(Handle, ClientWidth, ClientHeight);
+  UpdateD3DSeekBarOverlayState;
 end;
 
 function TVideoMinerVideoSurface.ConsumeZoomFrameRefreshNeeded: Boolean;
@@ -963,6 +982,35 @@ end;
 function TVideoMinerVideoSurface.SeekBarLayoutRect: TRect;
 begin
   Result := ClientRect;
+end;
+
+procedure TVideoMinerVideoSurface.UpdateD3DSeekBarOverlayState;
+var
+  ChapterIndex: Integer;
+  State: TD3D11SeekBarOverlayState;
+  TrackRect: TRect;
+begin
+  FillChar(State, SizeOf(State), 0);
+  if (FSeekBar <> nil) and FPlaybackActive and FSeekBarVisible and
+     (not FSeekPreviewVisible) and (not FSafeAreaVisible) and
+     (not FLoadingActive) then
+  begin
+    FSeekBar.UpdateLayout(SeekBarLayoutRect);
+    TrackRect := FSeekBar.CurrentTrackRect;
+    State.Visible := (FSeekBar.MaxMs > 0) and (not FSeekBar.BoundsRect.IsEmpty) and
+      (not TrackRect.IsEmpty);
+    State.Bounds := FSeekBar.BoundsRect;
+    State.Track := TrackRect;
+    State.PositionMs := FSeekBar.CurrentDisplayPositionMs;
+    State.MaxMs := FSeekBar.MaxMs;
+    SetLength(State.Chapters, Length(FSeekBar.Chapters));
+    for ChapterIndex := 0 to High(State.Chapters) do
+    begin
+      State.Chapters[ChapterIndex].PositionMs := FSeekBar.Chapters[ChapterIndex].PositionMs;
+      State.Chapters[ChapterIndex].Severity := Ord(FSeekBar.Chapters[ChapterIndex].Severity);
+    end;
+  end;
+  SetNv12TextureD3DSeekBarOverlay(State);
 end;
 
 function TVideoMinerVideoSurface.CanStartPan(const Point: TPoint): Boolean;

@@ -6,7 +6,22 @@
 interface
 
 uses
-  Winapi.Windows, FFmpegApi;
+  Winapi.Windows, System.Types, FFmpegApi;
+
+type
+  TD3D11SeekBarOverlayChapter = record
+    PositionMs : Integer; // シークバー上に出すチャプター位置 ms
+    Severity   : Integer; // 0=green, 1=yellow, 2=red
+  end;
+
+  TD3D11SeekBarOverlayState = record
+    Visible        : Boolean; // D3D 側で簡易 seek bar を描くか
+    Bounds         : TRect;   // 下部バー全体の client 座標
+    Track          : TRect;   // progress track の client 座標
+    PositionMs     : Integer; // 表示する現在位置 ms
+    MaxMs          : Integer; // 動画長 ms
+    Chapters       : TArray<TD3D11SeekBarOverlayChapter>; // D3D 側で描くチャプター目盛り
+  end;
 
 // NV12 frame を D3D11 texture へアップロードし、計測ログを出す。
 procedure ProbeNv12TextureUpload(Frame: PAVFrame);
@@ -16,12 +31,13 @@ function Nv12TextureD3DDisplayEnabled: Boolean;
 function Nv12TextureD3DFramePresented: Boolean;
 procedure ClearNv12TextureD3DFramePresented;
 procedure SetNv12TextureD3DDisplayAllowed(Allowed: Boolean);
+procedure SetNv12TextureD3DSeekBarOverlay(const State: TD3D11SeekBarOverlayState);
 
 implementation
 
 uses
   Winapi.D3D11, Winapi.D3DCommon, Winapi.D3DCompiler, Winapi.DXGI, Winapi.DxgiFormat,
-  Winapi.DxgiType, System.Diagnostics, System.SysUtils, VideoMinerDebugLog;
+  Winapi.DxgiType, System.Diagnostics, System.Math, System.SysUtils, VideoMinerDebugLog;
 
 type
   TNv12TextureProbe = class
@@ -42,6 +58,10 @@ type
     FDisplayRenderView: ID3D11RenderTargetView; // 実表示 backbuffer view
     FVertexShader   : ID3D11VertexShader;  // fullscreen triangle vertex shader
     FPixelShader    : ID3D11PixelShader;   // NV12 -> RGB pixel shader
+    FRectVertexShader  : ID3D11VertexShader; // overlay 矩形描画用 vertex shader
+    FRectPixelShader   : ID3D11PixelShader;  // overlay 矩形描画用 pixel shader
+    FRectConstantBuffer: ID3D11Buffer;        // overlay 矩形描画用 constant buffer
+    FAlphaBlendState   : ID3D11BlendState;    // overlay 半透明合成用 blend state
     FSampler        : ID3D11SamplerState;  // texture sampler
     FTargetWindow   : HWND;                // Present 計測先 HWND
     FTargetWidth    : Integer;             // Present 計測先幅
@@ -64,6 +84,7 @@ type
     function EnsurePlaneTextures(Width, Height: Integer; out Recreated: Boolean;
       out ErrorMessage: string): Boolean;
     function EnsureShaderPipeline(Width, Height: Integer; out ErrorMessage: string): Boolean;
+    function EnsureRectPipeline(out ErrorMessage: string): Boolean;
     function EnsureProbeWindow(out ErrorMessage: string): Boolean;
     function EnsureSwapChain(out Recreated: Boolean; out ErrorMessage: string): Boolean;
     function EnsureDisplaySwapChain(out Recreated: Boolean; out ErrorMessage: string): Boolean;
@@ -71,6 +92,8 @@ type
     procedure ProbePlaneTextures(Frame: PAVFrame);
     procedure ProbeShaderDraw(Frame: PAVFrame);
     procedure ProbeSwapChainPresent(Frame: PAVFrame);
+    procedure DrawOverlayRect(const Rect: TRect; R, G, B, A: Single);
+    function DrawSeekBarOverlay(const State: TD3D11SeekBarOverlayState): Double;
   public
     destructor Destroy; override;
     procedure Probe(Frame: PAVFrame);
@@ -82,6 +105,7 @@ var
   GlobalProbe: TNv12TextureProbe;
   GlobalD3DDisplayAllowed: Boolean;
   GlobalD3DFramePresented: Boolean;
+  GlobalD3DSeekBarOverlay: TD3D11SeekBarOverlayState;
 
 function TextureProbeEnabled: Boolean;
 begin
@@ -114,6 +138,12 @@ end;
 procedure SetNv12TextureD3DDisplayAllowed(Allowed: Boolean);
 begin
   GlobalD3DDisplayAllowed := Allowed;
+end;
+
+procedure SetNv12TextureD3DSeekBarOverlay(const State: TD3D11SeekBarOverlayState);
+begin
+  GlobalD3DSeekBarOverlay := State;
+  GlobalD3DSeekBarOverlay.Chapters := Copy(State.Chapters);
 end;
 
 function TNv12TextureProbe.EnsureDevice(out ErrorMessage: string): Boolean;
@@ -394,6 +424,105 @@ begin
   begin
     ErrorMessage := Format('CreateRenderTargetView failed. HRESULT=$%.8x', [Cardinal(Ret)]);
     Exit;
+  end;
+
+  Result := True;
+end;
+
+function TNv12TextureProbe.EnsureRectPipeline(out ErrorMessage: string): Boolean;
+const
+  RECT_VERTEX_SHADER_SOURCE: AnsiString =
+    'cbuffer RectConstants : register(b0) {' + #10 +
+    '  float4 rectPx;' + #10 +
+    '  float4 targetPx;' + #10 +
+    '  float4 color;' + #10 +
+    '};' + #10 +
+    'struct VSOut { float4 pos : SV_Position; float4 color : COLOR0; };' + #10 +
+    'VSOut main(uint id : SV_VertexID) {' + #10 +
+    '  float2 p0 = rectPx.xy;' + #10 +
+    '  float2 p1 = rectPx.zw;' + #10 +
+    '  float2 pos[6] = { p0, float2(p1.x, p0.y), float2(p0.x, p1.y),' + #10 +
+    '                    float2(p0.x, p1.y), float2(p1.x, p0.y), p1 };' + #10 +
+    '  float2 ndc = float2(pos[id].x / targetPx.x * 2.0 - 1.0,' + #10 +
+    '                      1.0 - pos[id].y / targetPx.y * 2.0);' + #10 +
+    '  VSOut o; o.pos = float4(ndc, 0.0, 1.0); o.color = color; return o;' + #10 +
+    '}';
+  RECT_PIXEL_SHADER_SOURCE: AnsiString =
+    'float4 main(float4 pos : SV_Position, float4 color : COLOR0) : SV_Target {' + #10 +
+    '  return color;' + #10 +
+    '}';
+var
+  BlendDesc: D3D11_BLEND_DESC;
+  BufferDesc: D3D11_BUFFER_DESC;
+  PixelBlob: ID3DBlob;
+  Ret: HRESULT;
+  TempRectVertexShader: ID3D11VertexShader;
+  VertexBlob: ID3DBlob;
+begin
+  Result := False;
+  ErrorMessage := '';
+
+  if not Assigned(FRectVertexShader) then
+  begin
+    if not CompileShader(RECT_VERTEX_SHADER_SOURCE, 'main', 'vs_4_0',
+      VertexBlob, ErrorMessage) then
+      Exit;
+    TempRectVertexShader := nil;
+    Ret := FDevice.CreateVertexShader(VertexBlob.GetBufferPointer,
+      VertexBlob.GetBufferSize, nil, @TempRectVertexShader);
+    if not Succeeded(Ret) then
+    begin
+      ErrorMessage := Format('CreateVertexShader rect failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+      Exit;
+    end;
+    FRectVertexShader := TempRectVertexShader;
+  end;
+
+  if not Assigned(FRectPixelShader) then
+  begin
+    if not CompileShader(RECT_PIXEL_SHADER_SOURCE, 'main', 'ps_4_0',
+      PixelBlob, ErrorMessage) then
+      Exit;
+    Ret := FDevice.CreatePixelShader(PixelBlob.GetBufferPointer,
+      PixelBlob.GetBufferSize, nil, FRectPixelShader);
+    if not Succeeded(Ret) then
+    begin
+      ErrorMessage := Format('CreatePixelShader rect failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+      Exit;
+    end;
+  end;
+
+  if not Assigned(FRectConstantBuffer) then
+  begin
+    FillChar(BufferDesc, SizeOf(BufferDesc), 0);
+    BufferDesc.ByteWidth := 48;
+    BufferDesc.Usage := D3D11_USAGE_DEFAULT;
+    BufferDesc.BindFlags := D3D11_BIND_CONSTANT_BUFFER;
+    Ret := FDevice.CreateBuffer(BufferDesc, nil, FRectConstantBuffer);
+    if not Succeeded(Ret) then
+    begin
+      ErrorMessage := Format('CreateBuffer rect constants failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+      Exit;
+    end;
+  end;
+
+  if not Assigned(FAlphaBlendState) then
+  begin
+    FillChar(BlendDesc, SizeOf(BlendDesc), 0);
+    BlendDesc.RenderTarget[0].BlendEnable := True;
+    BlendDesc.RenderTarget[0].SrcBlend := D3D11_BLEND_SRC_ALPHA;
+    BlendDesc.RenderTarget[0].DestBlend := D3D11_BLEND_INV_SRC_ALPHA;
+    BlendDesc.RenderTarget[0].BlendOp := D3D11_BLEND_OP_ADD;
+    BlendDesc.RenderTarget[0].SrcBlendAlpha := D3D11_BLEND_ONE;
+    BlendDesc.RenderTarget[0].DestBlendAlpha := D3D11_BLEND_INV_SRC_ALPHA;
+    BlendDesc.RenderTarget[0].BlendOpAlpha := D3D11_BLEND_OP_ADD;
+    BlendDesc.RenderTarget[0].RenderTargetWriteMask := Byte(D3D11_COLOR_WRITE_ENABLE_ALL);
+    Ret := FDevice.CreateBlendState(BlendDesc, FAlphaBlendState);
+    if not Succeeded(Ret) then
+    begin
+      ErrorMessage := Format('CreateBlendState rect failed. HRESULT=$%.8x', [Cardinal(Ret)]);
+      Exit;
+    end;
   end;
 
   Result := True;
@@ -779,6 +908,106 @@ begin
      TotalWatch.Elapsed.TotalMilliseconds]));
 end;
 
+procedure TNv12TextureProbe.DrawOverlayRect(const Rect: TRect; R, G, B, A: Single);
+type
+  TRectConstants = record
+    RectPx  : array[0..3] of Single;
+    TargetPx: array[0..3] of Single;
+    Color   : array[0..3] of Single;
+  end;
+var
+  BlendFactor: TFourSingleArray;
+  Constants: TRectConstants;
+begin
+  if Rect.IsEmpty or (FTargetWidth <= 0) or (FTargetHeight <= 0) then
+    Exit;
+
+  Constants.RectPx[0] := Rect.Left;
+  Constants.RectPx[1] := Rect.Top;
+  Constants.RectPx[2] := Rect.Right;
+  Constants.RectPx[3] := Rect.Bottom;
+  Constants.TargetPx[0] := FTargetWidth;
+  Constants.TargetPx[1] := FTargetHeight;
+  Constants.TargetPx[2] := 0;
+  Constants.TargetPx[3] := 0;
+  Constants.Color[0] := R;
+  Constants.Color[1] := G;
+  Constants.Color[2] := B;
+  Constants.Color[3] := A;
+
+  FDeviceContext.UpdateSubresource(FRectConstantBuffer, 0, nil, @Constants, 0, 0);
+  FDeviceContext.IASetInputLayout(nil);
+  FDeviceContext.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  FDeviceContext.VSSetShader(FRectVertexShader, nil, 0);
+  FDeviceContext.VSSetConstantBuffers(0, 1, FRectConstantBuffer);
+  FDeviceContext.PSSetShader(FRectPixelShader, nil, 0);
+  FDeviceContext.PSSetConstantBuffers(0, 1, FRectConstantBuffer);
+  FillChar(BlendFactor, SizeOf(BlendFactor), 0);
+  FDeviceContext.OMSetBlendState(FAlphaBlendState, BlendFactor, $FFFFFFFF);
+  FDeviceContext.Draw(6, 0);
+end;
+
+function TNv12TextureProbe.DrawSeekBarOverlay(
+  const State: TD3D11SeekBarOverlayState): Double;
+var
+  Chapter: TD3D11SeekBarOverlayChapter;
+  ErrorMessage: string;
+  FilledRect: TRect;
+  KnobRect: TRect;
+  MarkerRect: TRect;
+  MarkerX: Integer;
+  PositionRatio: Double;
+  StepWatch: TStopwatch;
+  TrackRect: TRect;
+  BlendFactor: TFourSingleArray;
+begin
+  Result := 0;
+  if (not State.Visible) or State.Bounds.IsEmpty or State.Track.IsEmpty or
+     (State.MaxMs <= 0) then
+    Exit;
+  if not EnsureRectPipeline(ErrorMessage) then
+  begin
+    LogErrorOnce(ErrorMessage);
+    Exit;
+  end;
+
+  StepWatch := TStopwatch.StartNew;
+  FDeviceContext.OMSetRenderTargets(1, FDisplayRenderView, nil);
+  DrawOverlayRect(State.Bounds, 0, 0, 0, 0.38);
+
+  TrackRect := State.Track;
+  DrawOverlayRect(TrackRect, 1, 1, 1, 0.34);
+
+  PositionRatio := State.PositionMs / State.MaxMs;
+  PositionRatio := Max(0.0, Min(1.0, PositionRatio));
+  MarkerX := TrackRect.Left + Round(TrackRect.Width * PositionRatio);
+  FilledRect := TrackRect;
+  FilledRect.Right := Max(FilledRect.Left + 1, MarkerX);
+  DrawOverlayRect(FilledRect, 0.25, 0.63, 0.94, 0.90);
+
+  for Chapter in State.Chapters do
+  begin
+    if (Chapter.PositionMs < 0) or (Chapter.PositionMs > State.MaxMs) then
+      Continue;
+    MarkerX := TrackRect.Left + Round(TrackRect.Width * Chapter.PositionMs / State.MaxMs);
+    MarkerRect := Rect(MarkerX - 1, TrackRect.Top - 5, MarkerX + 2, TrackRect.Bottom + 8);
+    case Chapter.Severity of
+      2: DrawOverlayRect(MarkerRect, 0.93, 0.20, 0.18, 0.95);
+      1: DrawOverlayRect(MarkerRect, 0.95, 0.78, 0.20, 0.95);
+    else
+      DrawOverlayRect(MarkerRect, 0.18, 0.85, 0.38, 0.95);
+    end;
+  end;
+
+  MarkerX := TrackRect.Left + Round(TrackRect.Width * PositionRatio);
+  KnobRect := Rect(MarkerX - 7, TrackRect.Top - 5, MarkerX + 7, TrackRect.Bottom + 6);
+  DrawOverlayRect(KnobRect, 0.25, 0.63, 0.94, 1.0);
+
+  FillChar(BlendFactor, SizeOf(BlendFactor), 0);
+  FDeviceContext.OMSetBlendState(nil, BlendFactor, $FFFFFFFF);
+  Result := StepWatch.Elapsed.TotalMilliseconds;
+end;
+
 function TNv12TextureProbe.PresentFrame(Frame: PAVFrame): Boolean;
 var
   ChromaHeight : Integer;    // NV12 UV plane の高さ
@@ -788,6 +1017,7 @@ var
   ErrorMessage : string;     // D3D 表示失敗理由
   PresentMs    : Double;     // Present 呼び出し時間
   Recreated    : Boolean;    // swap chain を今回作り直したか
+  OverlayMs    : Double;     // D3D overlay 描画時間
   ResourceViews: array[0..1] of ID3D11ShaderResourceView;
   StepWatch    : TStopwatch; // 各 step の計測
   TotalWatch   : TStopwatch; // D3D 表示全体の計測
@@ -826,6 +1056,8 @@ begin
     LogErrorOnce(ErrorMessage);
     Exit;
   end;
+  if not EnsureRectPipeline(ErrorMessage) then
+    LogErrorOnce(ErrorMessage);
 
   TotalWatch := TStopwatch.StartNew;
   ChromaHeight := (Frame.height + 1) div 2;
@@ -881,6 +1113,8 @@ begin
   FDeviceContext.Draw(3, 0);
   DrawMs := StepWatch.Elapsed.TotalMilliseconds;
 
+  OverlayMs := DrawSeekBarOverlay(GlobalD3DSeekBarOverlay);
+
   StepWatch := TStopwatch.StartNew;
   FDisplaySwapChain.Present(0, 0);
   PresentMs := StepWatch.Elapsed.TotalMilliseconds;
@@ -888,12 +1122,13 @@ begin
   GlobalD3DFramePresented := True;
   Result := True;
   WriteVideoMinerSlowLog(Format(
-    'd3d11_display_present frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d y_stride=%d uv_stride=%d range=%d space=%d recreated=%s upload_ms=%.3f clear_ms=%.3f draw_ms=%.3f present_ms=%.3f total_ms=%.3f',
+    'd3d11_display_present frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d y_stride=%d uv_stride=%d range=%d space=%d recreated=%s overlay=%s upload_ms=%.3f clear_ms=%.3f draw_ms=%.3f overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
     [Frame.width, Frame.height, FTargetWidth, FTargetHeight,
      ViewLeft, ViewTop, ViewLeft + ViewWidth, ViewTop + ViewHeight,
      Frame.linesize[0], Frame.linesize[1], Frame.color_range,
-     Frame.colorspace, BoolToStr(Recreated, True), UploadMs, ClearMs,
-     DrawMs, PresentMs, TotalWatch.Elapsed.TotalMilliseconds]));
+     Frame.colorspace, BoolToStr(Recreated, True),
+     BoolToStr(GlobalD3DSeekBarOverlay.Visible, True), UploadMs, ClearMs,
+     DrawMs, OverlayMs, PresentMs, TotalWatch.Elapsed.TotalMilliseconds]));
 end;
 
 procedure TNv12TextureProbe.Probe(Frame: PAVFrame);

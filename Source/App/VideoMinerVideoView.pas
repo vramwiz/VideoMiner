@@ -967,7 +967,7 @@ begin
 
   EffectiveRotation := DisplayRotationDegrees(Decoder.Info.RotationDegrees);
   D3DAllowed := ConvertFrame and (EffectiveRotation = 0) and
-    (not FLoopFrameCaptureActive) and FSurface.CanUseD3DFramePresentation;
+    (not FLoopFrameCaptureActive) and FSurface.PrepareD3DFramePresentation;
   SetNv12TextureD3DDisplayAllowed(D3DAllowed);
 {$IFDEF DEBUG}
   if ConvertFrame then

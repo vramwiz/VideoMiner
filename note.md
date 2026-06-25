@@ -43,19 +43,15 @@
      - 動画は D3D11 swap chain backbuffer へ `Present` している。
      - overlay / seek bar / seek preview は VCL/GDI で同じ HWND へ描いている。
      - D3D backbuffer の上へ GDI を直接重ねると、次の D3D `Present` で上書きされてちらつく。
-     - そのため上物表示が必要な状態では `CanUseD3DFramePresentation=False` になり、CPU BGRX32 + GDI 経路へ退避している。
-   - 次の本命は D3D overlay 化。
+     - そのため上物表示が必要な状態では原則 `CanUseD3DFramePresentation=False` になり、CPU BGRX32 + GDI 経路へ退避している。
+     - 例外として、再生中の簡易 seek bar は D3D backbuffer へ合成できるようにした。
+   - D3D overlay 化の現状。
      - 発想は「仮想画面」ではなく、同じ D3D 描画パスで動画と UI を backbuffer 上に合成し、最後に 1 回だけ `Present` する形。
-     - 最初は全部を置き換えず、D3D 実表示中だけ簡易 seek bar を D3D 側で描く。
      - 入力判定、位置計算、進捗値、ドラッグ/ホイールのイベント処理は既存の `TVideoMinerOverlaySeekBar` / `TVideoMinerVideoSurface` 側を使い回す。
-     - 描画だけを D3D 側へ渡す。最低限は下部バー背景、再生位置、hover/drag位置、チャプター目盛り程度でよい。テキスト、アイコン、細かいボタンは後回し。
-     - D3D seek bar が出せるようになったら、`CanUseD3DFramePresentation` から `FSeekBarVisible` だけを外せるか試す。
-     - クリック/ドラッグ中の表示も D3D overlay で足りるなら、シーク操作中も CPU BGRX32 変換を避けられる可能性がある。
-   - D3D overlay 化の実装入口候補:
-     - `FFmpegD3D11TextureProbe.pas` の `PresentNv12TextureFrame` / `TVideoMinerD3D11TextureProbe.PresentDisplayFrame` 周辺へ、動画描画後・`Present` 前に overlay 用 draw call を足す。
-     - まずは shader を増やさず、単色矩形を描く専用 pass を追加するのが安全。動的 vertex buffer か小さな constant buffer で矩形を渡す。
-     - `TVideoMinerVideoSurface` から D3D 側へ seek bar state を渡す関数を作る。例: target HWND/client size、visible、progress/max、hover/drag position、chapter positions。
-     - GDI と D3D の同時描画は避ける。D3D seek bar 表示中は VCL `Paint` 側の seek bar 描画を止める。
+     - `FFmpegD3D11TextureProbe.pas` に単色矩形 overlay pass を追加し、動画描画後・`Present` 前に下部バー背景、再生位置、チャプター目盛り、ノブを描くようにした。
+     - `TVideoMinerVideoSurface` から D3D 側へ seek bar state を渡す。
+     - D3D seek bar 表示中は VCL `Paint` 側の seek bar 描画を止め、`paint_skip_d3d_frame` のまま D3D 表示を継続する。
+     - 次はテキスト、ボタン、音量 UI、hover 状態などを D3D 側へどこまで持っていくか決める。
    - D3D overlay 化のデバッグ方法:
      - テストファイルは `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4`。
      - Debug Win64 / `VIDEOMINER_D3D11_DISPLAY=1` / `VIDEOMINER_DEBUG_LOG=1` / `VIDEOMINER_SLOW_LOG=1` で確認する。

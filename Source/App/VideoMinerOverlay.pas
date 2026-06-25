@@ -253,6 +253,8 @@ type
     function MouseDown(const Point: TPoint): Boolean; override;
     function MouseMove(const Point: TPoint): Boolean; override;
     function MouseUp(const Point: TPoint): Boolean; override;
+    function CurrentDisplayPositionMs: Integer;
+    function CurrentTrackRect: TRect;
     function HoverPositionFromPoint(const Point: TPoint; out PositionMs: Integer): Boolean;
     procedure SetProgress(PositionMs, MaxMs: Integer);
     function WheelPosition(WheelDelta, StepMs: Integer): Integer;
@@ -262,6 +264,7 @@ type
     property EndActionText: string read FEndActionText write SetEndActionText;
     property FullScreen: Boolean read FFullScreen write SetFullScreen;
     property FrameStepMs: Integer read FFrameStepMs write SetFrameStepMs;
+    property MaxMs: Integer read FMaxMs;
     property OnAddChapterClick: TNotifyEvent read FOnAddChapterClick write FOnAddChapterClick;
     property OnCheckClick: TNotifyEvent read FOnCheckClick write FOnCheckClick;
     property OnDeleteChapterClick: TNotifyEvent read FOnDeleteChapterClick write FOnDeleteChapterClick;
@@ -2012,6 +2015,18 @@ begin
   FHovered := BoundsHitTest(Point);
   if Assigned(FOnSeek) then
     FOnSeek(Self, SeekPositionMs);
+end;
+
+function TVideoMinerOverlaySeekBar.CurrentDisplayPositionMs: Integer;
+begin
+  Result := DisplayPositionMs;
+end;
+
+function TVideoMinerOverlaySeekBar.CurrentTrackRect: TRect;
+begin
+  Result := TrackRect;
+  if not Result.IsEmpty then
+    OffsetRect(Result, Bounds.Left, Bounds.Top);
 end;
 
 procedure TVideoMinerOverlaySeekBar.PaintControl(Canvas: TCanvas);
