@@ -58,11 +58,14 @@ type
     // 全チャプターと自動チェック継続状態をクリアする
     procedure Clear;
     // 指定位置に手動チャプターを追加する
-    procedure AddManualChapter(PositionMs, MaxMs: Integer);
+    procedure AddManualChapter(PositionMs, MaxMs: Integer;
+      MergeNearMs: Integer = 0);
     // 指定位置に最も近い手動チャプターを削除する
-    function DeleteNearestManualChapter(PositionMs, MaxMs: Integer): Boolean;
+    function DeleteNearestManualChapter(PositionMs, MaxMs: Integer;
+      NearMs: Integer = 3000): Boolean;
     // 指定位置に重なっている手動チャプターを削除する
-    function DeleteManualChapterAt(PositionMs, MaxMs: Integer): Boolean;
+    function DeleteManualChapterAt(PositionMs, MaxMs: Integer;
+      NearMs: Integer = 300): Boolean;
     // Check ON/OFF を切り替え、OFF では自動チェック継続状態を初期化する
     function ToggleCheckEnabled: Boolean;
     // 黒フレーム継続を自動チェックし、必要なら候補チャプターを追加する
@@ -164,13 +167,25 @@ begin
   Result := (Chapter.Source = chsUser) or FCheckEnabled;
 end;
 
-procedure TVideoMinerChapterManager.AddManualChapter(PositionMs, MaxMs: Integer);
+procedure TVideoMinerChapterManager.AddManualChapter(PositionMs, MaxMs,
+  MergeNearMs: Integer);
 var
   Chapter: TVideoMinerOverlayChapter;
   Index: Integer;
 begin
   if MaxMs <= 0 then
     Exit;
+  if (MergeNearMs > 0) and
+     DeleteNearestManualChapterWithin(PositionMs, MaxMs, MergeNearMs) then
+  begin
+    Chapter.PositionMs := Max(0, Min(MaxMs, PositionMs));
+    Chapter.Severity := csGreen;
+    Chapter.Source := chsUser;
+    Index := Length(FChapters);
+    SetLength(FChapters, Index + 1);
+    FChapters[Index] := Chapter;
+    Exit;
+  end;
 
   Chapter.PositionMs := Max(0, Min(MaxMs, PositionMs));
   Chapter.Severity := csGreen;
@@ -181,17 +196,19 @@ begin
 end;
 
 function TVideoMinerChapterManager.DeleteNearestManualChapter(
-  PositionMs, MaxMs: Integer): Boolean;
+  PositionMs, MaxMs, NearMs: Integer): Boolean;
 begin
-  Result := DeleteNearestManualChapterWithin(PositionMs, MaxMs,
-    MANUAL_DELETE_NEAR_MS);
+  if NearMs <= 0 then
+    NearMs := MANUAL_DELETE_NEAR_MS;
+  Result := DeleteNearestManualChapterWithin(PositionMs, MaxMs, NearMs);
 end;
 
 function TVideoMinerChapterManager.DeleteManualChapterAt(
-  PositionMs, MaxMs: Integer): Boolean;
+  PositionMs, MaxMs, NearMs: Integer): Boolean;
 begin
-  Result := DeleteNearestManualChapterWithin(PositionMs, MaxMs,
-    MANUAL_TOGGLE_NEAR_MS);
+  if NearMs <= 0 then
+    NearMs := MANUAL_TOGGLE_NEAR_MS;
+  Result := DeleteNearestManualChapterWithin(PositionMs, MaxMs, NearMs);
 end;
 
 function TVideoMinerChapterManager.DeleteNearestManualChapterWithin(

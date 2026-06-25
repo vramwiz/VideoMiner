@@ -22,6 +22,7 @@ type
     FOnConfigureLoop: TVideoMinerChapterPositionProc;
     FOnCurrentPosition: TVideoMinerChapterPositionFunc;
     function CurrentPositionMs: Integer;
+    function ManualChapterPixelNearMs: Integer;
     procedure ChapterStateChanged(SaveManualState: Boolean);
   public
     constructor Create(AMediaSession: TVideoMinerMediaSession;
@@ -52,6 +53,9 @@ type
 
 implementation
 
+const
+  MANUAL_CHAPTER_NEAR_PIXELS = 8; // 画面上で同じ marker とみなす近さ
+
 constructor TVideoMinerChapterController.Create(
   AMediaSession: TVideoMinerMediaSession; AVideoView: TVideoMinerVideoView);
 begin
@@ -72,7 +76,8 @@ begin
   if FManager = nil then
     Exit;
 
-  FManager.AddManualChapter(CurrentPositionMs, FMediaSession.SeekMaxMs);
+  FManager.AddManualChapter(CurrentPositionMs, FMediaSession.SeekMaxMs,
+    ManualChapterPixelNearMs);
   ChapterStateChanged(True);
 end;
 
@@ -105,13 +110,21 @@ begin
     Result := FMediaSession.SeekPositionMs;
 end;
 
+function TVideoMinerChapterController.ManualChapterPixelNearMs: Integer;
+begin
+  Result := 0;
+  if FVideoView <> nil then
+    Result := FVideoView.ChapterMarkerToleranceMs(FMediaSession.SeekMaxMs,
+      MANUAL_CHAPTER_NEAR_PIXELS);
+end;
+
 procedure TVideoMinerChapterController.DeleteChapterClick(Sender: TObject);
 begin
   if FManager = nil then
     Exit;
 
   if not FManager.DeleteNearestManualChapter(CurrentPositionMs,
-    FMediaSession.SeekMaxMs) then
+    FMediaSession.SeekMaxMs, ManualChapterPixelNearMs) then
     Exit;
 
   ChapterStateChanged(True);
@@ -241,8 +254,10 @@ begin
   if (FManager = nil) or (FMediaSession.SeekMaxMs <= 0) then
     Exit;
 
-  if not FManager.DeleteManualChapterAt(PositionMs, FMediaSession.SeekMaxMs) then
-    FManager.AddManualChapter(PositionMs, FMediaSession.SeekMaxMs);
+  if not FManager.DeleteManualChapterAt(PositionMs, FMediaSession.SeekMaxMs,
+    ManualChapterPixelNearMs) then
+    FManager.AddManualChapter(PositionMs, FMediaSession.SeekMaxMs,
+      ManualChapterPixelNearMs);
   ChapterStateChanged(True);
 end;
 

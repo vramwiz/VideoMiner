@@ -76,6 +76,7 @@ type
     FPreviewRect            : TRect;                             // 動画フレームが実際に描画される領域
     FSafeAreaVisible        : Boolean;                           // 90% セーフエリア確認枠を表示中か
     FSeekBar                : TVideoMinerOverlaySeekBar;         // 下側のシーク/音量/状態操作バー
+    FSeekBarLastHitTick     : UInt64;                            // シークバー hover 維持用の最終ヒット tick
     FSeekBarVisible         : Boolean;                           // 下側シークバーを表示中か
     FSeekPreviewAnchor      : TPoint;                            // hover プレビューを寄せるクライアント座標
     FSeekPreviewBitmap      : TBitmap;                           // シークバー hover 用の小型プレビュー
@@ -117,6 +118,8 @@ type
 {$ENDIF}
     // クライアント領域内に動画全体が収まる描画矩形を返す
     function FitRect: TRect;
+    // 中央 overlay ボタン群の配置を現在の動画表示矩形へ合わせる
+    procedure UpdateCenterOverlayButtonLayouts;
     // 中央 overlay ボタン群に当たっているか返す
     function HitAnyOverlayButton(const Point: TPoint): Boolean;
     // 下側シークバーに当たっているか返す
@@ -257,6 +260,8 @@ type
     function CurrentFrameCornersMostlyDark: Boolean;
     // 現在表示中フレームの簡易署名を返す
     function CurrentFrameSignature(out Signature: TVideoMinerFrameSignature): Boolean;
+    // シークバー上の指定 pixel 幅を動画時間 ms へ変換する
+    function ChapterMarkerToleranceMs(MaxMs, PixelTolerance: Integer): Integer;
     // D3D11 直接表示で動画本体だけを描いてよい状態か返す
     function CanUseD3DFramePresentation: Boolean;
     // D3D11 直接表示直前に target window と overlay 座標を同期する
@@ -339,6 +344,7 @@ const
   WHEEL_ZOOM_STEP       = 1.20; // ホイール 1 ノッチあたりのズーム倍率
   ALPHA_CHECK_SIZE      = 16;   // alpha 確認表示の市松模様 1 マス px
   HIDE_LEGACY_SEEK_BAR_PAINT = True; // D3D seek bar 移行中は旧 GDI seek bar を描かない
+  HIDE_LEGACY_CENTER_OVERLAY_PAINT = True; // 中央操作も D3D overlay 側へ寄せる
   SEEK_PREVIEW_WIDTH    = 160;  // シークバー hover プレビューの標準幅 px
   SEEK_PREVIEW_MARGIN   = 8;    // シークバー hover プレビューの余白 px
   LOADING_TIMER_MS      = 80;    // 読み込み中インジケータを進める間隔 ms
@@ -546,8 +552,6 @@ begin
   Result := '';
   if FSourceHasAlpha then
     Result := 'source_has_alpha'
-  else if FOverlayVisible then
-    Result := 'center_overlay_visible'
   else if FSeekPreviewVisible then
     Result := 'seek_preview_visible'
   else if FSafeAreaVisible then
@@ -1077,6 +1081,7 @@ end;
 
 function TVideoMinerVideoSurface.HitAnyOverlayButton(const Point: TPoint): Boolean;
 begin
+  UpdateCenterOverlayButtonLayouts;
   Result :=
     ((FFirstFrameButton <> nil) and FFirstFrameButton.BoundsHitTest(Point)) or
     ((FSkipBackwardButton <> nil) and FSkipBackwardButton.BoundsHitTest(Point)) or
@@ -1099,15 +1104,64 @@ begin
 end;
 
 function TVideoMinerVideoSurface.HitSeekBar(const Point: TPoint): Boolean;
+var
+  HitRect: TRect;
 begin
   if FSeekBar <> nil then
     FSeekBar.UpdateLayout(SeekBarLayoutRect);
   Result := (FSeekBar <> nil) and FSeekBar.BoundsHitTest(Point);
+  if (not Result) and FSeekBarVisible and (FSeekBar <> nil) then
+  begin
+    HitRect := FSeekBar.BoundsRect;
+    InflateRect(HitRect, 12, 18);
+    Result := PtInRect(HitRect, Point);
+  end;
+end;
+
+function TVideoMinerVideoSurface.ChapterMarkerToleranceMs(MaxMs,
+  PixelTolerance: Integer): Integer;
+var
+  TrackRect: TRect;
+begin
+  Result := 0;
+  if (FSeekBar = nil) or (MaxMs <= 0) or (PixelTolerance <= 0) then
+    Exit;
+
+  FSeekBar.UpdateLayout(SeekBarLayoutRect);
+  TrackRect := FSeekBar.CurrentTrackRect;
+  if TrackRect.Width <= 0 then
+    Exit;
+
+  Result := Ceil(Int64(MaxMs) * PixelTolerance / TrackRect.Width);
+  Result := Max(1, Result);
 end;
 
 function TVideoMinerVideoSurface.SeekBarLayoutRect: TRect;
 begin
-  Result := ClientRect;
+  Result := FitRect;
+  if Result.IsEmpty then
+    Result := ClientRect;
+end;
+
+procedure TVideoMinerVideoSurface.UpdateCenterOverlayButtonLayouts;
+var
+  PreviewRect: TRect;
+begin
+  PreviewRect := FitRect;
+  if PreviewRect.IsEmpty then
+    Exit;
+
+  FPreviewRect := PreviewRect;
+  if FFirstFrameButton <> nil then
+    FFirstFrameButton.UpdateLayout(PreviewRect);
+  if FSkipBackwardButton <> nil then
+    FSkipBackwardButton.UpdateLayout(PreviewRect);
+  if FPlayPauseButton <> nil then
+    FPlayPauseButton.UpdateLayout(PreviewRect);
+  if FSkipForwardButton <> nil then
+    FSkipForwardButton.UpdateLayout(PreviewRect);
+  if FLastFrameButton <> nil then
+    FLastFrameButton.UpdateLayout(PreviewRect);
 end;
 
 procedure TVideoMinerVideoSurface.UpdateD3DSeekBarOverlayState;
@@ -1117,6 +1171,23 @@ var
   TrackRect: TRect;
 begin
   FillChar(State, SizeOf(State), 0);
+  if FOverlayVisible and (not FSeekPreviewVisible) and
+     (not FSafeAreaVisible) and (not FLoadingActive) then
+  begin
+    UpdateCenterOverlayButtonLayouts;
+    State.TransportVisible := True;
+    State.TransportPlaying := FPlaybackActive;
+    if FFirstFrameButton <> nil then
+      State.FirstButton := FFirstFrameButton.BoundsRect;
+    if FSkipBackwardButton <> nil then
+      State.SkipBackwardButton := FSkipBackwardButton.BoundsRect;
+    if FPlayPauseButton <> nil then
+      State.PlayPauseButton := FPlayPauseButton.BoundsRect;
+    if FSkipForwardButton <> nil then
+      State.SkipForwardButton := FSkipForwardButton.BoundsRect;
+    if FLastFrameButton <> nil then
+      State.LastButton := FLastFrameButton.BoundsRect;
+  end;
   if (FSeekBar <> nil) and (FSeekBarVisible or FSeekBar.Dragging) and
      (not FSeekPreviewVisible) and (not FSafeAreaVisible) and
      (not FLoadingActive) then
@@ -1214,6 +1285,8 @@ begin
     FSkipForwardButton.Visible := Value;
   if FLastFrameButton <> nil then
     FLastFrameButton.Visible := Value;
+  UpdateD3DSeekBarOverlayState;
+  RefreshD3DFramePresentation;
   InvalidateAllOverlayControls;
 end;
 
@@ -1251,6 +1324,7 @@ begin
     FSeekBar.Visible := Value;
   if not Value then
   begin
+    FSeekBarLastHitTick := 0;
     FSeekBarHoverPositionMs := -1;
     ClearSeekHoverPreview;
     if Assigned(FOnSeekHoverPreviewEnd) then
@@ -1355,7 +1429,9 @@ procedure TVideoMinerVideoSurface.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   DestRect: TRect;
   HoverPositionMs: Integer;
+  KeepSeekBarVisible: Boolean;
   MousePoint: TPoint;
+  SeekBarHit: Boolean;
   SourceHeight: Double;
   SourceWidth: Double;
 begin
@@ -1398,9 +1474,15 @@ begin
     Exit;
   end;
 
-  SetOverlayVisible((not FPlaybackActive) and HitAnyOverlayButton(MousePoint));
-  SetSeekBarVisible(HitSeekBar(MousePoint) or
-    ((FSeekBar <> nil) and FSeekBar.Dragging));
+  SetOverlayVisible(HitAnyOverlayButton(MousePoint));
+  SeekBarHit := HitSeekBar(MousePoint);
+  if SeekBarHit then
+    FSeekBarLastHitTick := GetTickCount64;
+  KeepSeekBarVisible := SeekBarHit or
+    ((FSeekBar <> nil) and FSeekBar.Dragging) or
+    (FSeekBarVisible and (FSeekBarLastHitTick > 0) and
+      (GetTickCount64 - FSeekBarLastHitTick <= 350));
+  SetSeekBarVisible(KeepSeekBarVisible);
 
   if FPreviousFileButton <> nil then
   begin
@@ -1664,7 +1746,9 @@ var
 {$ENDIF}
   DrawCanvas: TCanvas;
   DestRect: TRect;
+  CenterOverlayDrawnByD3D: Boolean;
   D3DFrameCurrent: Boolean;
+  PaintLegacyCenterOverlay: Boolean;
   SeekBarCompactStyle: Boolean;
   UsePaintBuffer: Boolean;
 begin
@@ -1681,6 +1765,13 @@ begin
   end;
 
   D3DFrameCurrent := Nv12TextureD3DFramePresented and (not FSourceHasAlpha);
+  CenterOverlayDrawnByD3D := D3DFrameCurrent;
+  if (not D3DFrameCurrent) and FOverlayVisible and
+     CanUseD3DFramePresentation and D3DFrameRecentlyPresented then
+  begin
+    D3DFrameCurrent := RefreshD3DFramePresentation;
+    CenterOverlayDrawnByD3D := D3DFrameCurrent;
+  end;
   UsePaintBuffer := FOverlayVisible or FSeekBarVisible or FSeekPreviewVisible or
     ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible) or
     ((FNextFileButton <> nil) and FNextFileButton.Visible);
@@ -1756,23 +1847,25 @@ begin
 
   if (FPreviousFileButton <> nil) and FPreviousFileButton.Visible then
     FPreviousFileButton.Paint(DrawCanvas);
-  if FOverlayVisible and (FFirstFrameButton <> nil) then
+  PaintLegacyCenterOverlay := FOverlayVisible and
+    ((not HIDE_LEGACY_CENTER_OVERLAY_PAINT) or (not CenterOverlayDrawnByD3D));
+  if PaintLegacyCenterOverlay and (FFirstFrameButton <> nil) then
   begin
     FFirstFrameButton.Paint(DrawCanvas);
   end;
-  if FOverlayVisible and (FSkipBackwardButton <> nil) then
+  if PaintLegacyCenterOverlay and (FSkipBackwardButton <> nil) then
   begin
     FSkipBackwardButton.Paint(DrawCanvas);
   end;
-  if FOverlayVisible and (FPlayPauseButton <> nil) then
+  if PaintLegacyCenterOverlay and (FPlayPauseButton <> nil) then
   begin
     FPlayPauseButton.Paint(DrawCanvas);
   end;
-  if FOverlayVisible and (FSkipForwardButton <> nil) then
+  if PaintLegacyCenterOverlay and (FSkipForwardButton <> nil) then
   begin
     FSkipForwardButton.Paint(DrawCanvas);
   end;
-  if FOverlayVisible and (FLastFrameButton <> nil) then
+  if PaintLegacyCenterOverlay and (FLastFrameButton <> nil) then
   begin
     FLastFrameButton.Paint(DrawCanvas);
   end;
@@ -1953,6 +2046,7 @@ begin
   if (FPlayPauseButton <> nil) and (FPlayPauseButton.IsPlaying <> Value) then
   begin
     FPlayPauseButton.IsPlaying := Value;
+    RefreshD3DFramePresentation;
     Invalidate;
   end;
 end;

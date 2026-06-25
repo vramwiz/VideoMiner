@@ -45,6 +45,13 @@ type
     FullScreen     : Boolean; // 全画面表示中か
     FullScreenHovered: Boolean; // 全画面ボタン上にマウスがあるか
     FullScreenPressed: Boolean; // 全画面ボタン押下中か
+    TransportVisible: Boolean; // 中央の再生/シーク操作ボタンを描くか
+    TransportPlaying: Boolean; // 中央ボタンに一時停止アイコンを出すか
+    FirstButton    : TRect;   // 先頭へ移動する中央ボタン
+    SkipBackwardButton: TRect; // 10 秒戻し中央ボタン
+    PlayPauseButton: TRect;   // 再生/一時停止中央ボタン
+    SkipForwardButton: TRect; // 10 秒進み中央ボタン
+    LastButton     : TRect;   // 末尾へ移動する中央ボタン
     Chapters       : TArray<TD3D11SeekBarOverlayChapter>; // D3D 側で描くチャプター目盛り
   end;
 
@@ -152,6 +159,13 @@ type
     procedure DrawSeekBarEndAction(const State: TD3D11SeekBarOverlayState);
     procedure DrawSeekBarChapterButtons(const State: TD3D11SeekBarOverlayState);
     procedure DrawSeekBarFullScreen(const State: TD3D11SeekBarOverlayState);
+    procedure DrawTransportButtonBackground(const ButtonRect: TRect);
+    procedure DrawTransportTriangle(CenterX, CenterY, Width, Height,
+      Direction: Integer; R, G, B, A: Single);
+    procedure DrawTransportEdgeIcon(const ButtonRect: TRect; Forward: Boolean);
+    procedure DrawTransportSkipIcon(const ButtonRect: TRect; Forward: Boolean);
+    procedure DrawTransportPlayPauseIcon(const ButtonRect: TRect; Playing: Boolean);
+    procedure DrawTransportOverlay(const State: TD3D11SeekBarOverlayState);
     function DrawSeekBarOverlay(const State: TD3D11SeekBarOverlayState): Double;
   public
     destructor Destroy; override;
@@ -171,6 +185,7 @@ var
   LastD3DPresentLogTick: UInt64;
   LastD3DPresentOverlayVisible: Boolean;
   LastD3DPresentDragging: Boolean;
+  LastD3DPresentTransportVisible: Boolean;
 
 function TextureProbeEnabled: Boolean;
 begin
@@ -1939,6 +1954,181 @@ begin
   end;
 end;
 
+procedure TNv12TextureProbe.DrawTransportButtonBackground(
+  const ButtonRect: TRect);
+begin
+  if ButtonRect.IsEmpty then
+    Exit;
+
+  DrawOverlayRect(ButtonRect, 0, 0, 0, 0.36);
+end;
+
+procedure TNv12TextureProbe.DrawTransportTriangle(CenterX, CenterY, Width,
+  Height, Direction: Integer; R, G, B, A: Single);
+var
+  HalfHeight: Integer;
+  I: Integer;
+  Ratio: Double;
+  X: Integer;
+begin
+  if (Width <= 0) or (Height <= 0) then
+    Exit;
+
+  for I := 0 to Width - 1 do
+  begin
+    Ratio := (I + 1) / Width;
+    HalfHeight := Max(1, Round(Height * Ratio / 2));
+    if Direction >= 0 then
+      X := CenterX + Width div 2 - I
+    else
+      X := CenterX - Width div 2 + I;
+    DrawOverlayRect(Rect(X, CenterY - HalfHeight, X + 2,
+      CenterY + HalfHeight + 1), R, G, B, A);
+  end;
+end;
+
+procedure TNv12TextureProbe.DrawTransportEdgeIcon(const ButtonRect: TRect;
+  Forward: Boolean);
+var
+  CenterX: Integer;
+  CenterY: Integer;
+  Height: Integer;
+  LineX: Integer;
+  TriangleCenterX: Integer;
+  Width: Integer;
+begin
+  if ButtonRect.IsEmpty then
+    Exit;
+
+  DrawTransportButtonBackground(ButtonRect);
+  CenterX := (ButtonRect.Left + ButtonRect.Right) div 2;
+  CenterY := (ButtonRect.Top + ButtonRect.Bottom) div 2;
+  Width := Max(12, ButtonRect.Width div 4);
+  Height := Max(18, ButtonRect.Height div 3);
+  if Forward then
+  begin
+    LineX := CenterX + Width div 2 + 5;
+    TriangleCenterX := CenterX - 2;
+    DrawTransportTriangle(TriangleCenterX, CenterY, Width, Height, 1,
+      1, 1, 1, 0.82);
+  end
+  else
+  begin
+    LineX := CenterX - Width div 2 - 5;
+    TriangleCenterX := CenterX + 2;
+    DrawTransportTriangle(TriangleCenterX, CenterY, Width, Height, -1,
+      1, 1, 1, 0.82);
+  end;
+  DrawOverlayRect(Rect(LineX - 2, CenterY - Height div 2, LineX + 2,
+    CenterY + Height div 2), 1, 1, 1, 0.82);
+end;
+
+procedure TNv12TextureProbe.DrawTransportSkipIcon(const ButtonRect: TRect;
+  Forward: Boolean);
+var
+  Angle: Double;
+  CenterY: Double;
+  CurrentPoint: TPoint;
+  HeadX: Integer;
+  HeadY: Integer;
+  I: Integer;
+  LocalX: Integer;
+  NextPoint: TPoint;
+  PenWidth: Integer;
+  RadiusX: Double;
+  RadiusY: Double;
+  Size: Integer;
+begin
+  if ButtonRect.IsEmpty then
+    Exit;
+
+  DrawTransportButtonBackground(ButtonRect);
+  Size := Min(ButtonRect.Width, ButtonRect.Height);
+  CenterY := ButtonRect.Top + Size * 0.55;
+  RadiusX := Size * 0.29;
+  RadiusY := Size * 0.28;
+  PenWidth := Max(3, Round(Size * 0.075));
+
+  CurrentPoint := Point(0, 0);
+  for I := 0 to 23 do
+  begin
+    Angle := (210 - (190 * I / 23)) * Pi / 180;
+    LocalX := Round(Size * 0.50 + Cos(Angle) * RadiusX);
+    if not Forward then
+      LocalX := Size - LocalX;
+    NextPoint := Point(ButtonRect.Left + LocalX,
+      Round(CenterY + Sin(Angle) * RadiusY));
+    if I > 0 then
+      DrawOverlayLine(CurrentPoint.X, CurrentPoint.Y, NextPoint.X,
+        NextPoint.Y, PenWidth, 1, 1, 1, 0.80);
+    CurrentPoint := NextPoint;
+  end;
+
+  if Forward then
+  begin
+    HeadX := ButtonRect.Left + Round(Size * 0.70);
+    HeadY := ButtonRect.Top + Round(Size * 0.44);
+    DrawTransportTriangle(HeadX, HeadY, Max(8, Round(Size * 0.17)),
+      Max(12, Round(Size * 0.22)), 1, 1, 1, 1, 0.80);
+  end
+  else
+  begin
+    HeadX := ButtonRect.Left + Round(Size * 0.30);
+    HeadY := ButtonRect.Top + Round(Size * 0.44);
+    DrawTransportTriangle(HeadX, HeadY, Max(8, Round(Size * 0.17)),
+      Max(12, Round(Size * 0.22)), -1, 1, 1, 1, 0.80);
+  end;
+end;
+
+procedure TNv12TextureProbe.DrawTransportPlayPauseIcon(const ButtonRect: TRect;
+  Playing: Boolean);
+var
+  BarHeight: Integer;
+  BarWidth: Integer;
+  CenterX: Integer;
+  CenterY: Integer;
+  Gap: Integer;
+  TriangleHeight: Integer;
+  TriangleWidth: Integer;
+begin
+  if ButtonRect.IsEmpty then
+    Exit;
+
+  DrawTransportButtonBackground(ButtonRect);
+  CenterX := (ButtonRect.Left + ButtonRect.Right) div 2;
+  CenterY := (ButtonRect.Top + ButtonRect.Bottom) div 2;
+  if Playing then
+  begin
+    BarWidth := Max(5, ButtonRect.Width div 10);
+    BarHeight := Max(20, ButtonRect.Height div 3);
+    Gap := Max(5, ButtonRect.Width div 12);
+    DrawOverlayRect(Rect(CenterX - Gap - BarWidth, CenterY - BarHeight div 2,
+      CenterX - Gap, CenterY + BarHeight div 2), 1, 1, 1, 0.86);
+    DrawOverlayRect(Rect(CenterX + Gap, CenterY - BarHeight div 2,
+      CenterX + Gap + BarWidth, CenterY + BarHeight div 2), 1, 1, 1, 0.86);
+  end
+  else
+  begin
+    TriangleWidth := Max(18, ButtonRect.Width div 3);
+    TriangleHeight := Max(24, ButtonRect.Height div 3);
+    DrawTransportTriangle(CenterX + 2, CenterY, TriangleWidth,
+      TriangleHeight, 1, 1, 1, 1, 0.86);
+  end;
+end;
+
+procedure TNv12TextureProbe.DrawTransportOverlay(
+  const State: TD3D11SeekBarOverlayState);
+begin
+  if not State.TransportVisible then
+    Exit;
+
+  DrawTransportEdgeIcon(State.FirstButton, False);
+  DrawTransportSkipIcon(State.SkipBackwardButton, False);
+  DrawTransportPlayPauseIcon(State.PlayPauseButton, State.TransportPlaying);
+  DrawTransportSkipIcon(State.SkipForwardButton, True);
+  DrawTransportEdgeIcon(State.LastButton, True);
+end;
+
 function TNv12TextureProbe.DrawSeekBarOverlay(
   const State: TD3D11SeekBarOverlayState): Double;
 var
@@ -1959,11 +2149,13 @@ var
   StepWatch: TStopwatch;
   TrackRect: TRect;
   BlendFactor: TFourSingleArray;
+  DrawSeekBar: Boolean;
   Viewport: D3D11_VIEWPORT;
 begin
   Result := 0;
-  if (not State.Visible) or State.Bounds.IsEmpty or State.Track.IsEmpty or
-     (State.MaxMs <= 0) then
+  DrawSeekBar := State.Visible and (not State.Bounds.IsEmpty) and
+    (not State.Track.IsEmpty) and (State.MaxMs > 0);
+  if (not DrawSeekBar) and (not State.TransportVisible) then
     Exit;
   if not EnsureRectPipeline(ErrorMessage) then
   begin
@@ -1981,102 +2173,108 @@ begin
   Viewport.MaxDepth := 1;
   FDeviceContext.RSSetViewports(1, @Viewport);
   FDeviceContext.OMSetRenderTargets(1, FDisplayRenderView, nil);
-  DrawOverlayRect(State.Bounds, 0, 0, 0, 0.36);
 
-  TrackRect := State.Track;
-  DrawOverlayRect(Rect(TrackRect.Left - 1, TrackRect.Top - 3,
-    TrackRect.Right + 1, TrackRect.Bottom + 3), 0, 0, 0, 0.24);
-  DrawOverlayRect(TrackRect, 1, 1, 1, 0.32);
+  DrawTransportOverlay(State);
 
-  PositionRatio := State.PositionMs / State.MaxMs;
-  PositionRatio := Max(0.0, Min(1.0, PositionRatio));
-  MarkerX := TrackRect.Left + Round(TrackRect.Width * PositionRatio);
-  FilledRect := TrackRect;
-  FilledRect.Right := Max(FilledRect.Left + 1, MarkerX);
-  DrawOverlayRect(FilledRect, 0.25, 0.63, 0.94, 0.90);
-  HighlightRect := FilledRect;
-  HighlightRect.Bottom := Min(HighlightRect.Bottom, HighlightRect.Top + 2);
-  DrawOverlayRect(HighlightRect, 0.58, 0.84, 1.0, 0.52);
-
-  if (State.HoverPositionMs >= 0) and (State.HoverPositionMs <= State.MaxMs) then
+  if DrawSeekBar then
   begin
-    HoverRatio := State.HoverPositionMs / State.MaxMs;
-    HoverRatio := Max(0.0, Min(1.0, HoverRatio));
-    HoverX := TrackRect.Left + Round(TrackRect.Width * HoverRatio);
-    if State.Dragging then
-      HoverGuideRect := Rect(HoverX - 2, TrackRect.Top - 17, HoverX + 3,
-        TrackRect.Bottom + 24)
-    else
-      HoverGuideRect := Rect(HoverX - 1, TrackRect.Top - 12, HoverX + 2,
-        TrackRect.Bottom + 18);
-    if State.Dragging then
-      DrawOverlayRect(HoverGuideRect, 0.70, 0.88, 1.0, 0.72)
-    else
-      DrawOverlayRect(HoverGuideRect, 1.0, 1.0, 1.0, 0.34);
-  end;
+    DrawOverlayRect(State.Bounds, 0, 0, 0, 0.36);
 
-  for Chapter in State.Chapters do
-  begin
-    if (Chapter.PositionMs < 0) or (Chapter.PositionMs > State.MaxMs) then
-      Continue;
-    MarkerX := TrackRect.Left + Round(TrackRect.Width * Chapter.PositionMs / State.MaxMs);
-    MarkerRect := Rect(MarkerX - 1, TrackRect.Top - 6, MarkerX + 2, TrackRect.Bottom + 9);
-    case Chapter.Severity of
-      2:
-      begin
-        DrawOverlayRect(MarkerRect, 0.93, 0.20, 0.18, 0.95);
-        DrawOverlayRect(Rect(MarkerX - 4, TrackRect.Bottom + 8,
-          MarkerX + 5, TrackRect.Bottom + 11), 0.93, 0.20, 0.18, 0.88);
-      end;
-      1:
-      begin
-        DrawOverlayRect(MarkerRect, 0.95, 0.78, 0.20, 0.95);
-        DrawOverlayRect(Rect(MarkerX - 4, TrackRect.Bottom + 8,
-          MarkerX + 5, TrackRect.Bottom + 11), 0.95, 0.78, 0.20, 0.88);
-      end;
-    else
-      begin
-        DrawOverlayRect(MarkerRect, 0.18, 0.85, 0.38, 0.95);
-        DrawOverlayRect(Rect(MarkerX - 4, TrackRect.Bottom + 8,
-          MarkerX + 5, TrackRect.Bottom + 11), 0.18, 0.85, 0.38, 0.88);
+    TrackRect := State.Track;
+    DrawOverlayRect(Rect(TrackRect.Left - 1, TrackRect.Top - 3,
+      TrackRect.Right + 1, TrackRect.Bottom + 3), 0, 0, 0, 0.24);
+    DrawOverlayRect(TrackRect, 1, 1, 1, 0.32);
+
+    PositionRatio := State.PositionMs / State.MaxMs;
+    PositionRatio := Max(0.0, Min(1.0, PositionRatio));
+    MarkerX := TrackRect.Left + Round(TrackRect.Width * PositionRatio);
+    FilledRect := TrackRect;
+    FilledRect.Right := Max(FilledRect.Left + 1, MarkerX);
+    DrawOverlayRect(FilledRect, 0.25, 0.63, 0.94, 0.90);
+    HighlightRect := FilledRect;
+    HighlightRect.Bottom := Min(HighlightRect.Bottom, HighlightRect.Top + 2);
+    DrawOverlayRect(HighlightRect, 0.58, 0.84, 1.0, 0.52);
+
+    if (State.HoverPositionMs >= 0) and (State.HoverPositionMs <= State.MaxMs) then
+    begin
+      HoverRatio := State.HoverPositionMs / State.MaxMs;
+      HoverRatio := Max(0.0, Min(1.0, HoverRatio));
+      HoverX := TrackRect.Left + Round(TrackRect.Width * HoverRatio);
+      if State.Dragging then
+        HoverGuideRect := Rect(HoverX - 2, TrackRect.Top - 17, HoverX + 3,
+          TrackRect.Bottom + 24)
+      else
+        HoverGuideRect := Rect(HoverX - 1, TrackRect.Top - 12, HoverX + 2,
+          TrackRect.Bottom + 18);
+      if State.Dragging then
+        DrawOverlayRect(HoverGuideRect, 0.70, 0.88, 1.0, 0.72)
+      else
+        DrawOverlayRect(HoverGuideRect, 1.0, 1.0, 1.0, 0.34);
+    end;
+
+    for Chapter in State.Chapters do
+    begin
+      if (Chapter.PositionMs < 0) or (Chapter.PositionMs > State.MaxMs) then
+        Continue;
+      MarkerX := TrackRect.Left + Round(TrackRect.Width * Chapter.PositionMs / State.MaxMs);
+      MarkerRect := Rect(MarkerX - 1, TrackRect.Top - 6, MarkerX + 2, TrackRect.Bottom + 9);
+      case Chapter.Severity of
+        2:
+        begin
+          DrawOverlayRect(MarkerRect, 0.93, 0.20, 0.18, 0.95);
+          DrawOverlayRect(Rect(MarkerX - 4, TrackRect.Bottom + 8,
+            MarkerX + 5, TrackRect.Bottom + 11), 0.93, 0.20, 0.18, 0.88);
+        end;
+        1:
+        begin
+          DrawOverlayRect(MarkerRect, 0.95, 0.78, 0.20, 0.95);
+          DrawOverlayRect(Rect(MarkerX - 4, TrackRect.Bottom + 8,
+            MarkerX + 5, TrackRect.Bottom + 11), 0.95, 0.78, 0.20, 0.88);
+        end;
+      else
+        begin
+          DrawOverlayRect(MarkerRect, 0.18, 0.85, 0.38, 0.95);
+          DrawOverlayRect(Rect(MarkerX - 4, TrackRect.Bottom + 8,
+            MarkerX + 5, TrackRect.Bottom + 11), 0.18, 0.85, 0.38, 0.88);
+        end;
       end;
     end;
-  end;
 
-  MarkerX := TrackRect.Left + Round(TrackRect.Width * PositionRatio);
-  KnobCenterY := TrackRect.Top + TrackRect.Height div 2;
-  if State.Dragging then
-  begin
-    KnobHaloRadius := 24;
-    KnobCoreRadius := 13;
-    KnobInnerRadius := 8;
-  end
-  else if (State.HoverPositionMs >= 0) and (State.HoverPositionMs <= State.MaxMs) then
-  begin
-    KnobHaloRadius := 22;
-    KnobCoreRadius := 12;
-    KnobInnerRadius := 7;
-  end
-  else
-  begin
-    KnobHaloRadius := 20;
-    KnobCoreRadius := 11;
-    KnobInnerRadius := 6;
-  end;
-  DrawOverlayCircleApprox(MarkerX, KnobCenterY, KnobHaloRadius,
-    0.25, 0.63, 0.94, 0.18);
-  DrawOverlayCircleApprox(MarkerX, KnobCenterY, KnobCoreRadius,
-    0.25, 0.63, 0.94, 0.96);
-  DrawOverlayCircleApprox(MarkerX, KnobCenterY, KnobInnerRadius,
-    0.52, 0.82, 1.0, 1.0);
+    MarkerX := TrackRect.Left + Round(TrackRect.Width * PositionRatio);
+    KnobCenterY := TrackRect.Top + TrackRect.Height div 2;
+    if State.Dragging then
+    begin
+      KnobHaloRadius := 24;
+      KnobCoreRadius := 13;
+      KnobInnerRadius := 8;
+    end
+    else if (State.HoverPositionMs >= 0) and (State.HoverPositionMs <= State.MaxMs) then
+    begin
+      KnobHaloRadius := 22;
+      KnobCoreRadius := 12;
+      KnobInnerRadius := 7;
+    end
+    else
+    begin
+      KnobHaloRadius := 20;
+      KnobCoreRadius := 11;
+      KnobInnerRadius := 6;
+    end;
+    DrawOverlayCircleApprox(MarkerX, KnobCenterY, KnobHaloRadius,
+      0.25, 0.63, 0.94, 0.18);
+    DrawOverlayCircleApprox(MarkerX, KnobCenterY, KnobCoreRadius,
+      0.25, 0.63, 0.94, 0.96);
+    DrawOverlayCircleApprox(MarkerX, KnobCenterY, KnobInnerRadius,
+      0.52, 0.82, 1.0, 1.0);
 
-  DrawSeekBarTimeText(State);
-  DrawSeekBarHoverLabel(State);
-  DrawSeekBarVolume(State);
-  DrawSeekBarPlaybackRate(State);
-  DrawSeekBarEndAction(State);
-  DrawSeekBarChapterButtons(State);
-  DrawSeekBarFullScreen(State);
+    DrawSeekBarTimeText(State);
+    DrawSeekBarHoverLabel(State);
+    DrawSeekBarVolume(State);
+    DrawSeekBarPlaybackRate(State);
+    DrawSeekBarEndAction(State);
+    DrawSeekBarChapterButtons(State);
+    DrawSeekBarFullScreen(State);
+  end;
 
   FillChar(BlendFactor, SizeOf(BlendFactor), 0);
   FDeviceContext.OMSetBlendState(nil, BlendFactor, $FFFFFFFF);
@@ -2199,26 +2397,30 @@ begin
   Result := True;
   if VideoMinerSlowLogEnabled then
     WriteVideoMinerSlowLog(Format(
-      'd3d11_display_present frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d y_stride=%d uv_stride=%d range=%d space=%d recreated=%s overlay=%s dragging=%s upload_ms=%.3f clear_ms=%.3f draw_ms=%.3f overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
+      'd3d11_display_present frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d y_stride=%d uv_stride=%d range=%d space=%d recreated=%s overlay=%s transport=%s dragging=%s upload_ms=%.3f clear_ms=%.3f draw_ms=%.3f overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
       [Frame.width, Frame.height, FTargetWidth, FTargetHeight,
        ViewLeft, ViewTop, ViewLeft + ViewWidth, ViewTop + ViewHeight,
        Frame.linesize[0], Frame.linesize[1], Frame.color_range,
        Frame.colorspace, BoolToStr(Recreated, True),
        BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
+       BoolToStr(GlobalD3DSeekBarOverlay.TransportVisible, True),
        BoolToStr(GlobalD3DSeekBarOverlay.Dragging, True), UploadMs, ClearMs,
        DrawMs, OverlayMs, PresentMs, TotalWatch.Elapsed.TotalMilliseconds]))
   else if Recreated or
           (LastD3DPresentOverlayVisible <> GlobalD3DSeekBarOverlay.Visible) or
+          (LastD3DPresentTransportVisible <> GlobalD3DSeekBarOverlay.TransportVisible) or
           (LastD3DPresentDragging <> GlobalD3DSeekBarOverlay.Dragging) or
           (GetTickCount64 - LastD3DPresentLogTick >= 1000) then
   begin
     LastD3DPresentLogTick := GetTickCount64;
     LastD3DPresentOverlayVisible := GlobalD3DSeekBarOverlay.Visible;
+    LastD3DPresentTransportVisible := GlobalD3DSeekBarOverlay.TransportVisible;
     LastD3DPresentDragging := GlobalD3DSeekBarOverlay.Dragging;
     WriteVideoMinerD3DLog(Format(
-      'd3d11_display_present_lite frame=%dx%d target=%dx%d overlay=%s dragging=%s recreated=%s total_ms=%.3f',
+      'd3d11_display_present_lite frame=%dx%d target=%dx%d overlay=%s transport=%s dragging=%s recreated=%s total_ms=%.3f',
       [Frame.width, Frame.height, FTargetWidth, FTargetHeight,
        BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
+       BoolToStr(GlobalD3DSeekBarOverlay.TransportVisible, True),
        BoolToStr(GlobalD3DSeekBarOverlay.Dragging, True),
        BoolToStr(Recreated, True), TotalWatch.Elapsed.TotalMilliseconds]));
   end;
@@ -2352,25 +2554,29 @@ begin
   Result := True;
   if VideoMinerSlowLogEnabled then
     WriteVideoMinerSlowLog(Format(
-      'd3d11_display_present_bgrx32 frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d stride=%d recreated=%s overlay=%s dragging=%s upload_ms=%.3f draw_ms=%.3f overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
+      'd3d11_display_present_bgrx32 frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d stride=%d recreated=%s overlay=%s transport=%s dragging=%s upload_ms=%.3f draw_ms=%.3f overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
       [Width, Height, FTargetWidth, FTargetHeight, ViewLeft, ViewTop,
        ViewLeft + ViewWidth, ViewTop + ViewHeight, BufferStride,
        BoolToStr(Recreated, True),
        BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
+       BoolToStr(GlobalD3DSeekBarOverlay.TransportVisible, True),
        BoolToStr(GlobalD3DSeekBarOverlay.Dragging, True), UploadMs, DrawMs,
        OverlayMs, PresentMs, TotalWatch.Elapsed.TotalMilliseconds]))
   else if Recreated or
           (LastD3DPresentOverlayVisible <> GlobalD3DSeekBarOverlay.Visible) or
+          (LastD3DPresentTransportVisible <> GlobalD3DSeekBarOverlay.TransportVisible) or
           (LastD3DPresentDragging <> GlobalD3DSeekBarOverlay.Dragging) or
           (GetTickCount64 - LastD3DPresentLogTick >= 1000) then
   begin
     LastD3DPresentLogTick := GetTickCount64;
     LastD3DPresentOverlayVisible := GlobalD3DSeekBarOverlay.Visible;
+    LastD3DPresentTransportVisible := GlobalD3DSeekBarOverlay.TransportVisible;
     LastD3DPresentDragging := GlobalD3DSeekBarOverlay.Dragging;
     WriteVideoMinerD3DLog(Format(
-      'd3d11_display_present_bgrx32_lite frame=%dx%d target=%dx%d overlay=%s dragging=%s recreated=%s total_ms=%.3f',
+      'd3d11_display_present_bgrx32_lite frame=%dx%d target=%dx%d overlay=%s transport=%s dragging=%s recreated=%s total_ms=%.3f',
       [Width, Height, FTargetWidth, FTargetHeight,
        BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
+       BoolToStr(GlobalD3DSeekBarOverlay.TransportVisible, True),
        BoolToStr(GlobalD3DSeekBarOverlay.Dragging, True),
        BoolToStr(Recreated, True), TotalWatch.Elapsed.TotalMilliseconds]));
   end;
@@ -2470,10 +2676,11 @@ begin
     Result := True;
     if VideoMinerSlowLogEnabled then
       WriteVideoMinerSlowLog(Format(
-        'd3d11_display_represent_bgrx32 frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d overlay=%s dragging=%s overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
+        'd3d11_display_represent_bgrx32 frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d overlay=%s transport=%s dragging=%s overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
         [FBgrxWidth, FBgrxHeight, FTargetWidth, FTargetHeight,
          ViewLeft, ViewTop, ViewLeft + ViewWidth, ViewTop + ViewHeight,
          BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
+         BoolToStr(GlobalD3DSeekBarOverlay.TransportVisible, True),
          BoolToStr(GlobalD3DSeekBarOverlay.Dragging, True), OverlayMs,
          PresentMs, TotalWatch.Elapsed.TotalMilliseconds]));
     Exit;
@@ -2551,10 +2758,11 @@ begin
   Result := True;
   if VideoMinerSlowLogEnabled then
     WriteVideoMinerSlowLog(Format(
-      'd3d11_display_represent frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d overlay=%s dragging=%s overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
+      'd3d11_display_represent frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d overlay=%s transport=%s dragging=%s overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
       [FTextureWidth, FTextureHeight, FTargetWidth, FTargetHeight,
        ViewLeft, ViewTop, ViewLeft + ViewWidth, ViewTop + ViewHeight,
        BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
+       BoolToStr(GlobalD3DSeekBarOverlay.TransportVisible, True),
        BoolToStr(GlobalD3DSeekBarOverlay.Dragging, True), OverlayMs, PresentMs,
        TotalWatch.Elapsed.TotalMilliseconds]));
 end;

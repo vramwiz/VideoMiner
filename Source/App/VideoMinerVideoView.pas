@@ -162,6 +162,8 @@ type
     function CurrentFrameCornersMostlyDark: Boolean;
     // 現在表示中フレームの簡易署名を返す
     function CurrentFrameSignature(out Signature: TVideoMinerFrameSignature): Boolean;
+    // シークバー上の指定 pixel 幅を動画時間 ms へ変換する
+    function ChapterMarkerToleranceMs(MaxMs, PixelTolerance: Integer): Integer;
     // サーフェス上のホイール操作をズーム/シークとして処理する
     function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer;MousePos: TPoint): Boolean;
     // ズーム操作後に現在位置の CPU frame 再表示が必要なら True を返して消費する
@@ -249,6 +251,15 @@ function TVideoMinerVideoView.CurrentFrameSignature(
   out Signature: TVideoMinerFrameSignature): Boolean;
 begin
   Result := (FSurface <> nil) and FSurface.CurrentFrameSignature(Signature);
+end;
+
+function TVideoMinerVideoView.ChapterMarkerToleranceMs(MaxMs,
+  PixelTolerance: Integer): Integer;
+begin
+  if FSurface <> nil then
+    Result := FSurface.ChapterMarkerToleranceMs(MaxMs, PixelTolerance)
+  else
+    Result := 0;
 end;
 
 function TVideoMinerVideoView.PrepareBitmapFrameBuffer(Bitmap: TBitmap;
