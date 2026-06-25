@@ -15,6 +15,19 @@
   - overlay 表示中の高速化まで狙う場合は、VCL/GDI を上に重ねるのではなく、D3D 側で overlay texture / sprite を合成する段階が必要。
 - `Debug Win64` ビルド成功。警告 0 / エラー 0。
 
+## 2026-06-25 D3D11 direct display zoom refresh
+- D3D11 実表示後に一時停止してホイールズームした場合、CPU 側の最新表示フレームがないまま `Paint` が D3D frame skip してしまう可能性があったため、ズーム操作後に現在位置の CPU frame を再取得する導線を追加した。
+  - CPU 表示へ戻る `TVideoMinerVideoSurface.Present` / `PresentImmediate` で `ClearNv12TextureD3DFramePresented` を呼び、D3D 表示済みフラグを残さないようにした。
+  - `TVideoMinerVideoSurface` に `FZoomFrameRefreshNeeded` と `ConsumeZoomFrameRefreshNeeded` を追加し、動画面ホイールズームだけをメインフォーム側で検知できるようにした。
+  - 一時停止中の動画面ホイールズームでは、`TVideoMinerMainForm.DoMouseWheel` から `ShowFrameAtMs(CurrentPlaybackPositionMs)` を呼び、現在位置を CPU BGRX32 経路で再表示する。
+- `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` を Debug Win64 / `VIDEOMINER_D3D11_DISPLAY=1` で確認した。
+  - 再生中に Space で停止し、動画中央でホイールズームしたところ、`main_show_frame_at_begin requested_ms=1770` と `surface_present_immediate` が出て、CPU frame 再表示へ戻ることを確認した。
+  - マウス操作なしの通常再生では `d3d11_display_present total_ms` p50 約 2.18ms / p90 約 2.83ms、`next_bgrx32_detail convert_ms` p50 約 2.91ms / p90 約 4.04ms、`playback_tick total_ms` p50 約 9.69ms / p90 約 13.28ms、drop は 0。
+- 判断:
+  - ズーム中は CPU 描画へ退避するが、通常再生中の D3D 高速化は維持できている。
+  - D3D 側でズーム表示まで行う場合は、shader のサンプリング座標へズーム中心/倍率を渡す段階で再検討する。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+
 ## 2026-06-25 D3D11 texture upload probe
 - `VIDEOMINER_TEXTURE_PROBE=1` の Debug 実行時だけ、QSV の NV12 frame を D3D11 texture へアップロードする計測を追加した。
   - `nv12_texture_probe`: `DXGI_FORMAT_NV12` 1 枚 texture へ渡す方式。FFmpeg の Y/UV plane が連続していない場合は packed buffer へ詰め直してから `UpdateSubresource` する。

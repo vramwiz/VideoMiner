@@ -609,6 +609,10 @@ begin
 
   Result := (FVideoView <> nil) and
     FVideoView.HandleMouseWheel(Shift, WheelDelta, MousePos);
+  if Result and (FVideoView <> nil) and
+     FVideoView.ConsumeZoomFrameRefreshNeeded and
+     (not PlaybackActiveOrPending) and (FMediaSession.VideoFile <> '') then
+    ShowFrameAtMs(CurrentPlaybackPositionMs);
   if not Result then
     Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
 end;

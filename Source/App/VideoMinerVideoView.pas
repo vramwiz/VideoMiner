@@ -158,6 +158,8 @@ type
     function CurrentFrameSignature(out Signature: TVideoMinerFrameSignature): Boolean;
     // サーフェス上のホイール操作をズーム/シークとして処理する
     function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer;MousePos: TPoint): Boolean;
+    // ズーム操作後に現在位置の CPU frame 再表示が必要なら True を返して消費する
+    function ConsumeZoomFrameRefreshNeeded: Boolean;
     // 次フレームを読み込んで表示する
     function ShowNextFrame(Decoder: TFFmpegDecoder; out PositionMs: Integer; out ErrorMessage: string): Boolean;
     // scratch frame にあるフレームを現在表示へ反映する
@@ -1046,6 +1048,11 @@ function TVideoMinerVideoView.HandleMouseWheel(Shift: TShiftState;
 begin
   Result := (FSurface <> nil) and
     FSurface.HandleMouseWheel(Shift, WheelDelta, MousePos);
+end;
+
+function TVideoMinerVideoView.ConsumeZoomFrameRefreshNeeded: Boolean;
+begin
+  Result := (FSurface <> nil) and FSurface.ConsumeZoomFrameRefreshNeeded;
 end;
 
 function TVideoMinerVideoView.ShowNextFrame(Decoder: TFFmpegDecoder;

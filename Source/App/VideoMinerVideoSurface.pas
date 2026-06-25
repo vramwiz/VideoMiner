@@ -80,6 +80,7 @@ type
     FSourceHasAlpha         : Boolean;                           // 現在の動画が alpha を持つ形式か
     FZoomCenterX            : Double;                            // ズーム表示の画像中心 X
     FZoomCenterY            : Double;                            // ズーム表示の画像中心 Y
+    FZoomFrameRefreshNeeded : Boolean;                           // D3D 表示後にズーム用 CPU frame 再取得が必要か
     FZoomScale              : Double;                            // 現在のズーム倍率
     // 保留中の単クリック再生切替を取り消す
     procedure CancelPendingSurfaceClick;
@@ -237,6 +238,8 @@ type
     function CurrentFrameSignature(out Signature: TVideoMinerFrameSignature): Boolean;
     // D3D11 直接表示で動画本体だけを描いてよい状態か返す
     function CanUseD3DFramePresentation: Boolean;
+    // ズーム操作後に現在位置の CPU frame 再表示が必要なら True を返して消費する
+    function ConsumeZoomFrameRefreshNeeded: Boolean;
     // FBitmap を BGRX32 の direct デコード先として使える状態にする
     function PrepareBgrx32Frame(Width, Height: Integer; out Buffer: Pointer;
       out BufferStride: Integer): Boolean;
@@ -513,6 +516,12 @@ begin
     (FZoomScale <= MIN_ZOOM) and
     ((FPreviousFileButton = nil) or (not FPreviousFileButton.Visible)) and
     ((FNextFileButton = nil) or (not FNextFileButton.Visible));
+end;
+
+function TVideoMinerVideoSurface.ConsumeZoomFrameRefreshNeeded: Boolean;
+begin
+  Result := FZoomFrameRefreshNeeded;
+  FZoomFrameRefreshNeeded := False;
 end;
 
 procedure TVideoMinerVideoSurface.ResetZoom;
@@ -1382,6 +1391,7 @@ begin
   if Abs(NewScale - MIN_ZOOM) < 0.01 then
   begin
     ResetZoom;
+    FZoomFrameRefreshNeeded := True;
     Invalidate;
     Result := True;
     Exit;
@@ -1397,6 +1407,7 @@ begin
   FZoomCenterY := ImageY - RatioY * NewSourceHeight + NewSourceHeight / 2;
   ClampZoomCenter;
 
+  FZoomFrameRefreshNeeded := True;
   Invalidate;
   Result := True;
 end;
@@ -1609,12 +1620,14 @@ end;
 
 procedure TVideoMinerVideoSurface.Present;
 begin
+  ClearNv12TextureD3DFramePresented;
   FAlphaCompositeDirty := True;
   Invalidate;
 end;
 
 procedure TVideoMinerVideoSurface.PresentImmediate;
 begin
+  ClearNv12TextureD3DFramePresented;
   FAlphaCompositeDirty := True;
 {$IFDEF DEBUG}
   WriteVideoMinerSlowLog(Format(
