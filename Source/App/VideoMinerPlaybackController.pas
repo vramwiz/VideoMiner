@@ -26,6 +26,9 @@ type
   TVideoMinerPlaybackNotifyProc = procedure of object;
   // 再生位置 ms を main form 側へ渡す callback
   TVideoMinerPlaybackPositionProc = procedure(PositionMs: Integer) of object;
+  // ループ再開位置と、そのフレームをすでに表示済みかを main form 側へ渡す callback
+  TVideoMinerPlaybackLoopSeekProc = procedure(PositionMs: Integer;
+    FrameAlreadyShown: Boolean) of object;
   // 再生状態表示文字列を main form 側へ渡す callback
   TVideoMinerPlaybackStatusProc = procedure(const Text: string) of object;
   // 指定位置のフレーム表示を main form 側へ依頼する callback
@@ -182,7 +185,7 @@ type
       SeekGuardRemaining: Integer; var UpdatingSeek: Boolean;
       SetStatus: TVideoMinerPlaybackStatusProc;
       FinishPlaybackAtEnd: TVideoMinerPlaybackNotifyProc;
-      SeekToMs: TVideoMinerPlaybackPositionProc;
+      SeekToMs: TVideoMinerPlaybackLoopSeekProc;
       UpdatePlaybackProgress: TVideoMinerPlaybackPositionProc;
       MaybeAutoCheckFrame: TVideoMinerPlaybackPositionProc);
     // seek のために現在の再生出力を停止する
@@ -543,15 +546,15 @@ begin
           'finish_at_end_loop target_ms=%d cache_shown=%s',
           [LoopStartMs, BoolToStr(LoopFrameCacheShown, True)]));
 {$ENDIF}
-        if FVideoView <> nil then
-          FVideoView.BeginLoopFrameCacheCapture(LoopStartMs);
         UpdatingSeek := True;
         try
           SeekPositionMs := LoopStartMs;
         finally
           UpdatingSeek := False;
         end;
-        FrameShown := Assigned(ShowFrameAtMs) and ShowFrameAtMs(LoopStartMs);
+        FrameShown := LoopFrameCacheShown;
+        if (not FrameShown) and Assigned(ShowFrameAtMs) then
+          FrameShown := ShowFrameAtMs(LoopStartMs);
         if Assigned(StartPlaybackAtMs) then
           StartPlaybackAtMs(LoopStartMs, FrameShown);
         Exit;
@@ -1333,6 +1336,9 @@ begin
   SeekPositionMs := TargetMs;
   ConfigureLoopSegment(EndAction, ChapterManager, TargetMs, SeekMaxMs,
     LastFrameSeekPositionMs, LoopSegmentStartMs, LoopSegmentEndMs);
+  if (EndAction = eaLoop) and (FVideoView <> nil) and
+     (LoopSegmentStartMs = TargetMs) then
+    FVideoView.BeginLoopFrameCacheCapture(TargetMs, True);
 
   SeekGuardTargetMs := TargetMs;
   SeekGuardRemaining := VideoMinerDefaultSeekGuardFrames;
@@ -1401,7 +1407,7 @@ procedure TVideoMinerPlaybackController.Tick(Decoder: TFFmpegDecoder;
   SeekGuardRemaining: Integer; var UpdatingSeek: Boolean;
   SetStatus: TVideoMinerPlaybackStatusProc;
   FinishPlaybackAtEnd: TVideoMinerPlaybackNotifyProc;
-  SeekToMs: TVideoMinerPlaybackPositionProc;
+  SeekToMs: TVideoMinerPlaybackLoopSeekProc;
   UpdatePlaybackProgress: TVideoMinerPlaybackPositionProc;
   MaybeAutoCheckFrame: TVideoMinerPlaybackPositionProc);
 var
@@ -1609,8 +1615,6 @@ begin
        LoopSegmentEndMs, BoolToStr(LoopFrameCacheShown, True), PumpMs, DecodeMs, SyncMs,
        TotalWatch.Elapsed.TotalMilliseconds]));
 {$ENDIF}
-    if FVideoView <> nil then
-      FVideoView.BeginLoopFrameCacheCapture(LoopTargetMs);
     if Assigned(SeekToMs) then
     begin
       UpdatingSeek := True;
@@ -1622,7 +1626,7 @@ begin
       end;
       if Assigned(UpdatePlaybackProgress) then
         UpdatePlaybackProgress(SeekPositionMs);
-      SeekToMs(LoopTargetMs);
+      SeekToMs(LoopTargetMs, LoopFrameCacheShown);
     end;
     Exit;
   end;

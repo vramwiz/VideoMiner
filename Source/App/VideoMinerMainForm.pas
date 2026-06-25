@@ -156,7 +156,7 @@ type
     // controller と UI 状態から現在再生位置を返す
     function CurrentPlaybackPositionMs: Integer;
     // 再生 tick から指定位置へシークする
-    procedure SeekPlaybackTickToMs(PositionMs: Integer);
+    procedure SeekPlaybackTickToMs(PositionMs: Integer; FrameAlreadyShown: Boolean);
     // 指定位置へシークし、必要なら再生状態を復元する
     procedure SeekToMs(PositionMs: Integer; ResumeIfPlaying: Boolean = True);
     // 現在位置から相対移動する
@@ -1279,7 +1279,8 @@ begin
     SeekToMs(TargetMs);
 end;
 
-procedure TVideoMinerMainForm.SeekPlaybackTickToMs(PositionMs: Integer);
+procedure TVideoMinerMainForm.SeekPlaybackTickToMs(PositionMs: Integer;
+  FrameAlreadyShown: Boolean);
 var
   FrameShown: Boolean;
 {$IFDEF DEBUG}
@@ -1306,7 +1307,9 @@ begin
 {$IFDEF DEBUG}
   StepWatch := TStopwatch.StartNew;
 {$ENDIF}
-  FrameShown := ShowFrameAtMs(PositionMs);
+  FrameShown := FrameAlreadyShown;
+  if not FrameShown then
+    FrameShown := ShowFrameAtMs(PositionMs);
 {$IFDEF DEBUG}
   PreviewMs := StepWatch.Elapsed.TotalMilliseconds;
   StepWatch := TStopwatch.StartNew;
@@ -1315,8 +1318,9 @@ begin
 {$IFDEF DEBUG}
   RestartMs := StepWatch.Elapsed.TotalMilliseconds;
   WriteVideoMinerSlowLog(Format(
-    'loop_tick_seek file="%s" target_ms=%d frame_shown=%s preview_ms=%.3f restart_ms=%.3f total_ms=%.3f current_ms=%d seek_ms=%d guard_target_ms=%d guard_remaining=%d',
-    [ExtractFileName(FMediaSession.VideoFile), PositionMs, BoolToStr(FrameShown, True),
+    'loop_tick_seek file="%s" target_ms=%d frame_already_shown=%s frame_shown=%s preview_ms=%.3f restart_ms=%.3f total_ms=%.3f current_ms=%d seek_ms=%d guard_target_ms=%d guard_remaining=%d',
+    [ExtractFileName(FMediaSession.VideoFile), PositionMs,
+     BoolToStr(FrameAlreadyShown, True), BoolToStr(FrameShown, True),
      PreviewMs, RestartMs, TotalWatch.Elapsed.TotalMilliseconds,
      FMediaSession.CurrentVideoPositionMs, FMediaSession.SeekPositionMs, FSeekGuardTargetMs,
      FSeekGuardRemaining]));

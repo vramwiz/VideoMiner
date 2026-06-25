@@ -102,6 +102,21 @@
   - 次に色味をさらに詰めるなら、BT.601 / BT.709 / BT.2020 / full range の分岐を shader constant で渡す形にする。
 - `Debug Win64` ビルド成功。警告 0 / エラー 0。
 
+## 2026-06-25 loop restart cache prewarm
+- ループ再生で「最終フレーム、0 フレーム、最終フレーム、0 フレームの後に再生」のように見える現象への対策を進めた。
+  - 終端 loop の cache hit 時は、すでに `TryPresentLoopFrameCache` で 0 フレームを表示しているため、追加の `ShowFrameAtMs(0)` を呼ばず `StartPlaybackAtMs(0, True)` へ進むようにした。
+  - 再生開始位置が loop segment start の場合、開始時点の表示フレームを loop 先頭キャッシュへ即保存し、その後の先頭側フレームもキャッシュするようにした。
+  - loop restart 側で個別に `BeginLoopFrameCacheCapture` していた処理をやめ、再生開始側へ一本化した。
+- `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` / `EndAction=loop` / `VIDEOMINER_D3D11_DISPLAY=1` で約 11 秒再生して確認した。
+  - 初回 loop から `loop_frame_cache_hit` になり、`loop_frame_cache_miss` は 0 回。
+  - loop 到達時の追加 `main_show_frame_at_begin requested_ms=0` は出なくなり、起動時の初回表示 1 回だけになった。
+  - loop 再開直後の `seek_guard_drop target_ms=0 decoded_ms=7800/7833 present=False` は残るが、表示せず破棄している。
+  - drop は 0。
+- 判断:
+  - ログ上は二重の 0 フレーム表示と初回 cache miss は解消した。
+  - 実画面でまだ最終フレームが挟まる場合は、D3D backbuffer の再 Present / VCL repaint / seek guard 中の表示状態を追加で見る。
+- `Debug Win64` ビルド成功。警告 0 / エラー 0。
+
 ## 2026-06-25 QSV 表示経路の内訳計測と一時バッファ再利用
 - QSV/software の BGRX32 表示経路へ Debug 計測を追加した。
   - `qsv_transfer`: QSV HW frame を CPU frame へ転送した場合の時間。

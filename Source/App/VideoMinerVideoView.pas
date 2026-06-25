@@ -131,7 +131,8 @@ type
     // 次の明示デコード前に表示フレームキャッシュだけを空にする
     procedure ClearFrameCache;
     // 次に表示されるループ先頭側フレームを小さくキャッシュし始める
-    procedure BeginLoopFrameCacheCapture(StartMs: Integer);
+    procedure BeginLoopFrameCacheCapture(StartMs: Integer;
+      CaptureCurrentFrame: Boolean = False);
     // 表示だけを90度ずつ回転し、以降の再生フレームにも反映する
     procedure RotateDisplay90;
     // ボスが来たモード中のヘルプページを前後へ切り替える
@@ -341,7 +342,8 @@ begin
   FLoopFrameCaptureActive := False;
 end;
 
-procedure TVideoMinerVideoView.BeginLoopFrameCacheCapture(StartMs: Integer);
+procedure TVideoMinerVideoView.BeginLoopFrameCacheCapture(StartMs: Integer;
+  CaptureCurrentFrame: Boolean);
 begin
   if StartMs < 0 then
     Exit;
@@ -352,9 +354,12 @@ begin
   FLoopFrameCacheStartMs := StartMs;
   FLoopFrameCacheCount := 0;
   FLoopFrameCaptureActive := True;
+  if CaptureCurrentFrame then
+    StoreLoopFrameCache(StartMs);
 {$IFDEF DEBUG}
-  WriteVideoMinerSlowLog(Format('loop_frame_cache_capture_begin start_ms=%d',
-    [StartMs]));
+  WriteVideoMinerSlowLog(Format(
+    'loop_frame_cache_capture_begin start_ms=%d capture_current=%s count=%d',
+    [StartMs, BoolToStr(CaptureCurrentFrame, True), FLoopFrameCacheCount]));
 {$ENDIF}
 end;
 
