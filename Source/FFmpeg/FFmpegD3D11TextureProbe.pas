@@ -95,6 +95,8 @@ type
     procedure ProbeShaderDraw(Frame: PAVFrame);
     procedure ProbeSwapChainPresent(Frame: PAVFrame);
     procedure DrawOverlayRect(const Rect: TRect; R, G, B, A: Single);
+    procedure DrawOverlayCircleApprox(CenterX, CenterY, Radius: Integer;
+      R, G, B, A: Single);
     procedure DrawOverlayDigit(X, Y, Scale, Digit: Integer; R, G, B, A: Single);
     procedure DrawOverlayColon(X, Y, Scale: Integer; R, G, B, A: Single);
     procedure DrawOverlaySlash(X, Y, Scale: Integer; R, G, B, A: Single);
@@ -954,6 +956,30 @@ begin
   FDeviceContext.Draw(6, 0);
 end;
 
+procedure TNv12TextureProbe.DrawOverlayCircleApprox(CenterX, CenterY,
+  Radius: Integer; R, G, B, A: Single);
+var
+  BandHeight: Integer;
+  BandTop: Integer;
+  BandY: Integer;
+  HalfWidth: Integer;
+begin
+  if Radius <= 0 then
+    Exit;
+
+  BandHeight := Max(2, Radius div 5);
+  BandTop := -Radius;
+  while BandTop <= Radius do
+  begin
+    BandY := BandTop + BandHeight div 2;
+    HalfWidth := Round(Sqrt(Max(0, Radius * Radius - BandY * BandY)));
+    DrawOverlayRect(Rect(CenterX - HalfWidth, CenterY + BandTop,
+      CenterX + HalfWidth + 1, CenterY + Min(Radius + 1, BandTop + BandHeight)),
+      R, G, B, A);
+    Inc(BandTop, BandHeight);
+  end;
+end;
+
 function SeekBarTimeText(ValueMs: Integer): string;
 var
   Hours: Integer;
@@ -1111,12 +1137,9 @@ var
   HoverRatio: Double;
   HoverX: Integer;
   KnobCenterY: Integer;
-  KnobCorePad: Integer;
-  KnobHaloPadX: Integer;
-  KnobHaloPadY: Integer;
-  KnobRect: TRect;
-  KnobPadX: Integer;
-  KnobPadY: Integer;
+  KnobCoreRadius: Integer;
+  KnobHaloRadius: Integer;
+  KnobInnerRadius: Integer;
   MarkerRect: TRect;
   MarkerX: Integer;
   PositionRatio: Double;
@@ -1202,29 +1225,22 @@ begin
   KnobCenterY := TrackRect.Top + TrackRect.Height div 2;
   if State.Dragging then
   begin
-    KnobHaloPadX := 26;
-    KnobHaloPadY := 23;
-    KnobCorePad := 13;
-    KnobPadX := 11;
-    KnobPadY := 9;
+    KnobHaloRadius := 24;
+    KnobCoreRadius := 13;
+    KnobInnerRadius := 8;
   end
   else
   begin
-    KnobHaloPadX := 22;
-    KnobHaloPadY := 20;
-    KnobCorePad := 11;
-    KnobPadX := 7;
-    KnobPadY := 5;
+    KnobHaloRadius := 20;
+    KnobCoreRadius := 11;
+    KnobInnerRadius := 6;
   end;
-  DrawOverlayRect(Rect(MarkerX - KnobHaloPadX, KnobCenterY - KnobPadY,
-    MarkerX + KnobHaloPadX, KnobCenterY + KnobPadY + 1), 0.25, 0.63, 0.94, 0.20);
-  DrawOverlayRect(Rect(MarkerX - KnobPadX, KnobCenterY - KnobHaloPadY,
-    MarkerX + KnobPadX, KnobCenterY + KnobHaloPadY + 1), 0.25, 0.63, 0.94, 0.20);
-  KnobRect := Rect(MarkerX - KnobCorePad, KnobCenterY - KnobCorePad,
-    MarkerX + KnobCorePad, KnobCenterY + KnobCorePad);
-  DrawOverlayRect(KnobRect, 0.25, 0.63, 0.94, 0.96);
-  DrawOverlayRect(Rect(MarkerX - KnobPadX, KnobCenterY - KnobPadY,
-    MarkerX + KnobPadX, KnobCenterY + KnobPadY + 1), 0.52, 0.82, 1.0, 1.0);
+  DrawOverlayCircleApprox(MarkerX, KnobCenterY, KnobHaloRadius,
+    0.25, 0.63, 0.94, 0.18);
+  DrawOverlayCircleApprox(MarkerX, KnobCenterY, KnobCoreRadius,
+    0.25, 0.63, 0.94, 0.96);
+  DrawOverlayCircleApprox(MarkerX, KnobCenterY, KnobInnerRadius,
+    0.52, 0.82, 1.0, 1.0);
 
   DrawSeekBarTimeText(State);
 
