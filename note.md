@@ -196,6 +196,11 @@
   - `Source\Lib` などの既存補助ユニットが現行アプリで必要か確認し、不要なら外す。
 - `VideoMinerMainForm.pas` の肥大化を引き続き防ぐ。
   - GUI イベント受け口、再生制御、ウィンドウ制御、ショートカット、設定、メディア管理の責務を機能単位へ逃がす。
+  - 2026-06-26: `Application.OnMessage` で拾う戻る/進む系入力のログと遅延 navigate 投稿を `VideoMinerInputMessageRouter.pas` へ切り出した。
+  - 2026-06-26: 独自タイトルバーの初期化と caption button hover 色変更を `VideoMinerTitleBarUi.pas` へ切り出した。
+  - 2026-06-26: 起動時 open 予約と遅延 timer 実行を `VideoMinerStartupOpenController.pas` へ切り出した。
+  - 2026-06-26: safe area、終端動作表示、再生速度表示、音量設定保存を `VideoMinerPlaybackUiActions.pas` へ切り出した。
+  - 次の候補は、シーク/再生橋渡し、`LoadVideoFile`、FormCreate 内 controller 配線のどれかを小さな builder / coordinator へ寄せること。
 
 ## コンパイル方法
 
@@ -234,6 +239,7 @@ powershell -ExecutionPolicy Bypass -File tools\EnsureUtf8Bom.ps1 -Check
 - 不要なコメントや重複したコメントを増やしすぎない。
 - `var` ブロック内にローカル関数やローカル手続きを内包しない。必要な補助処理は同じ `implementation` 内の独立した関数/手続きとして切り出す。
 - ユニット先頭には、そのユニットの目的や担当範囲を `//` コメントで記述する。
+- フォーム系ユニットは GUI と実処理の境界が曖昧になりやすいため、`implementation` 直下にも `//` コメントを置き、実装部に残す責務と他ユニットへ逃がす責務を書く。ここは複数行でもよい。
 - フィールドや定数のコメントは右側に 1 行で置き、同じブロック内では `:`、`=`、`//` の位置を揃える。
 - コメントと対象の宣言/実装の間には空行を入れない。
 - `property`、`procedure`、`function` 宣言は、横幅 112 文字以内に収まる場合は折り返さない。

@@ -15,10 +15,11 @@ uses
   VideoMinerChapterController, VideoMinerCommandController,
   VideoMinerCurrentFileReloadController, VideoMinerMediaList, VideoMinerDebugLog,
   VideoMinerExternalOpenController, VideoMinerFrameClipboard, VideoMinerFrameGuideController,
-  VideoMinerInfoController, VideoMinerMediaLoadController, VideoMinerMediaOpen,
+  VideoMinerInfoController, VideoMinerInputMessageRouter, VideoMinerMediaLoadController, VideoMinerMediaOpen,
   VideoMinerMediaSession, VideoMinerSettings,
   VideoMinerNavigationController, VideoMinerSeekHoverPreviewController, VideoMinerThumbnailBrowserController,
-  VideoMinerPlaybackController, VideoMinerPlaybackTiming,
+  VideoMinerPlaybackController, VideoMinerPlaybackTiming, VideoMinerPlaybackUiActions,
+  VideoMinerStartupOpenController, VideoMinerTitleBarUi,
   VideoMinerVideoView, VideoMinerWindowChrome, VideoMinerWindowModeController;
 
 const
@@ -95,18 +96,13 @@ type
     FThumbnailBrowserController      : TVideoMinerThumbnailBrowserController; // 同一フォルダ内動画の一覧表示制御
     FSafeAreaVisible                 : Boolean;                         // 90% セーフエリア確認枠を表示中か
     FShortcuts                       : TShortcutAction;                 // キーボードショートカット登録先
-    FStartupOpenAutoPlay             : Boolean;                         // 起動後に開くファイルを自動再生するか
-    FStartupOpenFile                 : string;                          // 起動後に開く指定ファイル
-    FStartupOpenRemembered           : Boolean;                         // 起動後に前回ファイルを復元するか
-    FStartupOpenTimer                : TTimer;                          // 初回描画後に起動時 open を遅延実行するタイマー
+    FStartupOpenController           : TVideoMinerStartupOpenController; // 起動後 open 予約と遅延実行の管理
     FTitleIcon                       : TImage;                          // 独自タイトルバー左端のアイコン
     FFrameGuideController            : TVideoMinerFrameGuideController; // hover 用フォーム枠制御
     FLoadingVideo                    : Boolean;                         // 動画読み込み処理中か
     FPreviousApplicationOnMessage    : TMessageEvent;                   // 前段のアプリ全体メッセージフック
     // 子コントロールへ届いたマウス戻る/進む系入力を前後動画移動として扱う
     procedure ApplicationMessage(var Msg: TMsg; var Handled: Boolean);
-    // 独自タイトルバー左端のアプリアイコンを作る
-    procedure InitializeTitleIcon;
     // タイトルバーのボタン背景色を切り替える
     procedure SetCaptionButtonColor(Sender: TObject; Color: TColor);
     // 動画終端時の動作を順に切り替える
@@ -132,6 +128,8 @@ type
     // 指定ファイルを開き、必要なら自動再生する
     function LoadVideoFile(const FileName: string; AutoPlay: Boolean;
       RestoreLoopPosition: Boolean = True): Boolean;
+    // 起動時 open controller から指定ファイルを開く
+    function StartupLoadVideoFile(const FileName: string; AutoPlay: Boolean): Boolean;
     // 前後チャプターへ移動する
     procedure NavigateChapterBy(Delta: Integer);
     // ファイル選択ダイアログから動画を開く
@@ -176,8 +174,6 @@ type
     function LoopStartPositionMs: Integer;
     // 指定位置から再生を開始する
     procedure StartPlaybackAtMs(PositionMs: Integer; FrameAlreadyShown: Boolean = False);
-    // 起動時 open を初回描画後に実行する
-    procedure StartupOpenTimer(Sender: TObject);
     // シーク後の遅延再生再開を処理する
     procedure RestartPlaybackTimer(Sender: TObject);
     // 保留中の逆方向ホイールシークを実行する
@@ -227,6 +223,10 @@ var
 
 implementation
 
+// この実装部は DFM に紐づく GUI イベントと Windows メッセージの入口を残す場所。
+// 実際の再生、読み込み、表示状態更新、入力解釈は controller / helper unit へ逃がす。
+// フォーム内で新しい処理を増やす場合は、UI 部品との接続だけかを先に確認する。
+
 const
   REVERSE_WHEEL_SEEK_DELAY_MS  = 350;       // 逆方向ホイールの連続入力をまとめる待ち時間 ms
   SEEK_RESTART_DELAY_MS         = 15;        // シーク後に再生再開を遅延させる時間 ms
@@ -240,103 +240,9 @@ const
 
 procedure TVideoMinerMainForm.ApplicationMessage(var Msg: TMsg;
   var Handled: Boolean);
-const
-  VK_BROWSER_BACK = $A6;
-  VK_BROWSER_FORWARD = $A7;
-  WM_XBUTTONDBLCLK = $020D;
-var
-  AppCommand: Word;
-  Button: Word;
-  ClassName: array[0..127] of Char;
-  ClassText: string;
-  ShouldLog: Boolean;
 begin
-  if Assigned(FPreviousApplicationOnMessage) then
-    FPreviousApplicationOnMessage(Msg, Handled);
-
-  Button := Word((NativeUInt(Msg.wParam) shr 16) and $FFFF);
-  AppCommand := Word((NativeUInt(Msg.lParam) shr 16) and $FFFF);
-  ShouldLog := False;
-  case Msg.message of
-    WM_XBUTTONDOWN, WM_XBUTTONUP, WM_XBUTTONDBLCLK, WM_APPCOMMAND:
-      ShouldLog := True;
-    WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP:
-      ShouldLog := (Msg.wParam = VK_BROWSER_BACK) or
-        (Msg.wParam = VK_BROWSER_FORWARD);
-  end;
-
-  if ShouldLog and VideoMinerDebugLogEnabled then
-  begin
-    ClassText := '';
-    if (Msg.hwnd <> 0) and (GetClassName(Msg.hwnd, ClassName,
-      Length(ClassName)) > 0) then
-      ClassText := ClassName;
-
-    WriteVideoMinerDebugLog(Format(
-      'input_msg hwnd=$%s class="%s" msg=$%s wparam=$%s lparam=$%s key=%d xbutton=%d appcmd_raw=$%s handled=%s',
-      [IntToHex(NativeInt(Msg.hwnd), 8), ClassText, IntToHex(Msg.message, 4),
-       IntToHex(NativeInt(Msg.wParam), 8), IntToHex(NativeInt(Msg.lParam), 8),
-       Msg.wParam and $FFFF, Button, IntToHex(AppCommand, 4),
-       BoolToStr(Handled, True)]));
-  end;
-
-  if Handled or (FNavigationController = nil) then
-    Exit;
-
-  if Msg.message = WM_XBUTTONDOWN then
-  begin
-    case Button of
-      1:
-        begin
-          Handled := True;
-          if FLoadingVideo then
-            WriteVideoMinerDebugLog('input_xbutton_ignore_loading delta=-1')
-          else
-          begin
-            PostMessage(Handle, WM_VM_NAVIGATE, 1, 0);
-            WriteVideoMinerDebugLog('input_xbutton_queue delta=-1');
-          end;
-        end;
-      2:
-        begin
-          Handled := True;
-          if FLoadingVideo then
-            WriteVideoMinerDebugLog('input_xbutton_ignore_loading delta=1')
-          else
-          begin
-            PostMessage(Handle, WM_VM_NAVIGATE, 2, 0);
-            WriteVideoMinerDebugLog('input_xbutton_queue delta=1');
-          end;
-        end;
-    end;
-  end
-  else if (Msg.message = WM_KEYDOWN) or (Msg.message = WM_SYSKEYDOWN) then
-  begin
-    case Msg.wParam of
-      VK_BROWSER_BACK:
-        begin
-          Handled := True;
-          if FLoadingVideo then
-            WriteVideoMinerDebugLog('input_browser_key_ignore_loading delta=-1')
-          else
-          begin
-            PostMessage(Handle, WM_VM_NAVIGATE, 1, 0);
-            WriteVideoMinerDebugLog('input_browser_key_queue delta=-1');
-          end;
-        end;
-      VK_BROWSER_FORWARD:
-        begin
-          Handled := True;
-          if FLoadingVideo then
-            WriteVideoMinerDebugLog('input_browser_key_ignore_loading delta=1')
-          else
-          begin
-            PostMessage(Handle, WM_VM_NAVIGATE, 2, 0);
-            WriteVideoMinerDebugLog('input_browser_key_queue delta=1');
-          end;
-        end;
-    end;
-  end;
+  RouteVideoMinerApplicationMessage(Handle, WM_VM_NAVIGATE, FLoadingVideo,
+    FNavigationController <> nil, FPreviousApplicationOnMessage, Msg, Handled);
 end;
 
 // フォーム生成時にデコーダを用意する
@@ -354,13 +260,11 @@ begin
   WriteVideoMinerSlowLog('form_create begin');
 {$ENDIF}
   OnKeyUp := FormKeyUp;
-  PanelTitleBar.Color := TITLE_BAR_COLOR;
-  PanelCloseButton.Color := TITLE_BAR_COLOR;
-  PanelMaximizeButton.Color := TITLE_BAR_COLOR;
-  PanelMinimizeButton.Color := TITLE_BAR_COLOR;
-  Constraints.MinWidth := MIN_FORM_WIDTH;
-  Constraints.MinHeight := MIN_FORM_HEIGHT;
-  InitializeTitleIcon;
+  ConfigureVideoMinerTitleBar(Self, PanelTitleBar, PanelCloseButton,
+    PanelMaximizeButton, PanelMinimizeButton, TITLE_BAR_COLOR, MIN_FORM_WIDTH,
+    MIN_FORM_HEIGHT);
+  FTitleIcon := CreateVideoMinerTitleIcon(Self, PanelTitleBar, Icon,
+    Application.Icon, TitleBarMouseDown);
   FMainDecoderPreparedFrameMs := -1;
   FMediaSession := TVideoMinerMediaSession.Create;
   FMediaSession.EndAction := LoadEndAction;
@@ -470,10 +374,11 @@ begin
   FReverseWheelSeekTimer.Interval := REVERSE_WHEEL_SEEK_DELAY_MS;
   FReverseWheelSeekTimer.OnTimer := ReverseWheelSeekTimer;
   FReverseWheelSeekPositionMs := -1;
-  FStartupOpenTimer := TTimer.Create(Self);
-  FStartupOpenTimer.Enabled := False;
-  FStartupOpenTimer.Interval := 120;
-  FStartupOpenTimer.OnTimer := StartupOpenTimer;
+  FStartupOpenController := TVideoMinerStartupOpenController.Create(Self,
+    Handle, WM_VM_STARTUP_OPEN);
+  FStartupOpenController.OnLoadFile := StartupLoadVideoFile;
+  FStartupOpenController.OnOpenRemembered := OpenRememberedFile;
+  FStartupOpenController.OnSetStatus := FInfoController.SetStatusCaption;
   FCurrentFileReloadController :=
     TVideoMinerCurrentFileReloadController.Create(FMediaSession);
   FCurrentFileReloadController.OnReload := LoadVideoFile;
@@ -543,8 +448,8 @@ begin
       FRestartPlaybackTimer.Enabled := False;
     if FReverseWheelSeekTimer <> nil then
       FReverseWheelSeekTimer.Enabled := False;
-    if FStartupOpenTimer <> nil then
-      FStartupOpenTimer.Enabled := False;
+    if FStartupOpenController <> nil then
+      FStartupOpenController.Stop;
     if FCurrentFileReloadController <> nil then
       FCurrentFileReloadController.Stop;
     if FAudioPlayback <> nil then
@@ -554,6 +459,7 @@ begin
     FExternalOpenController.Free;
     FMediaLoadController.Free;
     FPlaybackController.Free;
+    FStartupOpenController.Free;
     FCurrentFileReloadController.Free;
     if FWindowModeController <> nil then
       FWindowModeController.SaveWindowBounds;
@@ -588,33 +494,8 @@ end;
 
 procedure TVideoMinerMainForm.ToggleSafeArea;
 begin
-  FSafeAreaVisible := not FSafeAreaVisible;
-  if FVideoView <> nil then
-    FVideoView.SafeAreaVisible := FSafeAreaVisible;
-  if FSafeAreaVisible then
-    FInfoController.SetStatusCaption('90% safe area guide on.')
-  else
-    FInfoController.SetStatusCaption('90% safe area guide off.');
-end;
-
-procedure TVideoMinerMainForm.InitializeTitleIcon;
-begin
-  if FTitleIcon <> nil then
-    Exit;
-
-  FTitleIcon := TImage.Create(Self);
-  FTitleIcon.Parent := PanelTitleBar;
-  FTitleIcon.Align := alLeft;
-  FTitleIcon.Width := PanelTitleBar.Height;
-  FTitleIcon.Center := True;
-  FTitleIcon.Proportional := True;
-  FTitleIcon.Stretch := False;
-  FTitleIcon.Transparent := True;
-  FTitleIcon.OnMouseDown := TitleBarMouseDown;
-  if not Icon.Empty then
-    FTitleIcon.Picture.Icon.Assign(Icon)
-  else if not Application.Icon.Empty then
-    FTitleIcon.Picture.Icon.Assign(Application.Icon);
+  ToggleVideoMinerSafeArea(FSafeAreaVisible, FVideoView,
+    FInfoController.SetStatusCaption);
 end;
 
 procedure TVideoMinerMainForm.CreateParams(var Params: TCreateParams);
@@ -728,17 +609,8 @@ begin
 end;
 
 procedure TVideoMinerMainForm.SetCaptionButtonColor(Sender: TObject; Color: TColor);
-var
-  Control: TControl;
 begin
-  if Sender is TPanel then
-    TPanel(Sender).Color := Color
-  else if Sender is TLabel then
-  begin
-    Control := TLabel(Sender).Parent;
-    if Control is TPanel then
-      TPanel(Control).Color := Color;
-  end;
+  SetPanelColor(Sender, Color);
 end;
 
 procedure TVideoMinerMainForm.CaptionButtonMouseEnter(Sender: TObject);
@@ -810,7 +682,6 @@ end;
 
 procedure TVideoMinerMainForm.CyclePlaybackRate;
 var
-  CurrentRate: Double;
   PositionMs: Integer;
   WasPlaying: Boolean;
 begin
@@ -819,14 +690,8 @@ begin
 
   WasPlaying := PlaybackActiveOrPending;
   PositionMs := CurrentPlaybackPositionMs;
-  CurrentRate := FPlaybackController.PlaybackRate;
-  if SameValue(CurrentRate, 1.0) then
-    FPlaybackController.PlaybackRate := 1.5
-  else if SameValue(CurrentRate, 1.5) then
-    FPlaybackController.PlaybackRate := 2.0
-  else
-    FPlaybackController.PlaybackRate := 1.0;
-
+  FPlaybackController.PlaybackRate :=
+    NextVideoMinerPlaybackRate(FPlaybackController.PlaybackRate);
   UpdatePlaybackRateButton;
   if WasPlaying then
   begin
@@ -876,26 +741,16 @@ end;
 
 procedure TVideoMinerMainForm.UpdateEndActionButton;
 begin
-  if (FVideoView = nil) or (FPlaybackController = nil) then
-    Exit;
-
-  FVideoView.EndActionText := FPlaybackController.EndActionText(FMediaSession.EndAction);
+  UpdateVideoMinerEndActionText(FVideoView, FPlaybackController,
+    FMediaSession.EndAction);
 end;
 
 procedure TVideoMinerMainForm.UpdatePlaybackRateButton;
-var
-  RateText: string;
 begin
-  if (FVideoView = nil) or (FPlaybackController = nil) then
+  if FPlaybackController = nil then
     Exit;
 
-  if SameValue(FPlaybackController.PlaybackRate, 1.5) then
-    RateText := '1.5x'
-  else if SameValue(FPlaybackController.PlaybackRate, 2.0) then
-    RateText := '2.0x'
-  else
-    RateText := '1.0x';
-  FVideoView.PlaybackRateText := RateText;
+  UpdateVideoMinerPlaybackRateText(FVideoView, FPlaybackController.PlaybackRate);
 end;
 
 procedure TVideoMinerMainForm.UpdateMaximizeButton;
@@ -944,15 +799,8 @@ begin
 end;
 
 procedure TVideoMinerMainForm.SaveAudioPlaybackSettings;
-var
-  Settings: TVideoMinerAudioSettings;
 begin
-  if FAudioPlayback = nil then
-    Exit;
-
-  Settings.Muted := FAudioPlayback.Muted;
-  Settings.VolumePercent := FAudioPlayback.VolumePercent;
-  SaveAudioSettings(Settings);
+  SaveVideoMinerAudioPlaybackSettings(FAudioPlayback);
 end;
 
 function TVideoMinerMainForm.PlaybackActiveOrPending: Boolean;
@@ -1108,6 +956,12 @@ begin
   end;
 end;
 
+function TVideoMinerMainForm.StartupLoadVideoFile(const FileName: string;
+  AutoPlay: Boolean): Boolean;
+begin
+  Result := LoadVideoFile(FileName, AutoPlay);
+end;
+
 function TVideoMinerMainForm.OpenAndPlayFile(const FileName: string): Boolean;
 begin
   Result := LoadVideoFile(FileName, True);
@@ -1155,24 +1009,14 @@ end;
 procedure TVideoMinerMainForm.QueueStartupOpenFile(const FileName: string;
   AutoPlay: Boolean);
 begin
-  FStartupOpenFile := FileName;
-  FStartupOpenAutoPlay := AutoPlay;
-  FStartupOpenRemembered := False;
-  PostMessage(Handle, WM_VM_STARTUP_OPEN, 0, 0);
+  if FStartupOpenController <> nil then
+    FStartupOpenController.QueueFile(FileName, AutoPlay);
 end;
 
 procedure TVideoMinerMainForm.QueueStartupOpenRemembered;
 begin
-  if SameText(GetEnvironmentVariable('VIDEOMINER_DISABLE_STARTUP_RESTORE'), '1') then
-  begin
-    WriteVideoMinerStartupLog('startup_remembered_skip disabled_by_env');
-    Exit;
-  end;
-
-  FStartupOpenFile := '';
-  FStartupOpenAutoPlay := False;
-  FStartupOpenRemembered := True;
-  PostMessage(Handle, WM_VM_STARTUP_OPEN, 0, 0);
+  if FStartupOpenController <> nil then
+    FStartupOpenController.QueueRemembered;
 end;
 
 procedure TVideoMinerMainForm.PlayFromCurrentPosition;
@@ -1681,53 +1525,9 @@ end;
 
 procedure TVideoMinerMainForm.WMStartupOpen(var Message: TMessage);
 begin
-  if FStartupOpenTimer <> nil then
-  begin
-    FStartupOpenTimer.Enabled := False;
-    FStartupOpenTimer.Enabled := True;
-  end;
+  if FStartupOpenController <> nil then
+    FStartupOpenController.RestartTimer;
   Message.Result := 1;
-end;
-
-procedure TVideoMinerMainForm.StartupOpenTimer(Sender: TObject);
-var
-  AutoPlay: Boolean;
-  FileName: string;
-  OpenRemembered: Boolean;
-begin
-  WriteVideoMinerStartupLog('startup_open_timer begin');
-  try
-    if FStartupOpenTimer <> nil then
-      FStartupOpenTimer.Enabled := False;
-
-    FileName := FStartupOpenFile;
-    AutoPlay := FStartupOpenAutoPlay;
-    OpenRemembered := FStartupOpenRemembered;
-    FStartupOpenFile := '';
-    FStartupOpenAutoPlay := False;
-    FStartupOpenRemembered := False;
-
-    if OpenRemembered then
-    begin
-      WriteVideoMinerStartupLog('startup_open_timer mode=remembered');
-      FInfoController.SetStatusCaption('Loading last video...');
-      OpenRememberedFile;
-    end
-    else if FileName <> '' then
-    begin
-      WriteVideoMinerStartupLog('startup_open_timer mode=file file="' +
-        ExtractFileName(FileName) + '"');
-      FInfoController.SetStatusCaption('Loading video...');
-      LoadVideoFile(FileName, AutoPlay);
-    end
-    else
-      WriteVideoMinerStartupLog('startup_open_timer mode=none');
-    WriteVideoMinerStartupLog('startup_open_timer done');
-  except
-    on E: Exception do
-      WriteVideoMinerStartupLog('startup_open_timer_exception class="' +
-        E.ClassName + '" message="' + E.Message + '"');
-  end;
 end;
 
 procedure TVideoMinerMainForm.RestartPlaybackTimer(Sender: TObject);

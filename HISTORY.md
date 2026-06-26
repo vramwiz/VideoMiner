@@ -2,6 +2,19 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-26 メインフォームの入力/タイトルバー処理切り出し
+- `VideoMinerMainForm.pas` の肥大化対策として、アプリ全体メッセージ処理のうちマウス戻る/進む、ブラウザー戻る/進むキーのログと前後動画移動キュー化を `VideoMinerInputMessageRouter.pas` へ切り出した。
+- `ApplicationMessage` は既存の `Application.OnMessage` 前段フック、読み込み中抑止、navigation controller 有無判定を渡すだけの薄い入口にした。
+- 独自タイトルバーの初期色、最小フォームサイズ、左端アイコン生成、caption button / label hover の親 panel 色変更を `VideoMinerTitleBarUi.pas` へ切り出した。
+- DFM に紐づくイベントハンドラ名はメインフォーム側に残し、フォームイベント接続への影響を避けた。
+- 起動時の直接ファイル open / 前回ファイル復元予約、フォーム表示後の遅延 timer 実行を `VideoMinerStartupOpenController.pas` へ切り出した。
+- `QueueStartupOpenFile` / `QueueStartupOpenRemembered` / `WMStartupOpen` はメインフォームの公開 API とメッセージ入口として残し、内部処理を controller へ委譲する形にした。
+- safe area 表示切り替え、終端動作表示、再生速度表示、次の再生速度決定、音量設定保存を `VideoMinerPlaybackUiActions.pas` へ切り出した。
+- `VideoMinerMainForm.pas` は 1708 行から 1517 行になった。
+- 確認:
+  - 文字コードチェック: 成功。
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+
 ## 2026-06-26 4K30 動画で seek bar が小 fallback になる問題
 - `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` を Debug ログ有効で実行し、小さい seek bar に落ちる条件を調査した。
 - ログ上は一度 D3D overlay seek bar に乗った後、マウス位置で左右ファイル移動ボタンが表示されると `d3d_surface_state ... reason=previous_file_button_visible` になり、`seekbar_gdi_paint compact=True` へ退避していた。
