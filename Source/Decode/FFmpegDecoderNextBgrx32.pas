@@ -55,46 +55,52 @@ var
   function FinishFrame(const SourceName: string): Boolean;
   begin
     Result := False;
-    if ConvertFrame then
-    begin
-      ConvertSourceFrame := Frame;
-      DidTransfer := False;
-{$IFDEF DEBUG}
-      TransferMs := 0;
-      ConvertMs := 0;
-      TransferWatch := TStopwatch.StartNew;
-{$ENDIF}
-      if not TransferFrameToCpuIfNeeded(Frame, PAVFrame(Context.TransferFrame),
-        ConvertSourceFrame, DidTransfer, TransferErrorMessage) then
+    DidTransfer := False;
+    try
+      if ConvertFrame then
       begin
-        ErrorMessage := 'Failed to transfer video frame: ' + TransferErrorMessage;
-        Exit;
+        ConvertSourceFrame := Frame;
+{$IFDEF DEBUG}
+        TransferMs := 0;
+        ConvertMs := 0;
+        TransferWatch := TStopwatch.StartNew;
+{$ENDIF}
+        if not TransferFrameToCpuIfNeeded(Frame, PAVFrame(Context.TransferFrame),
+          ConvertSourceFrame, DidTransfer, TransferErrorMessage) then
+        begin
+          ErrorMessage := 'Failed to transfer video frame: ' + TransferErrorMessage;
+          Exit;
+        end;
+{$IFDEF DEBUG}
+        TransferMs := TransferWatch.Elapsed.TotalMilliseconds;
+        ConvertWatch := TStopwatch.StartNew;
+{$ENDIF}
+        ProbeNv12TextureUpload(ConvertSourceFrame);
+        D3DPresented := PresentNv12TextureFrame(ConvertSourceFrame);
+        if not D3DPresented then
+          CopyFrameToBgrx32BufferCached(ConvertSourceFrame, Buffer, BufferStride,
+            Context.DirectSwsContext, Context.DirectSwsSrcWidth, Context.DirectSwsSrcHeight,
+            Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat,
+            Context.Bgrx32TempBuffer, Context.Bgrx32TempStride,
+            Context.Bgrx32TempHeight);
+{$IFDEF DEBUG}
+        ConvertMs := ConvertWatch.Elapsed.TotalMilliseconds;
+        WriteVideoMinerSlowLog(Format(
+          'next_bgrx32_detail source=%s frame=%dx%d fmt=%d linesize0=%d transferred=%s d3d_presented=%s transfer_ms=%.3f convert_ms=%.3f buffer_stride=%d',
+          [SourceName, ConvertSourceFrame.width, ConvertSourceFrame.height,
+           ConvertSourceFrame.format, ConvertSourceFrame.linesize[0],
+           BoolToStr(DidTransfer, True), BoolToStr(D3DPresented, True),
+           TransferMs, ConvertMs, BufferStride]));
+{$ENDIF}
       end;
-{$IFDEF DEBUG}
-      TransferMs := TransferWatch.Elapsed.TotalMilliseconds;
-      ConvertWatch := TStopwatch.StartNew;
-{$ENDIF}
-      ProbeNv12TextureUpload(ConvertSourceFrame);
-      D3DPresented := PresentNv12TextureFrame(ConvertSourceFrame);
-      if not D3DPresented then
-        CopyFrameToBgrx32BufferCached(ConvertSourceFrame, Buffer, BufferStride,
-          Context.DirectSwsContext, Context.DirectSwsSrcWidth, Context.DirectSwsSrcHeight,
-          Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat,
-          Context.Bgrx32TempBuffer, Context.Bgrx32TempStride,
-          Context.Bgrx32TempHeight);
-{$IFDEF DEBUG}
-      ConvertMs := ConvertWatch.Elapsed.TotalMilliseconds;
-      WriteVideoMinerSlowLog(Format(
-        'next_bgrx32_detail source=%s frame=%dx%d fmt=%d linesize0=%d transferred=%s d3d_presented=%s transfer_ms=%.3f convert_ms=%.3f buffer_stride=%d',
-        [SourceName, ConvertSourceFrame.width, ConvertSourceFrame.height,
-         ConvertSourceFrame.format, ConvertSourceFrame.linesize[0],
-         BoolToStr(DidTransfer, True), BoolToStr(D3DPresented, True),
-         TransferMs, ConvertMs, BufferStride]));
-{$ENDIF}
-    end;
 
-    PositionMs := StreamTimestampToMs(Stream, Frame.pts);
-    Result := True;
+      PositionMs := StreamTimestampToMs(Stream, Frame.pts);
+      Result := True;
+    finally
+      if DidTransfer and (Context.TransferFrame <> nil) then
+        TFFmpegApi.av_frame_unref(PAVFrame(Context.TransferFrame));
+      TFFmpegApi.av_frame_unref(Frame);
+    end;
   end;
 
 begin

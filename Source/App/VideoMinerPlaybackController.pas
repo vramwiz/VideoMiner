@@ -462,30 +462,9 @@ begin
   if VideoMinerShouldDropFrame(CurrentVideoPositionMs, AudioPositionMs,
     DropCount, DropElapsedMs) then
   begin
-    if FVideoView.NeedsD3DOverlayFrame and
-       FVideoView.ShowFrameAt(Decoder, AudioPositionMs, ErrorMessage) then
-    begin
-      WriteVideoMinerD3DLog(Format(
-        'lagging_video_sync_for_d3d_overlay audio_ms=%d video_ms=%d lag_ms=%d drop_count=%d drop_elapsed_ms=%d',
-        [AudioPositionMs, CurrentVideoPositionMs,
-         AudioPositionMs - CurrentVideoPositionMs, DropCount, DropElapsedMs]));
-      PositionMs := AudioPositionMs;
-      CurrentVideoPositionMs := AudioPositionMs;
-      Result := lvrSyncedToAudio;
-      Exit;
-    end;
-
     ConvertFrame := False;
     Inc(DropCount);
     Result := lvrDropped;
-    Exit;
-  end;
-
-  if FVideoView.ShowFrameAt(Decoder, AudioPositionMs, ErrorMessage) then
-  begin
-    PositionMs := AudioPositionMs;
-    CurrentVideoPositionMs := AudioPositionMs;
-    Result := lvrSyncedToAudio;
     Exit;
   end;
 
@@ -498,7 +477,7 @@ begin
     Exit;
   end;
 
-  Result := lvrError;
+  Result := lvrNoAction;
 end;
 
 function TVideoMinerPlaybackController.EndActionText(
@@ -1434,16 +1413,9 @@ begin
   if not VideoMinerShouldSeekVideoToAudio(PositionMs, AudioPositionMs) then
     Exit;
 
-  Result := FVideoView.ShowFrameAt(Decoder, AudioPositionMs, ErrorMessage);
-  if Result then
-    PositionMs := AudioPositionMs;
-
-  if (not Result) and VideoMinerNearEnd(SeekMaxMs, AudioPositionMs) then
-  begin
-    ErrorMessage := '';
-    PositionMs := AudioPositionMs;
-    Result := True;
-  end;
+  WriteVideoMinerD3DLog(Format(
+    'sync_video_to_audio_skip_seek_during_playback video_ms=%d audio_ms=%d lag_ms=%d',
+    [PositionMs, AudioPositionMs, AudioPositionMs - PositionMs]));
 end;
 
 procedure TVideoMinerPlaybackController.Tick(Decoder: TFFmpegDecoder;

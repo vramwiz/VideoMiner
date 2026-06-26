@@ -2,6 +2,17 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-27 NAS 4K 動画再生中のメモリ急増対策
+- `\\taketani\bbb\Balloon\[萌球工作室][4k][pop]ストッキングに印刷風船を入れる.mp4` を Win64 Debug で再生すると、修正前は 14 秒程度で private bytes が約 2.8 GB まで増え続けることを確認した。
+- 原因は、NAS 4K 動画で decode が一時的に音声へ遅れた時、`HandleLaggingVideo` / `SyncVideoToAudio` がほぼ毎 tick `ShowFrameAt(audio_ms)` を呼び、通常再生中に音声位置への seek を連打していたこと。
+- 再生中の遅れ補正では seek 連打をやめ、順方向 decode と frame drop に任せるようにした。これにより SMB 越しの大きい MP4 で FFmpeg/MP4 側の内部保持が膨らむ状態を避ける。
+- 通常再生中の `ShowFrameAt` では明示シーク用の表示フレームキャッシュ更新をしないようにし、4K bitmap の余分なコピーを抑えた。
+- 順方向デコードの `AVFrame` / QSV 転送 frame と音声 decode の `AVFrame` を、処理後に `av_frame_unref` するようにした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - D3D off: 25 秒再生で private bytes は約 506 MB 付近で横ばい。
+  - D3D on: 25 秒再生で private bytes は約 688 MB 付近で横ばい。ログ上も `seek_to_audio=False`、`d3d_memory private_mb=687.9` で安定。
+
 ## 2026-06-26 シークバー下段ツール行の縦位置揃え
 - シークバー下段の音量ラベル、ミュート、再生速度、時刻、終端動作、Check、チャプター追加/削除、全画面アイコンがそれぞれ別の `Top` 基準で配置され、水平位置がガタついて見えていた。
 - `TVideoMinerOverlaySeekBar` に `ToolRowCenterY` / `ToolRowRect` を追加し、下段ツール行の各矩形を共通の中心 Y から作るようにした。

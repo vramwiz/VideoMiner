@@ -22,6 +22,7 @@ type
     FDisplayRotationOffset   : Integer;                 // ユーザー操作で追加する表示回転角度
     FLastD3DDecodeLogText    : string;                  // 直近に出した D3D デコード判定ログ
     FLastD3DDecodeLogTick    : UInt64;                  // 直近に D3D デコード判定ログを出した時刻
+    FPlaybackActive          : Boolean;                 // 通常再生中か
     FShownFrameCache         : TBitmap;                 // 直近の明示表示フレームを即時再表示するためのキャッシュ
     FShownFrameCachePosition : Integer;                 // キャッシュしている明示表示フレームの位置 ms
     FSurface                 : TVideoMinerVideoSurface; // 実際の動画表示と overlay 描画を持つサーフェス
@@ -792,6 +793,7 @@ end;
 
 procedure TVideoMinerVideoView.SetPlaybackActive(Value: Boolean);
 begin
+  FPlaybackActive := Value;
   if FSurface <> nil then
     FSurface.PlaybackActive := Value;
 end;
@@ -1078,7 +1080,8 @@ begin
         'show_frame_signature position_ms=%d %s',
         [PositionMs, FrameSignatureLogText(Signature)]));
 {$ENDIF}
-    CacheShownFrame(PositionMs);
+    if not FPlaybackActive then
+      CacheShownFrame(PositionMs);
     StoreLoopFrameCache(PositionMs);
   end;
   Result := True;

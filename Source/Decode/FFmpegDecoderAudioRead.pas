@@ -227,8 +227,14 @@ begin
         while (SampleCount < TargetSampleCount) and
           (TFFmpegApi.avcodec_receive_frame(PAVCodecContext(Context.AudioCodecContext),
             PAVFrame(Context.AudioFrame)) = 0) do
-          if not AppendDecodedAudioFrame then
-            Exit;
+        begin
+          try
+            if not AppendDecodedAudioFrame then
+              Exit;
+          finally
+            TFFmpegApi.av_frame_unref(PAVFrame(Context.AudioFrame));
+          end;
+        end;
       finally
         TFFmpegApi.av_packet_unref(PAVPacket(Context.Packet));
       end;
@@ -241,8 +247,14 @@ begin
         while (SampleCount < TargetSampleCount) and
           (TFFmpegApi.avcodec_receive_frame(PAVCodecContext(Context.AudioCodecContext),
             PAVFrame(Context.AudioFrame)) = 0) do
-          if not AppendDecodedAudioFrame then
-            Exit;
+        begin
+          try
+            if not AppendDecodedAudioFrame then
+              Exit;
+          finally
+            TFFmpegApi.av_frame_unref(PAVFrame(Context.AudioFrame));
+          end;
+        end;
       Finished := True;
     end;
 

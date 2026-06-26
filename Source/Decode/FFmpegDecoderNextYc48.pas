@@ -40,6 +40,20 @@ var
   Frame: PAVFrame;
   Stream: PAVStream;
   Ret: Integer;
+
+  function FinishFrame: Boolean;
+  begin
+    try
+      if ConvertFrame then
+        CopyFrameToYc48Buffer(Frame, Buffer, BufferStride,
+          Context.DirectSwsContext, Context.DirectSwsSrcWidth, Context.DirectSwsSrcHeight,
+          Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat);
+      PositionMs := StreamTimestampToMs(Stream, Frame.pts);
+      Result := True;
+    finally
+      TFFmpegApi.av_frame_unref(Frame);
+    end;
+  end;
 begin
   ErrorMessage := '';
   PositionMs := -1;
@@ -66,12 +80,7 @@ begin
   try
     if TFFmpegApi.avcodec_receive_frame(CodecContext, Frame) = 0 then
     begin
-      if ConvertFrame then
-        CopyFrameToYc48Buffer(Frame, Buffer, BufferStride,
-          Context.DirectSwsContext, Context.DirectSwsSrcWidth, Context.DirectSwsSrcHeight,
-          Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat);
-      PositionMs := StreamTimestampToMs(Stream, Frame.pts);
-      Result := True;
+      Result := FinishFrame;
       Exit;
     end;
 
@@ -92,12 +101,7 @@ begin
 
         while TFFmpegApi.avcodec_receive_frame(CodecContext, Frame) = 0 do
         begin
-          if ConvertFrame then
-            CopyFrameToYc48Buffer(Frame, Buffer, BufferStride,
-              Context.DirectSwsContext, Context.DirectSwsSrcWidth, Context.DirectSwsSrcHeight,
-              Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat);
-          PositionMs := StreamTimestampToMs(Stream, Frame.pts);
-          Result := True;
+          Result := FinishFrame;
           Exit;
         end;
       finally

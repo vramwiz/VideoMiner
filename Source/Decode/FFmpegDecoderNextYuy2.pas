@@ -47,23 +47,29 @@ var
   function FinishFrame(const SourceName: string): Boolean;
   begin
     Result := False;
-    if ConvertFrame then
-    begin
-      ConvertSourceFrame := Frame;
-      DidTransfer := False;
-      if not TransferFrameToCpuIfNeeded(Frame, PAVFrame(Context.TransferFrame),
-        ConvertSourceFrame, DidTransfer, TransferErrorMessage) then
+    DidTransfer := False;
+    try
+      if ConvertFrame then
       begin
-        ErrorMessage := 'Failed to transfer video frame: ' + TransferErrorMessage;
-        Exit;
+        ConvertSourceFrame := Frame;
+        if not TransferFrameToCpuIfNeeded(Frame, PAVFrame(Context.TransferFrame),
+          ConvertSourceFrame, DidTransfer, TransferErrorMessage) then
+        begin
+          ErrorMessage := 'Failed to transfer video frame: ' + TransferErrorMessage;
+          Exit;
+        end;
+        CopyFrameToYuy2Buffer(ConvertSourceFrame, Buffer, BufferStride,
+          Context.DirectSwsContext, Context.DirectSwsSrcWidth, Context.DirectSwsSrcHeight,
+          Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat);
       end;
-      CopyFrameToYuy2Buffer(ConvertSourceFrame, Buffer, BufferStride,
-        Context.DirectSwsContext, Context.DirectSwsSrcWidth, Context.DirectSwsSrcHeight,
-        Context.DirectSwsSrcFormat, Context.DirectSwsDstFormat);
-    end;
 
-    PositionMs := StreamTimestampToMs(Stream, Frame.pts);
-    Result := True;
+      PositionMs := StreamTimestampToMs(Stream, Frame.pts);
+      Result := True;
+    finally
+      if DidTransfer and (Context.TransferFrame <> nil) then
+        TFFmpegApi.av_frame_unref(PAVFrame(Context.TransferFrame));
+      TFFmpegApi.av_frame_unref(Frame);
+    end;
   end;
 
 begin

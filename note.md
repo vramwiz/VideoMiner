@@ -79,10 +79,6 @@
   - まずはディスクキャッシュ miss の 1 枚生成だけを worker 化し、キャッシュ hit や hover 実動画プレビューとは分離して検証する。
   - worker ごとに専用デコーダを持ち、UI 反映は main thread 側で生存確認と世代確認を行ってから反映する。
 
-- 再生を進めるとメモリ使用量が急増する問題を調査する。
-  - D3D texture / swap chain / BGRX32 temp buffer / frame cache / thumbnail cache / FFmpeg frame・packet 周りの解放漏れを疑う。
-  - hover preview やサムネイル一覧を閉じた状態でも増えるかを確認し、通常再生経路と overlay/preview 経路を分けて見る。
-
 - ループ再生の先頭戻りをさらに滑らかにする。
   - 現状かなり改善済みなので優先順位は低め。
   - 目標は seek / 再同期 / 音声再開の待ちを 0ms に近づけること。
