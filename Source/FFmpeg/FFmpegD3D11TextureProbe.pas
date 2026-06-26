@@ -90,6 +90,7 @@ uses
 
 const
   DRAW_D3D_SEEKBAR_TOOL_ROW = True; // 下段の音量/速度/Check/Loop 等を D3D 側で描く
+  SEEKBAR_TOOL_VISUAL_NUDGE_Y = -2; // スピーカー/速度/全画面の見た目中心を基準線へ合わせる補正
 
 type
   TNv12TextureProbe = class
@@ -1810,6 +1811,7 @@ begin
     Exit;
 
   ToolTop := SeekBarToolRowTop(State);
+  Inc(ToolTop, SEEKBAR_TOOL_VISUAL_NUDGE_Y);
   MuteRect := Rect(State.Bounds.Left + 134, ToolTop, State.Bounds.Left + 162,
     ToolTop + 28);
   BackAlpha := SeekBarButtonBackAlpha(State.MuteHovered, State.MutePressed,
@@ -1963,6 +1965,7 @@ begin
     Exit;
 
   ToolTop := SeekBarToolRowTop(State);
+  Inc(ToolTop, SEEKBAR_TOOL_VISUAL_NUDGE_Y);
   IconRect := Rect(State.Bounds.Right - 48, ToolTop - 3,
     State.Bounds.Right - 14, ToolTop + 31);
   BackAlpha := SeekBarButtonBackAlpha(State.FullScreenHovered,

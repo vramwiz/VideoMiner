@@ -29,6 +29,8 @@ type
     FLoadingActive          : Boolean;                           // 動画読み込み中のインジケータを表示するか
     FLoadingTick            : Integer;                           // 読み込み中インジケータのアニメーション段階
     FLoadingTimer           : TTimer;                            // 読み込み中インジケータを再描画するタイマー
+    FCursorHidden           : Boolean;                           // 動画面上でマウスカーソルを自動非表示中か
+    FCursorHideTimer        : TTimer;                            // 操作領域外でカーソルを隠す遅延タイマー
     FLastD3DStateLogText    : string;                            // 直近に出した D3D 表示判定ログ
     FLastD3DStateLogTick    : UInt64;                            // 直近に D3D 表示判定ログを出した時刻
     FForceCompactSeekBarPaint : Boolean;                         // ループ再開中の一時 GDI 表示でも D3D 風に描くか
@@ -128,6 +130,10 @@ type
     function HitSeekBar(const Point: TPoint): Boolean;
     // 表示中の下側シークバーを維持する領域に当たっているか返す
     function HitSeekBarKeepAlive(const Point: TPoint): Boolean;
+    // 指定位置ではカーソルを自動非表示にしてよいか返す
+    function ShouldHideMouseCursorAt(const Point: TPoint): Boolean;
+    // マウスカーソルを表示へ戻し、必要なら自動非表示タイマーを再開する
+    procedure ResetMouseCursorAutoHide(const Point: TPoint);
     // 下側シークバーを配置するフォーム側の基準領域を返す
     function SeekBarLayoutRect: TRect;
     // D3D 表示中に backbuffer 上へ描く簡易シークバー状態を更新する
@@ -234,10 +240,14 @@ type
     procedure SetVolumePercent(Value: Integer);
     // 読み込み中インジケータを 1 段階進める
     procedure LoadingTimer(Sender: TObject);
+    // マウス停止後に操作領域外ならカーソルを隠す
+    procedure CursorHideTimer(Sender: TObject);
     // 単クリックが確定した時点で再生/一時停止を発火する
     procedure SurfaceClickTimer(Sender: TObject);
     // 背景消去を抑止して動画面のちらつきを避ける
     procedure WMEraseBkgnd(var Message: TWMEraseBkgnd); message WM_ERASEBKGND;
+    // 動画面から出たらカーソル非表示を解除する
+    procedure CMMouseLeave(var Message: TMessage); message CM_MOUSELEAVE;
   protected
     // ダブルクリックを全画面切り替えとして扱う
     procedure DblClick; override;
@@ -376,6 +386,7 @@ const
   LOADING_SEGMENTS      = 36;    // 欠け丸を構成する線分数
   LOADING_GAP_SEGMENTS  = 7;     // 欠けとして空ける線分数
   LOADING_LAP_TICKS     = 24;    // 色を切り替える周回の tick 数
+  CURSOR_HIDE_DELAY_MS  = 1200;  // 操作領域外でマウスカーソルを隠すまでの待ち時間
 
 constructor TVideoMinerVideoSurface.Create(AOwner: TComponent);
 begin
@@ -417,6 +428,10 @@ begin
   FLoadingTimer.Enabled := False;
   FLoadingTimer.Interval := LOADING_TIMER_MS;
   FLoadingTimer.OnTimer := LoadingTimer;
+  FCursorHideTimer := TTimer.Create(Self);
+  FCursorHideTimer.Enabled := False;
+  FCursorHideTimer.Interval := CURSOR_HIDE_DELAY_MS;
+  FCursorHideTimer.OnTimer := CursorHideTimer;
   FPreviousFileButton.Visible := False;
   FFirstFrameButton.Visible := False;
   FSkipBackwardButton.Visible := False;
@@ -430,6 +445,9 @@ end;
 destructor TVideoMinerVideoSurface.Destroy;
 begin
   CancelPendingSurfaceClick;
+  Cursor := crDefault;
+  FCursorHidden := False;
+  FCursorHideTimer.Free;
   FLoadingTimer.Free;
   FSurfaceClickTimer.Free;
   FBossGestureDetector.Free;
@@ -1293,6 +1311,39 @@ begin
   Result := PtInRect(HitRect, Point);
 end;
 
+function TVideoMinerVideoSurface.ShouldHideMouseCursorAt(
+  const Point: TPoint): Boolean;
+begin
+  Result := PtInRect(ClientRect, Point) and
+    (not FBossMode) and
+    (not FLoadingActive) and
+    (not HitSeekBar(Point)) and
+    (not HitAnyOverlayButton(Point)) and
+    (not ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible and
+      HitPreviousFileButton(Point))) and
+    (not ((FNextFileButton <> nil) and FNextFileButton.Visible and
+      HitNextFileButton(Point)));
+end;
+
+procedure TVideoMinerVideoSurface.ResetMouseCursorAutoHide(
+  const Point: TPoint);
+begin
+  if FCursorHidden then
+  begin
+    Cursor := crDefault;
+    FCursorHidden := False;
+  end
+  else if Cursor = crNone then
+    Cursor := crDefault;
+
+  if FCursorHideTimer = nil then
+    Exit;
+
+  FCursorHideTimer.Enabled := False;
+  if ShouldHideMouseCursorAt(Point) then
+    FCursorHideTimer.Enabled := True;
+end;
+
 function TVideoMinerVideoSurface.ChapterMarkerToleranceMs(MaxMs,
   PixelTolerance: Integer): Integer;
 var
@@ -1548,6 +1599,7 @@ begin
   if FBossMode = Value then
     Exit;
 
+  ResetMouseCursorAutoHide(ScreenToClient(Mouse.CursorPos));
   FBossMode := Value;
   if Value then
     FBossHelpPageIndex := 0;
@@ -1617,6 +1669,7 @@ var
   TogglePositionMs: Integer;
 begin
   inherited MouseDown(Button, Shift, X, Y);
+  ResetMouseCursorAutoHide(Point(X, Y));
   if FBossMode then
   begin
     CancelPendingSurfaceClick;
@@ -1718,6 +1771,7 @@ var
 begin
   inherited MouseMove(Shift, X, Y);
   MousePoint := Point(X, Y);
+  ResetMouseCursorAutoHide(MousePoint);
 
   if FBossMode then
     Exit;
@@ -1857,6 +1911,8 @@ begin
   end
   else if (not KeepSeekBarVisible) and Assigned(FOnSeekHoverPreviewEnd) then
     FOnSeekHoverPreviewEnd(Self);
+
+  ResetMouseCursorAutoHide(MousePoint);
 end;
 
 procedure TVideoMinerVideoSurface.MouseUp(Button: TMouseButton;
@@ -1997,6 +2053,7 @@ begin
     Exit;
 
   LocalPoint := ScreenToClient(MousePos);
+  ResetMouseCursorAutoHide(LocalPoint);
   DestRect := FitRect;
   if DestRect.IsEmpty then
     Exit;
@@ -2762,6 +2819,23 @@ begin
     FSeekBar.OnVolumeChange := Value;
 end;
 
+procedure TVideoMinerVideoSurface.CursorHideTimer(Sender: TObject);
+var
+  LocalPoint: TPoint;
+begin
+  if FCursorHideTimer <> nil then
+    FCursorHideTimer.Enabled := False;
+
+  LocalPoint := ScreenToClient(Mouse.CursorPos);
+  if ShouldHideMouseCursorAt(LocalPoint) then
+  begin
+    Cursor := crNone;
+    FCursorHidden := True;
+  end
+  else
+    ResetMouseCursorAutoHide(LocalPoint);
+end;
+
 procedure TVideoMinerVideoSurface.SurfaceClickTimer(Sender: TObject);
 begin
   FSurfaceClickTimer.Enabled := False;
@@ -2831,6 +2905,15 @@ end;
 procedure TVideoMinerVideoSurface.WMEraseBkgnd(var Message: TWMEraseBkgnd);
 begin
   Message.Result := 1;
+end;
+
+procedure TVideoMinerVideoSurface.CMMouseLeave(var Message: TMessage);
+begin
+  inherited;
+  if FCursorHideTimer <> nil then
+    FCursorHideTimer.Enabled := False;
+  Cursor := crDefault;
+  FCursorHidden := False;
 end;
 
 end.

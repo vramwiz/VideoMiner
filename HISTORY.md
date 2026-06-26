@@ -2,6 +2,27 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-27 動画面カーソルの自動非表示
+- 動画面上でマウスがシークバー、中央操作アイコン、左右ナビアイコンの上にないまま一定時間止まった場合、カーソルを `crNone` へ切り替えて非表示にするようにした。
+- マウス移動、クリック、ホイール操作、ボスモード切替、動画面外への移動では `crDefault` へ戻し、操作領域上では自動非表示タイマーを止める。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+
+## 2026-06-27 シークバー下段アイコンの縦位置補正
+- Debug 表示の緑基準線に対して、D3D 下段ツール行のスピーカー、再生速度、全画面アイコンが 1〜2 px ずれて見えていた。
+- 再生中に使われる D3D overlay 側だけ、`DrawSeekBarPlaybackRate` と `DrawSeekBarFullScreen` で 2 px 上方向へ視覚補正するようにした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+
+## 2026-06-27 起動復元 skip 後のサムネイル表示待ち対策
+- NAS など重い動画が前回ファイルで、起動時に前回動画を開かない状態では、現在の `MediaList` が空になる。
+- その状態で右クリックまたは Tab からサムネイル一覧を開く時、`ShowFolderHistoryWhenMediaListEmpty` が履歴フォルダを順に `FirstMediaFileInFolder` で同期走査していたため、NAS 履歴があると表示操作自体がしばらく返らなかった。
+- 空一覧からサムネイル一覧を開く時は、フォルダ履歴行だけを即表示し、画面表示後の短い遅延タイマーで履歴フォルダを復元して通常の動画一覧構築へ進むようにした。
+- 空一覧状態の履歴タイル描画では、過去フォルダの代表サムネイル用 `MediaList` も同期構築しないようにした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - `VIDEOMINER_DISABLE_STARTUP_RESTORE=1` で空一覧起動し、Tab でサムネイル表示。ログは `thumbnail toggle_end visible=True` の後に `thumbnail history_restore_after_open ...` と `media_list_build ...` が出る。
+
 ## 2026-06-27 NAS 4K 動画再生中のメモリ急増対策
 - `\\taketani\bbb\Balloon\[萌球工作室][4k][pop]ストッキングに印刷風船を入れる.mp4` を Win64 Debug で再生すると、修正前は 14 秒程度で private bytes が約 2.8 GB まで増え続けることを確認した。
 - 原因は、NAS 4K 動画で decode が一時的に音声へ遅れた時、`HandleLaggingVideo` / `SyncVideoToAudio` がほぼ毎 tick `ShowFrameAt(audio_ms)` を呼び、通常再生中に音声位置への seek を連打していたこと。
