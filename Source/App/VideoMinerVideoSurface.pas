@@ -131,6 +131,8 @@ type
     function SeekBarLayoutRect: TRect;
     // D3D 表示中に backbuffer 上へ描く簡易シークバー状態を更新する
     procedure UpdateD3DSeekBarOverlayState;
+    // D3D 表示中の動画 texture 拡大表示状態を更新する
+    procedure UpdateD3DVideoZoomState;
     // 保持中の D3D frame へ現在の簡易シークバー状態を重ねて再表示する
     function RefreshD3DFramePresentation: Boolean;
     // D3D11 直接表示を止めている最初の理由を返す
@@ -580,8 +582,6 @@ begin
     Result := 'safe_area_visible'
   else if FLoadingActive then
     Result := 'loading_active'
-  else if FZoomScale > MIN_ZOOM then
-    Result := 'zoom_active'
 end;
 
 procedure TVideoMinerVideoSurface.LogD3DFramePresentationState(
@@ -697,6 +697,7 @@ begin
   end;
 
   SetNv12TextureProbeTargetWindow(Handle, ClientWidth, ClientHeight);
+  UpdateD3DVideoZoomState;
   UpdateD3DSeekBarOverlayState;
 end;
 
@@ -712,6 +713,7 @@ begin
   end;
 
   SetNv12TextureProbeTargetWindow(Handle, ClientWidth, ClientHeight);
+  UpdateD3DVideoZoomState;
   UpdateD3DSeekBarOverlayState;
 end;
 
@@ -1420,6 +1422,52 @@ begin
   SetNv12TextureD3DSeekBarOverlay(State);
 end;
 
+procedure TVideoMinerVideoSurface.UpdateD3DVideoZoomState;
+var
+  SourceHeight: Integer;
+  SourceRect: TRect;
+  SourceWidth: Integer;
+  State: TD3D11VideoZoomState;
+begin
+  State := Default(TD3D11VideoZoomState);
+  if (FBitmap = nil) or (FBitmap.Width <= 0) or (FBitmap.Height <= 0) or
+     (FZoomScale <= MIN_ZOOM) then
+  begin
+    SetNv12TextureD3DVideoZoom(State);
+    Exit;
+  end;
+
+  ClampZoomCenter;
+  if FZoomScale <= MIN_ZOOM then
+  begin
+    SetNv12TextureD3DVideoZoom(State);
+    Exit;
+  end;
+
+  SourceWidth := Max(1, Round(FBitmap.Width / FZoomScale));
+  SourceHeight := Max(1, Round(FBitmap.Height / FZoomScale));
+  SourceRect.Left := Round(FZoomCenterX - SourceWidth / 2);
+  SourceRect.Top := Round(FZoomCenterY - SourceHeight / 2);
+  SourceRect.Right := SourceRect.Left + SourceWidth;
+  SourceRect.Bottom := SourceRect.Top + SourceHeight;
+
+  if SourceRect.Left < 0 then
+    OffsetRect(SourceRect, -SourceRect.Left, 0);
+  if SourceRect.Top < 0 then
+    OffsetRect(SourceRect, 0, -SourceRect.Top);
+  if SourceRect.Right > FBitmap.Width then
+    OffsetRect(SourceRect, FBitmap.Width - SourceRect.Right, 0);
+  if SourceRect.Bottom > FBitmap.Height then
+    OffsetRect(SourceRect, 0, FBitmap.Height - SourceRect.Bottom);
+
+  State.Active := True;
+  State.Left := SourceRect.Left / FBitmap.Width;
+  State.Top := SourceRect.Top / FBitmap.Height;
+  State.Width := Max(1, SourceRect.Width) / FBitmap.Width;
+  State.Height := Max(1, SourceRect.Height) / FBitmap.Height;
+  SetNv12TextureD3DVideoZoom(State);
+end;
+
 function TVideoMinerVideoSurface.RefreshD3DFramePresentation: Boolean;
 begin
   Result := False;
@@ -1428,6 +1476,7 @@ begin
     Exit;
 
   SetNv12TextureProbeTargetWindow(Handle, ClientWidth, ClientHeight);
+  UpdateD3DVideoZoomState;
   UpdateD3DSeekBarOverlayState;
   Result := PresentCurrentNv12TextureFrame;
   if Result then
@@ -1636,6 +1685,7 @@ end;
 
 procedure TVideoMinerVideoSurface.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
+  D3DRefreshed: Boolean;
   DestRect: TRect;
   HoverPositionMs: Integer;
   KeepAliveHit: Boolean;
@@ -1671,7 +1721,12 @@ begin
         (MousePoint.Y - FPanStartPoint.Y) / Max(1, DestRect.Height) *
         SourceHeight;
       ClampZoomCenter;
-      Invalidate;
+      UpdateD3DVideoZoomState;
+      D3DRefreshed := RefreshD3DFramePresentation;
+      if not D3DRefreshed then
+        D3DRefreshed := PresentCurrentBgrx32FrameWithD3D;
+      if not D3DRefreshed then
+        Invalidate;
     end;
     Exit;
   end;
@@ -1908,6 +1963,7 @@ var
   NewSourceWidth: Double;
   RatioX: Double;
   RatioY: Double;
+  D3DRefreshed: Boolean;
   SeekPositionMs: Integer;
   StepMs: Integer;
 begin
@@ -1968,8 +2024,17 @@ begin
   if Abs(NewScale - MIN_ZOOM) < 0.01 then
   begin
     ResetZoom;
-    FZoomFrameRefreshNeeded := True;
-    Invalidate;
+    UpdateD3DVideoZoomState;
+    D3DRefreshed := RefreshD3DFramePresentation;
+    if not D3DRefreshed then
+      D3DRefreshed := PresentCurrentBgrx32FrameWithD3D;
+    if D3DRefreshed then
+      FZoomFrameRefreshNeeded := False
+    else
+    begin
+      FZoomFrameRefreshNeeded := True;
+      Invalidate;
+    end;
     Result := True;
     Exit;
   end;
@@ -1984,8 +2049,17 @@ begin
   FZoomCenterY := ImageY - RatioY * NewSourceHeight + NewSourceHeight / 2;
   ClampZoomCenter;
 
-  FZoomFrameRefreshNeeded := True;
-  Invalidate;
+  UpdateD3DVideoZoomState;
+  D3DRefreshed := RefreshD3DFramePresentation;
+  if not D3DRefreshed then
+    D3DRefreshed := PresentCurrentBgrx32FrameWithD3D;
+  if D3DRefreshed then
+    FZoomFrameRefreshNeeded := False
+  else
+  begin
+    FZoomFrameRefreshNeeded := True;
+    Invalidate;
+  end;
   Result := True;
 end;
 

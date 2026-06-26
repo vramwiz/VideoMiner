@@ -60,6 +60,14 @@ type
     Chapters       : TArray<TD3D11SeekBarOverlayChapter>; // D3D 側で描くチャプター目盛り
   end;
 
+  TD3D11VideoZoomState = record
+    Active: Boolean; // 動画 texture の一部を拡大表示するか
+    Left  : Double;  // 表示する source 矩形の左端。0.0..1.0 の正規化座標
+    Top   : Double;  // 表示する source 矩形の上端。0.0..1.0 の正規化座標
+    Width : Double;  // 表示する source 矩形の幅。0.0..1.0 の正規化座標
+    Height: Double;  // 表示する source 矩形の高さ。0.0..1.0 の正規化座標
+  end;
+
 // NV12 frame を D3D11 texture へアップロードし、計測ログを出す。
 procedure ProbeNv12TextureUpload(Frame: PAVFrame);
 procedure SetNv12TextureProbeTargetWindow(WindowHandle: HWND; Width, Height: Integer);
@@ -72,6 +80,7 @@ function Nv12TextureD3DFramePresented: Boolean;
 procedure ClearNv12TextureD3DFramePresented;
 procedure SetNv12TextureD3DDisplayAllowed(Allowed: Boolean);
 procedure SetNv12TextureD3DSeekBarOverlay(const State: TD3D11SeekBarOverlayState);
+procedure SetNv12TextureD3DVideoZoom(const State: TD3D11VideoZoomState);
 
 implementation
 
@@ -177,6 +186,9 @@ type
     procedure DrawTransportOverlay(const State: TD3D11SeekBarOverlayState);
     procedure DrawFileNavButton(const ButtonRect: TRect; Previous: Boolean);
     function DrawSeekBarOverlay(const State: TD3D11SeekBarOverlayState): Double;
+    procedure BuildVideoViewport(FrameWidth, FrameHeight: Integer;
+      out Viewport: D3D11_VIEWPORT; out ViewLeft, ViewTop, ViewWidth,
+      ViewHeight: Double);
   public
     destructor Destroy; override;
     procedure Probe(Frame: PAVFrame);
@@ -192,6 +204,7 @@ var
   GlobalD3DDisplayAllowed: Boolean;
   GlobalD3DFramePresented: Boolean;
   GlobalD3DSeekBarOverlay: TD3D11SeekBarOverlayState;
+  GlobalD3DVideoZoom: TD3D11VideoZoomState;
   LastD3DPresentLogTick: UInt64;
   LastD3DMemoryLogTick: UInt64;
   LastD3DPresentOverlayVisible: Boolean;
@@ -286,6 +299,49 @@ procedure SetNv12TextureD3DSeekBarOverlay(const State: TD3D11SeekBarOverlayState
 begin
   GlobalD3DSeekBarOverlay := State;
   GlobalD3DSeekBarOverlay.Chapters := Copy(State.Chapters);
+end;
+
+procedure SetNv12TextureD3DVideoZoom(const State: TD3D11VideoZoomState);
+begin
+  GlobalD3DVideoZoom := State;
+end;
+
+procedure TNv12TextureProbe.BuildVideoViewport(FrameWidth, FrameHeight: Integer;
+  out Viewport: D3D11_VIEWPORT; out ViewLeft, ViewTop, ViewWidth,
+  ViewHeight: Double);
+var
+  Zoom: TD3D11VideoZoomState;
+begin
+  ViewWidth := FTargetWidth;
+  ViewHeight := FTargetWidth * FrameHeight / FrameWidth;
+  if ViewHeight > FTargetHeight then
+  begin
+    ViewHeight := FTargetHeight;
+    ViewWidth := FTargetHeight * FrameWidth / FrameHeight;
+  end;
+  if ViewWidth < 1 then
+    ViewWidth := 1;
+  if ViewHeight < 1 then
+    ViewHeight := 1;
+  ViewLeft := (FTargetWidth - ViewWidth) / 2;
+  ViewTop := (FTargetHeight - ViewHeight) / 2;
+
+  Zoom := GlobalD3DVideoZoom;
+  if Zoom.Active and (Zoom.Width > 0.0001) and (Zoom.Height > 0.0001) then
+  begin
+    ViewLeft := ViewLeft - ViewWidth * Zoom.Left / Zoom.Width;
+    ViewTop := ViewTop - ViewHeight * Zoom.Top / Zoom.Height;
+    ViewWidth := ViewWidth / Zoom.Width;
+    ViewHeight := ViewHeight / Zoom.Height;
+  end;
+
+  FillChar(Viewport, SizeOf(Viewport), 0);
+  Viewport.TopLeftX := ViewLeft;
+  Viewport.TopLeftY := ViewTop;
+  Viewport.Width := ViewWidth;
+  Viewport.Height := ViewHeight;
+  Viewport.MinDepth := 0;
+  Viewport.MaxDepth := 1;
 end;
 
 function TNv12TextureProbe.EnsureDevice(out ErrorMessage: string): Boolean;
@@ -2387,11 +2443,11 @@ var
   StepWatch    : TStopwatch; // 各 step の計測
   TotalWatch   : TStopwatch; // D3D 表示全体の計測
   UploadMs     : Double;     // Y/UV plane upload 合計時間
-  ViewHeight   : Integer;    // アスペクト比維持後の描画高さ
-  ViewLeft     : Integer;    // アスペクト比維持後の描画左位置
-  ViewTop      : Integer;    // アスペクト比維持後の描画上位置
+  ViewHeight   : Double;     // アスペクト比維持後の描画高さ
+  ViewLeft     : Double;     // アスペクト比維持後の描画左位置
+  ViewTop      : Double;     // アスペクト比維持後の描画上位置
   Viewport     : D3D11_VIEWPORT;
-  ViewWidth    : Integer;    // アスペクト比維持後の描画幅
+  ViewWidth    : Double;     // アスペクト比維持後の描画幅
 begin
   Result := False;
   GlobalD3DFramePresented := False;
@@ -2434,27 +2490,8 @@ begin
     Cardinal(Frame.linesize[1]), Cardinal(Frame.linesize[1] * ChromaHeight));
   UploadMs := StepWatch.Elapsed.TotalMilliseconds;
 
-  ViewWidth := FTargetWidth;
-  ViewHeight := (Int64(FTargetWidth) * Frame.height) div Frame.width;
-  if ViewHeight > FTargetHeight then
-  begin
-    ViewHeight := FTargetHeight;
-    ViewWidth := (Int64(FTargetHeight) * Frame.width) div Frame.height;
-  end;
-  if ViewWidth < 1 then
-    ViewWidth := 1;
-  if ViewHeight < 1 then
-    ViewHeight := 1;
-  ViewLeft := (FTargetWidth - ViewWidth) div 2;
-  ViewTop := (FTargetHeight - ViewHeight) div 2;
-
-  FillChar(Viewport, SizeOf(Viewport), 0);
-  Viewport.TopLeftX := ViewLeft;
-  Viewport.TopLeftY := ViewTop;
-  Viewport.Width := ViewWidth;
-  Viewport.Height := ViewHeight;
-  Viewport.MinDepth := 0;
-  Viewport.MaxDepth := 1;
+  BuildVideoViewport(Frame.width, Frame.height, Viewport, ViewLeft, ViewTop,
+    ViewWidth, ViewHeight);
   ResourceViews[0] := FYResourceView;
   ResourceViews[1] := FUvResourceView;
 
@@ -2492,7 +2529,8 @@ begin
     WriteVideoMinerSlowLog(Format(
       'd3d11_display_present frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d y_stride=%d uv_stride=%d range=%d space=%d recreated=%s overlay=%s transport=%s dragging=%s upload_ms=%.3f clear_ms=%.3f draw_ms=%.3f overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
       [Frame.width, Frame.height, FTargetWidth, FTargetHeight,
-       ViewLeft, ViewTop, ViewLeft + ViewWidth, ViewTop + ViewHeight,
+       Round(ViewLeft), Round(ViewTop), Round(ViewLeft + ViewWidth),
+       Round(ViewTop + ViewHeight),
        Frame.linesize[0], Frame.linesize[1], Frame.color_range,
        Frame.colorspace, BoolToStr(Recreated, True),
        BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
@@ -2536,11 +2574,11 @@ var
   TextureRecreated: Boolean;       // BGRX32 texture を今回作り直したか
   TotalWatch   : TStopwatch;       // D3D 表示全体の計測
   UploadMs     : Double;           // BGRX32 upload 時間
-  ViewHeight   : Integer;          // アスペクト比維持後の描画高さ
-  ViewLeft     : Integer;          // アスペクト比維持後の描画左位置
-  ViewTop      : Integer;          // アスペクト比維持後の描画上位置
+  ViewHeight   : Double;           // アスペクト比維持後の描画高さ
+  ViewLeft     : Double;           // アスペクト比維持後の描画左位置
+  ViewTop      : Double;           // アスペクト比維持後の描画上位置
   Viewport     : D3D11_VIEWPORT;
-  ViewWidth    : Integer;          // アスペクト比維持後の描画幅
+  ViewWidth    : Double;           // アスペクト比維持後の描画幅
   Y            : Integer;          // 負 stride 詰め直し中の行番号
 begin
   Result := False;
@@ -2595,27 +2633,8 @@ begin
     Cardinal(SrcPitch * Cardinal(Height)));
   UploadMs := StepWatch.Elapsed.TotalMilliseconds;
 
-  ViewWidth := FTargetWidth;
-  ViewHeight := (Int64(FTargetWidth) * Height) div Width;
-  if ViewHeight > FTargetHeight then
-  begin
-    ViewHeight := FTargetHeight;
-    ViewWidth := (Int64(FTargetHeight) * Width) div Height;
-  end;
-  if ViewWidth < 1 then
-    ViewWidth := 1;
-  if ViewHeight < 1 then
-    ViewHeight := 1;
-  ViewLeft := (FTargetWidth - ViewWidth) div 2;
-  ViewTop := (FTargetHeight - ViewHeight) div 2;
-
-  FillChar(Viewport, SizeOf(Viewport), 0);
-  Viewport.TopLeftX := ViewLeft;
-  Viewport.TopLeftY := ViewTop;
-  Viewport.Width := ViewWidth;
-  Viewport.Height := ViewHeight;
-  Viewport.MinDepth := 0;
-  Viewport.MaxDepth := 1;
+  BuildVideoViewport(Width, Height, Viewport, ViewLeft, ViewTop, ViewWidth,
+    ViewHeight);
   ResourceView := FBgrxResourceView;
 
   ClearColor[0] := 0;
@@ -2649,8 +2668,9 @@ begin
   if VideoMinerSlowLogEnabled then
     WriteVideoMinerSlowLog(Format(
       'd3d11_display_present_bgrx32 frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d stride=%d recreated=%s overlay=%s transport=%s dragging=%s upload_ms=%.3f draw_ms=%.3f overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
-      [Width, Height, FTargetWidth, FTargetHeight, ViewLeft, ViewTop,
-       ViewLeft + ViewWidth, ViewTop + ViewHeight, BufferStride,
+      [Width, Height, FTargetWidth, FTargetHeight, Round(ViewLeft),
+       Round(ViewTop), Round(ViewLeft + ViewWidth),
+       Round(ViewTop + ViewHeight), BufferStride,
        BoolToStr(Recreated, True),
        BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
        BoolToStr(GlobalD3DSeekBarOverlay.TransportVisible, True),
@@ -2687,11 +2707,11 @@ var
   ResourceViews: array[0..1] of ID3D11ShaderResourceView;
   StepWatch    : TStopwatch;       // 各 step の計測
   TotalWatch   : TStopwatch;       // D3D 表示全体の計測
-  ViewHeight   : Integer;          // アスペクト比維持後の描画高さ
-  ViewLeft     : Integer;          // アスペクト比維持後の描画左位置
-  ViewTop      : Integer;          // アスペクト比維持後の描画上位置
+  ViewHeight   : Double;           // アスペクト比維持後の描画高さ
+  ViewLeft     : Double;           // アスペクト比維持後の描画左位置
+  ViewTop      : Double;           // アスペクト比維持後の描画上位置
   Viewport     : D3D11_VIEWPORT;
-  ViewWidth    : Integer;          // アスペクト比維持後の描画幅
+  ViewWidth    : Double;           // アスペクト比維持後の描画幅
 begin
   Result := False;
   GlobalD3DFramePresented := False;
@@ -2721,27 +2741,8 @@ begin
       LogErrorOnce(ErrorMessage);
 
     TotalWatch := TStopwatch.StartNew;
-    ViewWidth := FTargetWidth;
-    ViewHeight := (Int64(FTargetWidth) * FBgrxHeight) div FBgrxWidth;
-    if ViewHeight > FTargetHeight then
-    begin
-      ViewHeight := FTargetHeight;
-      ViewWidth := (Int64(FTargetHeight) * FBgrxWidth) div FBgrxHeight;
-    end;
-    if ViewWidth < 1 then
-      ViewWidth := 1;
-    if ViewHeight < 1 then
-      ViewHeight := 1;
-    ViewLeft := (FTargetWidth - ViewWidth) div 2;
-    ViewTop := (FTargetHeight - ViewHeight) div 2;
-
-    FillChar(Viewport, SizeOf(Viewport), 0);
-    Viewport.TopLeftX := ViewLeft;
-    Viewport.TopLeftY := ViewTop;
-    Viewport.Width := ViewWidth;
-    Viewport.Height := ViewHeight;
-    Viewport.MinDepth := 0;
-    Viewport.MaxDepth := 1;
+    BuildVideoViewport(FBgrxWidth, FBgrxHeight, Viewport, ViewLeft, ViewTop,
+      ViewWidth, ViewHeight);
     ResourceView := FBgrxResourceView;
 
     ClearColor[0] := 0;
@@ -2773,7 +2774,8 @@ begin
       WriteVideoMinerSlowLog(Format(
         'd3d11_display_represent_bgrx32 frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d overlay=%s transport=%s dragging=%s overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
         [FBgrxWidth, FBgrxHeight, FTargetWidth, FTargetHeight,
-         ViewLeft, ViewTop, ViewLeft + ViewWidth, ViewTop + ViewHeight,
+         Round(ViewLeft), Round(ViewTop), Round(ViewLeft + ViewWidth),
+         Round(ViewTop + ViewHeight),
          BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
          BoolToStr(GlobalD3DSeekBarOverlay.TransportVisible, True),
          BoolToStr(GlobalD3DSeekBarOverlay.Dragging, True), OverlayMs,
@@ -2803,27 +2805,8 @@ begin
     LogErrorOnce(ErrorMessage);
 
   TotalWatch := TStopwatch.StartNew;
-  ViewWidth := FTargetWidth;
-  ViewHeight := (Int64(FTargetWidth) * FTextureHeight) div FTextureWidth;
-  if ViewHeight > FTargetHeight then
-  begin
-    ViewHeight := FTargetHeight;
-    ViewWidth := (Int64(FTargetHeight) * FTextureWidth) div FTextureHeight;
-  end;
-  if ViewWidth < 1 then
-    ViewWidth := 1;
-  if ViewHeight < 1 then
-    ViewHeight := 1;
-  ViewLeft := (FTargetWidth - ViewWidth) div 2;
-  ViewTop := (FTargetHeight - ViewHeight) div 2;
-
-  FillChar(Viewport, SizeOf(Viewport), 0);
-  Viewport.TopLeftX := ViewLeft;
-  Viewport.TopLeftY := ViewTop;
-  Viewport.Width := ViewWidth;
-  Viewport.Height := ViewHeight;
-  Viewport.MinDepth := 0;
-  Viewport.MaxDepth := 1;
+  BuildVideoViewport(FTextureWidth, FTextureHeight, Viewport, ViewLeft, ViewTop,
+    ViewWidth, ViewHeight);
   ResourceViews[0] := FYResourceView;
   ResourceViews[1] := FUvResourceView;
 
@@ -2856,7 +2839,8 @@ begin
     WriteVideoMinerSlowLog(Format(
       'd3d11_display_represent frame=%dx%d target=%dx%d viewport=%d,%d,%d,%d overlay=%s transport=%s dragging=%s overlay_ms=%.3f present_ms=%.3f total_ms=%.3f',
       [FTextureWidth, FTextureHeight, FTargetWidth, FTargetHeight,
-       ViewLeft, ViewTop, ViewLeft + ViewWidth, ViewTop + ViewHeight,
+       Round(ViewLeft), Round(ViewTop), Round(ViewLeft + ViewWidth),
+       Round(ViewTop + ViewHeight),
        BoolToStr(GlobalD3DSeekBarOverlay.Visible, True),
        BoolToStr(GlobalD3DSeekBarOverlay.TransportVisible, True),
        BoolToStr(GlobalD3DSeekBarOverlay.Dragging, True), OverlayMs, PresentMs,

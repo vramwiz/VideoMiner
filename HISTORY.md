@@ -2,6 +2,14 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-26 ホイールズームの D3D 表示対応
+- ホイールズーム時に `D3DFramePresentationBlockReason` が `zoom_active` になり、D3D 表示から CPU/GDI 側の再取得・再描画へ落ちていた。
+- D3D presenter に `TD3D11VideoZoomState` と `SetNv12TextureD3DVideoZoom` を追加し、GDI 側と同じ source crop を正規化座標で渡すようにした。
+- NV12 直通、BGRX32 upload、保持中 frame の再表示の各経路で共通の `BuildVideoViewport` を使い、ズーム中は viewport を拡大・オフセットして render target でクリップする方式にした。
+- `zoom_active` を D3D frame presentation のブロック理由から外し、ホイールズームとパンではまず保持中 D3D frame の再表示、次に現在 bitmap の BGRX32 D3D upload を試し、失敗時だけ従来の invalidate / CPU 再取得へ戻すようにした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+
 ## 2026-06-26 メインフォームの入力/タイトルバー処理切り出し
 - `VideoMinerMainForm.pas` の肥大化対策として、アプリ全体メッセージ処理のうちマウス戻る/進む、ブラウザー戻る/進むキーのログと前後動画移動キュー化を `VideoMinerInputMessageRouter.pas` へ切り出した。
 - `ApplicationMessage` は既存の `Application.OnMessage` 前段フック、読み込み中抑止、navigation controller 有無判定を渡すだけの薄い入口にした。

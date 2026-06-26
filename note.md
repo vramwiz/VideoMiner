@@ -149,10 +149,13 @@
         - 色分けのため、旧/GDI 通常 seek bar はオレンジ、小さい fallback seek bar はマゼンタに一時変更した。
         - 原因は、切替直後に D3D 保持フレームがまだ無い状態で seek bar 表示が来ると、現在 CPU bitmap を D3D upload せず fallback へ落ちていたこと。
         - `Paint` で D3D frame が無い場合でも、現在の CPU bitmap があれば `PresentCurrentBgrx32FrameWithD3D` を試すようにし、開始直後 hover でも `d3d11_display_present_bgrx32 overlay=True` と `paint_skip_d3d_frame surface_ready=True` を確認済み。
-      - 次の課題は拡大縮小/ズーム。
-        - 現状はズーム操作時に D3D 表示から CPU/GDI 側の再取得・再描画へ落ちるため、ソフトデコード経路に処理が寄って重くなる。
-        - D3D 側だけで拡大縮小できれば、動画 texture の描画 viewport / UV / transform を変えるだけで済み、CPU 変換や GDI 再描画を増やさずに済む可能性が高い。
-        - 次に見る時は、ズーム時の `D3DFramePresentationBlockReason` の `zoom_active`、`ShowFrameAt` の再取得、`bgrx32_convert`、`paint` の増加をログで確認する。
+      - 2026-06-26: 拡大縮小/ズームの D3D 表示対応を入れた。
+        - `zoom_active` を D3D 表示ブロック理由から外した。
+        - D3D presenter に正規化 source crop を渡し、NV12 直通 / BGRX32 upload / 保持中 frame 再表示の各経路で、viewport を拡大・オフセットして render target クリップでズーム表示する。
+        - ホイールズームとパンでは、まず保持中 D3D frame の再表示、次に現在 bitmap の BGRX32 D3D upload を試し、失敗時だけ従来の invalidate / CPU 再取得へ戻す。
+        - ユーザー確認で安定しており、従来より速くなっているため正式採用とする。
+        - 4K などフォームサイズを超える動画でも、D3D 経路では元 texture を先にフォームサイズへ潰さず、保持済み texture の表示 viewport を変えるため、ズーム時も元解像度の情報を活かせる。
+        - 現在の sampler は `D3D11_FILTER_MIN_MAG_MIP_POINT`。整数倍率かつ pixel 境界が揃う場合はくっきり表示される一方、非整数倍率では硬さやジャギーが出る可能性がある。画質優先で調整するなら linear sampler 化を後続候補にする。
    - D3D overlay 化のデバッグ方法:
      - テストファイルは `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4`。
      - Debug Win64 / `VIDEOMINER_DEBUG_LOG=1` / `VIDEOMINER_SLOW_LOG=1` で確認する。D3D11 実表示は既定で有効。
