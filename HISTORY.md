@@ -8,6 +8,7 @@
 - `TVideoMinerVideoSurface.Resize` を override し、サイズ変更直後に D3D target window、ズーム状態、seek bar overlay state を同期するようにした。
 - リサイズ中に同期的な D3D swap chain 再作成 / Present を連打すると独自タイトルバーの VCL 再描画と競合してちらつくため、Resize では `Nv12TextureD3DFramePresented` と直近 D3D frame tick を明示的に落とし、通常 `Paint` へ戻す。
 - シークバー表示中だけちらつくことが分かったため、`WM_ENTERSIZEMOVE` から `WM_EXITSIZEMOVE` まで `FLiveResizeActive` を立て、ドラッグ中は `Paint` からの D3D 再表示 / BGRX32 upload と `Resize` からの D3D target 再同期を抑えるようにした。終了時にだけ現在サイズで D3D 側を同期し直す。
+- ライブリサイズ中は GDI fallback に落ちるため、旧 seek bar paint や最小 fallback の混在を避け、ドラッグ中は seek bar を描画せず、終了後に通常の D3D seek bar へ戻す方針にした。
 - 確認:
   - Win64 Debug: 成功、警告 0 / エラー 0。
 

@@ -2176,11 +2176,11 @@ begin
     DrawCanvas.FillRect(ClientRect);
     if FSeekBar <> nil then
     begin
-      SeekBarCompactStyle := (not FSourceHasAlpha) and
-        (FPlaybackActive or FForceCompactSeekBarPaint or HIDE_LEGACY_SEEK_BAR_PAINT);
+      SeekBarCompactStyle := HIDE_LEGACY_SEEK_BAR_PAINT or FLiveResizeActive or
+        ((not FSourceHasAlpha) and (FPlaybackActive or FForceCompactSeekBarPaint));
       FSeekBar.CompactPlaybackStyle := SeekBarCompactStyle;
       FSeekBar.UpdateLayout(SeekBarLayoutRect);
-      if FSeekBarVisible and (not FLoadingActive) then
+      if FSeekBarVisible and (not FLiveResizeActive) and (not FLoadingActive) then
       begin
         if SeekBarCompactStyle then
           DrawMinimalSeekBarFallback(DrawCanvas)
@@ -2224,8 +2224,8 @@ begin
     FNextFileButton.UpdateLayout(ClientRect);
   if FSeekBar <> nil then
   begin
-    SeekBarCompactStyle := (not FSourceHasAlpha) and
-      (FPlaybackActive or FForceCompactSeekBarPaint or HIDE_LEGACY_SEEK_BAR_PAINT);
+    SeekBarCompactStyle := HIDE_LEGACY_SEEK_BAR_PAINT or FLiveResizeActive or
+      ((not FSourceHasAlpha) and (FPlaybackActive or FForceCompactSeekBarPaint));
     FSeekBar.CompactPlaybackStyle := SeekBarCompactStyle;
     FSeekBar.UpdateLayout(SeekBarLayoutRect);
   end;
@@ -2256,10 +2256,10 @@ begin
   end;
   if (FNextFileButton <> nil) and FNextFileButton.Visible then
     FNextFileButton.Paint(DrawCanvas);
-  if FSeekBarVisible and (FSeekBar <> nil) then
+  if FSeekBarVisible and (not FLiveResizeActive) and (FSeekBar <> nil) then
   begin
-    SeekBarCompactStyle := (not FSourceHasAlpha) and
-      (FPlaybackActive or FForceCompactSeekBarPaint or HIDE_LEGACY_SEEK_BAR_PAINT);
+    SeekBarCompactStyle := HIDE_LEGACY_SEEK_BAR_PAINT or FLiveResizeActive or
+      ((not FSourceHasAlpha) and (FPlaybackActive or FForceCompactSeekBarPaint));
     FSeekBar.CompactPlaybackStyle := SeekBarCompactStyle;
     LogSeekBarPaintState(SeekBarCompactStyle, D3DFrameCurrent);
     if (not FLoadingActive) and SeekBarCompactStyle then
