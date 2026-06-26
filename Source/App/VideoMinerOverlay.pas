@@ -301,7 +301,7 @@ implementation
 
 const
   SECONDARY_TOOL_BUTTONS_MIN_WIDTH = 520; // 補助ツールボタンを下部バーへ表示する最小幅
-  SEEK_ACCENT_COLOR = $00F0A040;          // シーク済み範囲とノブに使う VideoMiner の青系アクセント色
+  SEEK_ACCENT_COLOR = $0000A5FF;          // 旧/GDI seek bar を識別しやすくするオレンジ
 
 type
   TRgbTripleArray = array[0..MaxInt div SizeOf(TRGBTriple) - 1] of TRGBTriple;

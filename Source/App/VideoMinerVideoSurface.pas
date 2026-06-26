@@ -362,7 +362,7 @@ const
   HIDE_LEGACY_CENTER_OVERLAY_PAINT = True; // 中央操作も D3D overlay 側へ寄せる
   SEEK_PREVIEW_WIDTH    = 160;  // シークバー hover プレビューの標準幅 px
   SEEK_PREVIEW_MARGIN   = 8;    // シークバー hover プレビューの余白 px
-  SEEK_FALLBACK_ACCENT_COLOR = $00F0A040; // hover preview 中の最小 fallback seek bar 色
+  SEEK_FALLBACK_ACCENT_COLOR = $00C040FF; // 最小 fallback seek bar を識別しやすくするマゼンタ
   LOADING_TIMER_MS      = 80;    // 読み込み中インジケータを進める間隔 ms
   LOADING_SEGMENTS      = 36;    // 欠け丸を構成する線分数
   LOADING_GAP_SEGMENTS  = 7;     // 欠けとして空ける線分数
@@ -2017,13 +2017,16 @@ begin
   D3DFrameCurrent := Nv12TextureD3DFramePresented and CanUseD3DCompositedFramePresentation;
   CenterOverlayDrawnByD3D := D3DFrameCurrent;
   if (not D3DFrameCurrent) and CanUseD3DCompositedFramePresentation and
-     D3DFrameRecentlyPresented and
      (FOverlayVisible or FSeekBarVisible or
       ((FSeekBar <> nil) and FSeekBar.Dragging) or
       ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible) or
       ((FNextFileButton <> nil) and FNextFileButton.Visible)) then
   begin
-    D3DFrameCurrent := RefreshD3DFramePresentation;
+    if FLastD3DFramePresentedTick > 0 then
+      D3DFrameCurrent := RefreshD3DFramePresentation;
+    if (not D3DFrameCurrent) and (FBitmap.Width > 0) and
+       (FBitmap.Height > 0) then
+      D3DFrameCurrent := PresentCurrentBgrx32FrameWithD3D;
     CenterOverlayDrawnByD3D := D3DFrameCurrent;
   end;
   UsePaintBuffer := FOverlayVisible or FSeekBarVisible or FSeekPreviewVisible or

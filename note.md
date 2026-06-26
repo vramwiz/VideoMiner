@@ -140,7 +140,19 @@
       - 2026-06-25: 縦長動画では `FitRect` 基準にした結果、シークバーと黒い下部パネルの幅も動画幅まで狭まり、アイコン類が消えることが分かった。配置基準は `ClientRect` に戻し、フォーム幅基準で D3D seek bar / 下段ツール行を描く。
       - 2026-06-25: `magnific_8vzvBH6IrU.mp4` は再生 tick で `ConvertFrame=False` になり D3D present が発生せず、通常 D3D seek bar の土台が無いため最小 fallback だけになることがあった。再生中に seek bar / overlay が見えている間は、フレーム drop より音声位置への `ShowFrameAt` を優先し、D3D overlay 用の表示フレームを確保する。
       - 2026-06-25: 手動チャプターの追加/削除/右クリックトグルは固定時間幅ではなく、現在のシークバー track 幅から 8px 相当の時間幅を計算して近接判定するようにした。画面上で細かく重なって見えるチャプターが増え続けるのを抑える。
-      - 次回は実画面で、ソフトウェアデコード時の seek bar が旧/GDI ではなく D3D overlay 表示になっているかを目視確認する。
+      - 2026-06-26: 透明 MOV も、CPU 側で市松模様へ合成した BGRX32 フレームを最終的に D3D texture へ upload する簡易案を採用する。
+        - alpha 付きフレームそのものを shader blend する本格案ではなく、既存の市松合成結果を D3D へ渡す方針。
+        - 通常の D3D 直通では `source_has_alpha` を引き続きブロック理由にするが、合成済み BGRX32 用の D3D 表示判定では alpha を許可する。
+        - `C:\Users\vramw\Videos\test_out.mov` の Debug 実行で `prepare_composited ready=True`、`d3d11_display_present_bgrx32 ...`、`paint_skip_d3d_frame ... surface_ready=True` を確認済み。
+        - 目的は、透明 MOV だけ GDI UI へ落ちる特殊ルートを減らし、ハード/ソフト/透明の最終表示と seek bar overlay を D3D 側へ寄せること。
+      - 2026-06-26: `C:\Users\vramw\Videos\magnific_2_kling_720p_16-9_24fps_14397.mp4` で、ファイル切替直後や戻ってきた直後だけ小さい fallback seek bar へ落ちる問題を確認した。
+        - 色分けのため、旧/GDI 通常 seek bar はオレンジ、小さい fallback seek bar はマゼンタに一時変更した。
+        - 原因は、切替直後に D3D 保持フレームがまだ無い状態で seek bar 表示が来ると、現在 CPU bitmap を D3D upload せず fallback へ落ちていたこと。
+        - `Paint` で D3D frame が無い場合でも、現在の CPU bitmap があれば `PresentCurrentBgrx32FrameWithD3D` を試すようにし、開始直後 hover でも `d3d11_display_present_bgrx32 overlay=True` と `paint_skip_d3d_frame surface_ready=True` を確認済み。
+      - 次の課題は拡大縮小/ズーム。
+        - 現状はズーム操作時に D3D 表示から CPU/GDI 側の再取得・再描画へ落ちるため、ソフトデコード経路に処理が寄って重くなる。
+        - D3D 側だけで拡大縮小できれば、動画 texture の描画 viewport / UV / transform を変えるだけで済み、CPU 変換や GDI 再描画を増やさずに済む可能性が高い。
+        - 次に見る時は、ズーム時の `D3DFramePresentationBlockReason` の `zoom_active`、`ShowFrameAt` の再取得、`bgrx32_convert`、`paint` の増加をログで確認する。
    - D3D overlay 化のデバッグ方法:
      - テストファイルは `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4`。
      - Debug Win64 / `VIDEOMINER_DEBUG_LOG=1` / `VIDEOMINER_SLOW_LOG=1` で確認する。D3D11 実表示は既定で有効。
@@ -150,6 +162,7 @@
      - 次に再生中にシークバー領域へマウスを載せて、`bgrx32_convert` が増えないか、`d3d11_display_present` が継続するか、ちらつきがないかを見る。
      - 目安: D3D 維持時は `next_bgrx32_detail convert_ms` p50 が 3-4ms 程度、`playback_tick total_ms` p50 が 10-13ms 程度。CPU 退避時は `bgrx32_convert` が増え、`playback_tick` が 20ms 以上へ寄る。
      - ログ比較用の保存先は `D:\Users\take6\VideoMiner\VideoMiner_playback_debug_*.log`。
+     - 現在この環境の実ログは `D:\Users\take6\VideoMiner\VideoMiner_playback_debug.log` に出る。`note.md` の古い説明にある「マイドキュメント」は Windows API 上の MyDocuments で、この環境では `D:\Users\take6` を指す。`C:\Users\vramw\Documents` ではないので注意する。
      - ちらついたら、GDI/VCL が同じ HWND へ描いていないか、`Paint` が seek bar を描いていないか、D3D `Present` と GDI overlay が混在していないかを最初に疑う。
    - 次に進めること:
      - 旧 GDI seek bar の残機能を D3D overlay 側へ移す順番を決める。
