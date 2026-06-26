@@ -1384,9 +1384,23 @@ begin
   end;
 end;
 
+function SeekBarToolRowCenterY(const State: TD3D11SeekBarOverlayState): Integer;
+begin
+  Result := State.Bounds.Bottom - 29;
+end;
+
 function SeekBarToolRowTop(const State: TD3D11SeekBarOverlayState): Integer;
 begin
-  Result := State.Bounds.Bottom - 40;
+  Result := SeekBarToolRowCenterY(State) - 11;
+end;
+
+function SeekBarToolRowRect(const State: TD3D11SeekBarOverlayState;
+  Left, Width, Height: Integer): TRect;
+var
+  Top: Integer;
+begin
+  Top := SeekBarToolRowCenterY(State) - Height div 2;
+  Result := Rect(Left, Top, Left + Width, Top + Height);
 end;
 
 function SeekBarButtonBackAlpha(Hovered, Pressed, Active: Boolean): Single;
@@ -1802,16 +1816,13 @@ var
   Scale: Integer;
   Text: string;
   TextWidth: Integer;
-  ToolTop: Integer;
   X: Integer;
   Y: Integer;
 begin
   if State.Bounds.IsEmpty then
     Exit;
 
-  ToolTop := SeekBarToolRowTop(State);
-  MuteRect := Rect(State.Bounds.Left + 134, ToolTop, State.Bounds.Left + 162,
-    ToolTop + 28);
+  MuteRect := SeekBarToolRowRect(State, State.Bounds.Left + 134, 28, 28);
   BackAlpha := SeekBarButtonBackAlpha(State.MuteHovered, State.MutePressed,
     State.Muted);
   if BackAlpha > 0 then
@@ -1823,8 +1834,8 @@ begin
     Text := '1.0x';
   Scale := 2;
   TextWidth := OverlayTextWidth(Text, Scale);
-  RateRect := Rect(MuteRect.Right + 12, MuteRect.Top, MuteRect.Right + 66,
-    MuteRect.Bottom);
+  RateRect := SeekBarToolRowRect(State, MuteRect.Right + 12, 54,
+    MuteRect.Height);
   X := RateRect.Left + (RateRect.Width - TextWidth) div 2;
   Y := RateRect.Top + (RateRect.Height - Scale * 11) div 2;
   Active := not SameText(Text, '1.0x');
@@ -1848,7 +1859,6 @@ var
   Scale: Integer;
   Text: string;
   TextWidth: Integer;
-  ToolTop: Integer;
   X: Integer;
   Y: Integer;
 begin
@@ -1860,9 +1870,7 @@ begin
     Text := 'Stop';
   Scale := 2;
   TextWidth := OverlayTextWidth(Text, Scale);
-  ToolTop := SeekBarToolRowTop(State);
-  ButtonRect := Rect(State.Bounds.Right - 110, ToolTop, State.Bounds.Right - 56,
-    ToolTop + 28);
+  ButtonRect := SeekBarToolRowRect(State, State.Bounds.Right - 110, 54, 28);
   X := ButtonRect.Left + (ButtonRect.Width - TextWidth) div 2;
   Y := ButtonRect.Top + (ButtonRect.Height - Scale * 11) div 2;
   BackAlpha := SeekBarButtonBackAlpha(State.EndActionHovered,
@@ -1884,7 +1892,6 @@ var
   FullRect: TRect;
   Scale: Integer;
   TextWidth: Integer;
-  ToolTop: Integer;
   X: Integer;
   Y: Integer;
 begin
@@ -1892,17 +1899,13 @@ begin
     Exit;
 
   Scale := 2;
-  ToolTop := SeekBarToolRowTop(State);
-  FullRect := Rect(State.Bounds.Right - 48, ToolTop - 1, State.Bounds.Right - 14,
-    ToolTop + 33);
-  EndRect := Rect(FullRect.Left - 62, FullRect.Top, FullRect.Left - 8,
-    FullRect.Bottom);
-  CheckRect := Rect(EndRect.Left - 84, EndRect.Top, EndRect.Left - 8,
-    EndRect.Bottom);
-  DeleteRect := Rect(CheckRect.Left - 38, CheckRect.Top, CheckRect.Left - 6,
-    CheckRect.Bottom);
-  AddRect := Rect(DeleteRect.Left - 38, DeleteRect.Top, DeleteRect.Left - 6,
-    DeleteRect.Bottom);
+  FullRect := SeekBarToolRowRect(State, State.Bounds.Right - 48, 34, 34);
+  EndRect := SeekBarToolRowRect(State, FullRect.Left - 62, 54, FullRect.Height);
+  CheckRect := SeekBarToolRowRect(State, EndRect.Left - 84, 76, EndRect.Height);
+  DeleteRect := SeekBarToolRowRect(State, CheckRect.Left - 38, 32,
+    CheckRect.Height);
+  AddRect := SeekBarToolRowRect(State, DeleteRect.Left - 38, 32,
+    DeleteRect.Height);
 
   BackAlpha := SeekBarButtonBackAlpha(State.AddChapterHovered,
     State.AddChapterPressed, False);
@@ -1956,15 +1959,12 @@ var
   T: Integer;
   Top: Integer;
   B: Integer;
-  ToolTop: Integer;
   WindowRect: TRect;
 begin
   if State.Bounds.IsEmpty then
     Exit;
 
-  ToolTop := SeekBarToolRowTop(State);
-  IconRect := Rect(State.Bounds.Right - 48, ToolTop - 1,
-    State.Bounds.Right - 14, ToolTop + 33);
+  IconRect := SeekBarToolRowRect(State, State.Bounds.Right - 48, 34, 34);
   BackAlpha := SeekBarButtonBackAlpha(State.FullScreenHovered,
     State.FullScreenPressed, False);
   if BackAlpha > 0 then
@@ -2288,6 +2288,9 @@ var
   MarkerX: Integer;
   PositionRatio: Double;
   StepWatch: TStopwatch;
+{$IFDEF DEBUG}
+  ToolRowCenterY: Integer;
+{$ENDIF}
   TrackRect: TRect;
   BlendFactor: TFourSingleArray;
   DrawSeekBar: Boolean;
@@ -2325,6 +2328,14 @@ begin
   if DrawSeekBar then
   begin
     DrawOverlayRect(State.Bounds, 0, 0, 0, 0.36);
+{$IFDEF DEBUG}
+    if DRAW_D3D_SEEKBAR_TOOL_ROW then
+    begin
+      ToolRowCenterY := SeekBarToolRowCenterY(State);
+      DrawOverlayRect(Rect(State.Bounds.Left, ToolRowCenterY,
+        State.Bounds.Right, ToolRowCenterY + 1), 0.0, 1.0, 0.0, 0.95);
+    end;
+{$ENDIF}
 
     TrackRect := State.Track;
     DrawOverlayRect(Rect(TrackRect.Left - 1, TrackRect.Top - 3,

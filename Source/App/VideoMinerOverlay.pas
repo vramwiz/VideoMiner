@@ -231,6 +231,8 @@ type
     function PlaybackRateButtonRect: TRect;
     function PositionFromPoint(const Point: TPoint): Integer;
     function SecondaryToolButtonsVisible: Boolean;
+    function ToolRowCenterY: Integer;
+    function ToolRowRect(Left, Width, Height: Integer): TRect;
     procedure DrawChapterMarkers(Canvas: TCanvas; const Track: TRect);
     procedure DrawTextButton(Canvas: TCanvas; const ButtonRect: TRect;
       const Text: string; Active, Hovered, Pressed: Boolean; ActiveColor: TColor);
@@ -1507,8 +1509,7 @@ begin
     Exit;
 
   DeleteRect := DeleteChapterButtonRect;
-  Result := Rect(DeleteRect.Left - 38, DeleteRect.Top, DeleteRect.Left - 6,
-    DeleteRect.Bottom);
+  Result := ToolRowRect(DeleteRect.Left - 38, 32, DeleteRect.Height);
 end;
 
 function TVideoMinerOverlaySeekBar.ChapterColor(
@@ -1536,8 +1537,7 @@ var
   EndRect: TRect;
 begin
   EndRect := EndActionButtonRect;
-  Result := Rect(EndRect.Left - 84, EndRect.Top, EndRect.Left - 8,
-    EndRect.Bottom);
+  Result := ToolRowRect(EndRect.Left - 84, 76, EndRect.Height);
 end;
 
 function TVideoMinerOverlaySeekBar.DeleteChapterButtonHitTest(
@@ -1556,8 +1556,7 @@ begin
     Exit;
 
   CheckRect := CheckButtonRect;
-  Result := Rect(CheckRect.Left - 38, CheckRect.Top, CheckRect.Left - 6,
-    CheckRect.Bottom);
+  Result := ToolRowRect(CheckRect.Left - 38, 32, CheckRect.Height);
 end;
 
 function TVideoMinerOverlaySeekBar.EndActionButtonHitTest(
@@ -1572,8 +1571,7 @@ var
   FullScreenRect: TRect;
 begin
   FullScreenRect := FullScreenButtonRect;
-  Result := Rect(FullScreenRect.Left - 62, FullScreenRect.Top,
-    FullScreenRect.Left - 8, FullScreenRect.Bottom);
+  Result := ToolRowRect(FullScreenRect.Left - 62, 54, FullScreenRect.Height);
 end;
 
 function TVideoMinerOverlaySeekBar.FullScreenButtonHitTest(
@@ -1592,13 +1590,10 @@ end;
 
 function TVideoMinerOverlaySeekBar.FullScreenButtonRect: TRect;
 var
-  RowTop: Integer;
   Size: Integer;
 begin
   Size := 34;
-  RowTop := Bounds.Height - 38;
-  Result := Rect(Bounds.Width - Size - 14, RowTop - 3,
-    Bounds.Width - 14, RowTop - 3 + Size);
+  Result := ToolRowRect(Bounds.Width - Size - 14, Size, Size);
 end;
 
 function TVideoMinerOverlaySeekBar.MuteButtonRect: TRect;
@@ -1608,8 +1603,7 @@ var
 begin
   LabelRect := VolumeLabelRect;
   Size := 28;
-  Result := Rect(LabelRect.Right + 22, LabelRect.Top - 2,
-    LabelRect.Right + 22 + Size, LabelRect.Top - 2 + Size);
+  Result := ToolRowRect(LabelRect.Right + 22, Size, Size);
 end;
 
 function TVideoMinerOverlaySeekBar.PlaybackRateButtonHitTest(
@@ -1628,8 +1622,7 @@ begin
     Exit;
 
   MuteRect := MuteButtonRect;
-  Result := Rect(MuteRect.Right + 12, MuteRect.Top, MuteRect.Right + 66,
-    MuteRect.Bottom);
+  Result := ToolRowRect(MuteRect.Right + 12, 54, MuteRect.Height);
 end;
 
 function TVideoMinerOverlaySeekBar.SecondaryToolButtonsVisible: Boolean;
@@ -1637,12 +1630,23 @@ begin
   Result := Bounds.Width >= SECONDARY_TOOL_BUTTONS_MIN_WIDTH;
 end;
 
-function TVideoMinerOverlaySeekBar.VolumeLabelRect: TRect;
-var
-  RowTop: Integer;
+function TVideoMinerOverlaySeekBar.ToolRowCenterY: Integer;
 begin
-  RowTop := Bounds.Height - 38;
-  Result := Rect(22, RowTop, 112, RowTop + 17);
+  Result := Bounds.Height - 29;
+end;
+
+function TVideoMinerOverlaySeekBar.ToolRowRect(Left, Width,
+  Height: Integer): TRect;
+var
+  Top: Integer;
+begin
+  Top := ToolRowCenterY - Height div 2;
+  Result := Rect(Left, Top, Left + Width, Top + Height);
+end;
+
+function TVideoMinerOverlaySeekBar.VolumeLabelRect: TRect;
+begin
+  Result := ToolRowRect(22, 90, 20);
 end;
 
 function TVideoMinerOverlaySeekBar.VolumeTrackRect: TRect;
@@ -2080,6 +2084,14 @@ begin
     Exit;
 
   DrawAlphaPanel(Canvas, Rect(0, 0, Bounds.Width, Bounds.Height), 18, 96);
+{$IFDEF DEBUG}
+  Canvas.Pen.Style := psSolid;
+  Canvas.Pen.Width := 1;
+  Canvas.Pen.Color := clLime;
+  Canvas.MoveTo(Bounds.Left, Bounds.Top + ToolRowCenterY);
+  Canvas.LineTo(Bounds.Right, Bounds.Top + ToolRowCenterY);
+  Canvas.Pen.Style := psClear;
+{$ENDIF}
   ButtonRect := FullScreenButtonRect;
   EndActionRect := EndActionButtonRect;
   CheckRect := CheckButtonRect;
@@ -2137,7 +2149,7 @@ begin
     Canvas.Font.Color := clWhite;
     SetBkMode(Canvas.Handle, TRANSPARENT);
     TextSize := Canvas.TextExtent(Text);
-    TextTop := Bounds.Height - 38 + (17 - TextSize.cy) div 2;
+    TextTop := ToolRowCenterY - TextSize.cy div 2;
     Canvas.TextOut(Bounds.Left + (Track.Left + Track.Right - TextSize.cx) div 2,
       Bounds.Top + TextTop, Text);
 
@@ -2222,7 +2234,7 @@ begin
   Canvas.Font.Color := clWhite;
   SetBkMode(Canvas.Handle, TRANSPARENT);
   TextSize := Canvas.TextExtent(Text);
-  TextTop := Bounds.Height - 38 + (17 - TextSize.cy) div 2;
+  TextTop := ToolRowCenterY - TextSize.cy div 2;
   Canvas.TextOut(Bounds.Left + (Track.Left + Track.Right - TextSize.cx) div 2,
     Bounds.Top + TextTop, Text);
 
