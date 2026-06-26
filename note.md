@@ -37,6 +37,14 @@
    - hover preview 小窓は bitmap/texture 合成が必要なので、seek bar 本体と基本操作の後で扱う。
    - ホイールズーム/パンは D3D viewport 方式を正式採用済み。画質優先で調整するなら linear sampler 化を後続候補にする。
 
+6. D3D シークバー下段ツール行の縦位置を仕上げる。
+   - 現在、Debug ビルドでは下段ツール行確認用の緑の水平ラインを表示中。
+   - 左側の `Vol`、スピーカー、`1.0x` のグループ内はおおむね揃っている。
+   - 中央の時刻と右側の `+` / `-` / `E` / `Stop` は左側へ寄せる方向で調整済み。
+   - 残りはスピーカー、倍速表示、全画面アイコンだけ微調整が必要。
+   - 調整対象は主に `Source\FFmpeg\FFmpegD3D11TextureProbe.pas` の D3D overlay 側。GDI 側 `Source\App\VideoMinerOverlay.pas` にも Debug 用水平ラインが残っている。
+   - 完了時は Debug 用水平ラインを削除または無効化し、`HISTORY.md` に移す。
+
 ## 後続課題
 
 - D3D 表示に乗らない動画、または初回だけ D3D 表示に乗らない動画を切り分ける。
