@@ -115,10 +115,6 @@ type
     procedure DrawLoadingIndicator(Canvas: TCanvas);
     // alpha 確認用の市松模様合成 Bitmap を最新化する
     procedure EnsureAlphaCompositeBitmap;
-{$IFDEF DEBUG}
-    // alpha 確認状態を動画面左上へ描く
-    procedure DrawAlphaStatus(Canvas: TCanvas; const DestRect: TRect);
-{$ENDIF}
     // クライアント領域内に動画全体が収まる描画矩形を返す
     function FitRect: TRect;
     // 中央 overlay ボタン群の配置を現在の動画表示矩形へ合わせる
@@ -831,38 +827,6 @@ begin
   end;
   FAlphaCompositeDirty := False;
 end;
-
-{$IFDEF DEBUG}
-procedure TVideoMinerVideoSurface.DrawAlphaStatus(Canvas: TCanvas;
-  const DestRect: TRect);
-var
-  Percent : Double; // alpha が 255 未満の pixel 割合
-  Text    : string; // 表示する診断文字列
-  TextRect: TRect;  // 背景付きで描く文字領域
-  TextSize: TSize;  // 診断文字列の表示サイズ
-begin
-  if (not FSourceHasAlpha) or DestRect.IsEmpty then
-    Exit;
-
-  EnsureAlphaCompositeBitmap;
-  Percent := 0;
-  if (FBitmap.Width > 0) and (FBitmap.Height > 0) then
-    Percent := FAlphaPixelCount * 100.0 / (Int64(FBitmap.Width) * FBitmap.Height);
-  Text := Format('Alpha preview  A %d-%d  transparent %.1f%%',
-    [FAlphaMin, FAlphaMax, Percent]);
-
-  Canvas.Font.Name := 'Segoe UI';
-  Canvas.Font.Size := 9;
-  Canvas.Font.Style := [];
-  TextSize := Canvas.TextExtent(Text);
-  TextRect := Rect(DestRect.Left + 10, DestRect.Top + 10,
-    DestRect.Left + 18 + TextSize.cx, DestRect.Top + 16 + TextSize.cy);
-  Canvas.Brush.Color := clBlack;
-  Canvas.Font.Color := clWhite;
-  Canvas.FillRect(TextRect);
-  Canvas.TextOut(TextRect.Left + 4, TextRect.Top + 3, Text);
-end;
-{$ENDIF}
 
 procedure TVideoMinerVideoSurface.DrawFrame(Canvas: TCanvas; const DestRect: TRect);
 var
@@ -2015,13 +1979,16 @@ begin
     DrawCanvas.FillRect(ClientRect);
     if FSeekBar <> nil then
     begin
-      SeekBarCompactStyle := FPlaybackActive or FForceCompactSeekBarPaint or
-        HIDE_LEGACY_SEEK_BAR_PAINT;
+      SeekBarCompactStyle := (not FSourceHasAlpha) and
+        (FPlaybackActive or FForceCompactSeekBarPaint or HIDE_LEGACY_SEEK_BAR_PAINT);
       FSeekBar.CompactPlaybackStyle := SeekBarCompactStyle;
       FSeekBar.UpdateLayout(SeekBarLayoutRect);
       if FSeekBarVisible and (not FLoadingActive) then
       begin
-        DrawMinimalSeekBarFallback(DrawCanvas);
+        if SeekBarCompactStyle then
+          DrawMinimalSeekBarFallback(DrawCanvas)
+        else
+          FSeekBar.Paint(DrawCanvas);
       end;
     end;
     DrawSeekHoverPreview(DrawCanvas);
@@ -2044,9 +2011,6 @@ begin
 
   DrawFrame(DrawCanvas, DestRect);
   DrawSafeAreaGuide(DrawCanvas, DestRect);
-{$IFDEF DEBUG}
-  DrawAlphaStatus(DrawCanvas, DestRect);
-{$ENDIF}
   if FPreviousFileButton <> nil then
     FPreviousFileButton.UpdateLayout(ClientRect);
   if FFirstFrameButton <> nil then
@@ -2063,8 +2027,8 @@ begin
     FNextFileButton.UpdateLayout(ClientRect);
   if FSeekBar <> nil then
   begin
-    SeekBarCompactStyle := FPlaybackActive or FForceCompactSeekBarPaint or
-      HIDE_LEGACY_SEEK_BAR_PAINT;
+    SeekBarCompactStyle := (not FSourceHasAlpha) and
+      (FPlaybackActive or FForceCompactSeekBarPaint or HIDE_LEGACY_SEEK_BAR_PAINT);
     FSeekBar.CompactPlaybackStyle := SeekBarCompactStyle;
     FSeekBar.UpdateLayout(SeekBarLayoutRect);
   end;
@@ -2097,13 +2061,17 @@ begin
     FNextFileButton.Paint(DrawCanvas);
   if FSeekBarVisible and (FSeekBar <> nil) then
   begin
-    SeekBarCompactStyle := FPlaybackActive or FForceCompactSeekBarPaint or
-      HIDE_LEGACY_SEEK_BAR_PAINT;
+    SeekBarCompactStyle := (not FSourceHasAlpha) and
+      (FPlaybackActive or FForceCompactSeekBarPaint or HIDE_LEGACY_SEEK_BAR_PAINT);
     FSeekBar.CompactPlaybackStyle := SeekBarCompactStyle;
     LogSeekBarPaintState(SeekBarCompactStyle, D3DFrameCurrent);
-    if SeekBarCompactStyle and (not FLoadingActive) then
+    if (not FLoadingActive) and SeekBarCompactStyle then
     begin
       DrawMinimalSeekBarFallback(DrawCanvas);
+    end
+    else if not FLoadingActive then
+    begin
+      FSeekBar.Paint(DrawCanvas);
     end;
   end;
   DrawSeekHoverPreview(DrawCanvas);
