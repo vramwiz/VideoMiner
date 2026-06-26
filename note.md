@@ -23,6 +23,13 @@
    - 大きい動画やネットワーク越しの動画では、フォーム表示後の読み込み中に固まったように見える可能性がある。
    - `Loading` 表示や周辺の軽いアニメーションで、処理中であることを伝える。
    - 実際の読み込み時間短縮とは別の UI 課題として扱う。
+   - 2026-06-26: FFmpeg custom AVIO で decoder ごとに単一ファイル前方読み込みバッファを持たせる実験をしたが、現行案は不採用としてコミット時点へ戻した。
+     - ローカル SSD の `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` では、buffer 有効時に 32MB 初期読み込みの分だけ `format_open_ms` と `playback_tick` が悪化した。
+     - USB 接続の `E:\videominer_4k30_motion_debug.mp4` でも、従来経路の `playback_tick` p50 10.665ms / p95 13.679ms に対し、buffer 32MB は p50 11.810ms / p95 14.400ms、buffer 4MB は p50 11.915ms / p95 14.251ms で改善しなかった。
+     - open 時の `format_open_ms` も従来 p50 0.466ms に対し、buffer 32MB は 17.293ms、buffer 4MB は 11.479ms へ増えた。
+     - VideoMiner は open 時に同じ動画を複数 decoder で開くため、decoder 個別 buffer では同じファイルを重複して先読みし、USB/NAS に対しても不利になりやすい。
+     - 次に再挑戦するなら、decoder 個別ではなく「現在再生中ファイル単位の共有 I/O cache」にするか、再生本体 decoder だけに限定する。
+     - 比較ログは Codex 作業フォルダの `outputs\usb_buffer_compare` に保存済み。
 3. 映像再生が少しカクつく場合の原因を切り分ける。
    - 同期ズレではなく、描画、デコード、タイマー周りの負荷や間隔が原因の可能性がある。
    - まず Debug ログ量を絞り、`playback_tick`、`paint`、`decode_ms`、`paint_ms`、`timer_interval` を確認する。
