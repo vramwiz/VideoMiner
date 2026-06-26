@@ -7,7 +7,6 @@
 - そのため、リサイズ直後に seek bar などの幅が古いままになり、フォームを広げた領域には未描画のゴミが見えることがあった。
 - `TVideoMinerVideoSurface.Resize` を override し、サイズ変更直後に D3D target window、ズーム状態、seek bar overlay state を同期するようにした。
 - リサイズ中に同期的な D3D swap chain 再作成 / Present を連打すると独自タイトルバーの VCL 再描画と競合してちらつくため、Resize では `Nv12TextureD3DFramePresented` と直近 D3D frame tick を明示的に落とし、通常 `Paint` へ戻す。
-- タイトルバー付近のちらつき対策として、リサイズドラッグ中は frame guide の hover 枠を強制的に非表示にするようにした。タイトルバー上では `WM_NCHITTEST` と timer で hover 枠の表示/最前面化が走るため、ドラッグ中にタイトルバー部分だけ表示が揺れる原因になり得る。
 - シークバー表示中だけちらつくことが分かったため、`WM_ENTERSIZEMOVE` から `WM_EXITSIZEMOVE` まで `FLiveResizeActive` を立て、ドラッグ中は `Paint` からの D3D 再表示 / BGRX32 upload と `Resize` からの D3D target 再同期を抑えるようにした。終了時にだけ現在サイズで D3D 側を同期し直す。
 - 確認:
   - Win64 Debug: 成功、警告 0 / エラー 0。
