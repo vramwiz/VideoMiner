@@ -168,6 +168,7 @@
         <DCCReference Include="Source\Decode\FFmpegAudioConvert.pas"/>
         <DCCReference Include="Source\Decode\FFmpegAudioOpen.pas"/>
         <DCCReference Include="Source\Decode\FFmpegDecoder.pas"/>
+        <DCCReference Include="Source\Decode\FFmpegForwardReadBuffer.pas"/>
         <DCCReference Include="Source\Decode\FFmpegDecoderAudioPlayback.pas"/>
         <DCCReference Include="Source\Decode\FFmpegDecoderAudioRead.pas"/>
         <DCCReference Include="Source\Decode\FFmpegDecoderContext.pas"/>

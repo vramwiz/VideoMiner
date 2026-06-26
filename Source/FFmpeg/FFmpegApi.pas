@@ -209,6 +209,7 @@ type
   Tavformat_flush = function(s: PAVFormatContext): Integer; cdecl;
   Tavformat_alloc_output_context2 = function(ctx: PPAVFormatContext; oformat: Pointer;
     format_name, filename: PAnsiChar): Integer; cdecl;
+  Tavformat_alloc_context = function: PAVFormatContext; cdecl;
   Tavformat_new_stream = function(ctx: PAVFormatContext; codec: PAVCodec): PAVStream; cdecl;
   Tavformat_write_header = function(ctx: PAVFormatContext; options: Pointer): Integer; cdecl;
   Tav_interleaved_write_frame = function(ctx: PAVFormatContext; pkt: PAVPacket): Integer; cdecl;
@@ -216,6 +217,11 @@ type
   Tavformat_free_context = procedure(ctx: PAVFormatContext); cdecl;
   Tavio_open = function(s: PPointer; url: PAnsiChar; flags: Integer): Integer; cdecl;
   Tavio_closep = function(s: PPointer): Integer; cdecl;
+  Tavio_alloc_context = function(buffer: PByte; buffer_size, write_flag: Integer; opaque: Pointer;
+    read_packet, write_packet, seek: Pointer): Pointer; cdecl;
+  Tavio_context_free = procedure(s: PPointer); cdecl;
+  Tav_malloc = function(size: NativeUInt): Pointer; cdecl;
+  Tav_free = procedure(ptr: Pointer); cdecl;
 
   Tavcodec_find_decoder = function(id: Integer): PAVCodec; cdecl;
   Tavcodec_find_decoder_by_name = function(name: PAnsiChar): PAVCodec; cdecl;
@@ -316,6 +322,7 @@ const
   AV_HWDEVICE_TYPE_QSV        = 5;                    // QSV device context の種類
   SWS_BILINEAR                = 2;                    // sws_scale の bilinear 変換指定
   AVIO_FLAG_WRITE             = 2;                    // FFmpeg I/O の書き込み指定
+  AVSEEK_SIZE                 = $10000;               // custom AVIO seek でファイルサイズを問い合わせる指定
   AV_CODEC_FLAG_GLOBAL_HEADER = 1 shl 22;             // コンテナ外 global header を使う codec flag
   AVERROR_EOF                 = -541478725;           // filter/decoder が終端を返すエラー値
   AVERROR_EAGAIN              = -11;                  // 入出力待ちを示すエラー値
@@ -352,6 +359,7 @@ type
     class var av_read_frame                 : Tav_read_frame;                 // 次のパケットを読む関数
     class var av_seek_frame                 : Tav_seek_frame;                 // 指定位置へシークする関数
     class var avformat_flush                : Tavformat_flush;                // 入力側の内部バッファを捨てる関数
+    class var avformat_alloc_context        : Tavformat_alloc_context;        // custom I/O 用の入力コンテキストを確保する関数
     class var avcodec_find_decoder          : Tavcodec_find_decoder;          // コーデックIDからデコーダを探す関数
     class var avcodec_alloc_context3        : Tavcodec_alloc_context3;        // デコードコンテキストを確保する関数
     class var avcodec_parameters_to_context : Tavcodec_parameters_to_context; // ストリーム情報をデコードコンテキストへコピーする関数
@@ -375,6 +383,8 @@ type
     class var av_channel_layout_default     : Tav_channel_layout_default;     // 標準チャンネルレイアウトを作る関数
     class var av_channel_layout_copy        : Tav_channel_layout_copy;        // チャンネルレイアウトをコピーする関数
     class var av_channel_layout_uninit      : Tav_channel_layout_uninit;      // チャンネルレイアウトを解放する関数
+    class var av_malloc                     : Tav_malloc;                     // FFmpeg 管理メモリを確保する関数
+    class var av_free                       : Tav_free;                       // FFmpeg 管理メモリを解放する関数
     class var sws_getContext                : Tsws_getContext;                // 色変換コンテキストを作る関数
     class var sws_scale                     : Tsws_scale;                     // フレームをBGRへ変換する関数
     class var sws_freeContext               : Tsws_freeContext;               // 色変換コンテキストを解放する関数
@@ -390,6 +400,10 @@ type
     class var avfilter_graph_free           : Tavfilter_graph_free;           // フィルタグラフを解放する関数
     class var av_buffersrc_add_frame_flags  : Tav_buffersrc_add_frame_flags;  // ソースフィルタへフレームを渡す関数
     class var av_buffersink_get_frame       : Tav_buffersink_get_frame;       // シンクフィルタからフレームを受け取る関数
+    class var avio_open                     : Tavio_open;                     // 出力 I/O を開く関数
+    class var avio_closep                   : Tavio_closep;                   // 出力 I/O を閉じる関数
+    class var avio_alloc_context            : Tavio_alloc_context;            // custom I/O context を作る関数
+    class var avio_context_free             : Tavio_context_free;             // custom I/O context を解放する関数
     // この入力プラグインが置かれているフォルダを取得する。
     class function ModuleDirectory: string; static;
     // 指定DLLを実行ファイルフォルダからロードする。
@@ -490,6 +504,8 @@ begin
   av_hwframe_transfer_data := Tav_hwframe_transfer_data(LoadProc(FAvUtil,
     'av_hwframe_transfer_data'));
   av_buffer_unref := Tav_buffer_unref(LoadProc(FAvUtil, 'av_buffer_unref'));
+  av_malloc := Tav_malloc(LoadProc(FAvUtil, 'av_malloc'));
+  av_free := Tav_free(LoadProc(FAvUtil, 'av_free'));
   av_display_rotation_get := Tav_display_rotation_get(LoadProc(FAvUtil,
     'av_display_rotation_get'));
   av_channel_layout_default := Tav_channel_layout_default(LoadProc(FAvUtil, 'av_channel_layout_default'));
@@ -504,6 +520,11 @@ begin
   av_read_frame := Tav_read_frame(LoadProc(FAvFormat, 'av_read_frame'));
   av_seek_frame := Tav_seek_frame(LoadProc(FAvFormat, 'av_seek_frame'));
   avformat_flush := Tavformat_flush(LoadProc(FAvFormat, 'avformat_flush'));
+  avformat_alloc_context := Tavformat_alloc_context(LoadProc(FAvFormat, 'avformat_alloc_context'));
+  avio_open := Tavio_open(LoadProc(FAvFormat, 'avio_open'));
+  avio_closep := Tavio_closep(LoadProc(FAvFormat, 'avio_closep'));
+  avio_alloc_context := Tavio_alloc_context(LoadProc(FAvFormat, 'avio_alloc_context'));
+  avio_context_free := Tavio_context_free(LoadProc(FAvFormat, 'avio_context_free'));
 
   avcodec_find_decoder := Tavcodec_find_decoder(LoadProc(FAvCodec, 'avcodec_find_decoder'));
   avcodec_find_decoder_by_name := Tavcodec_find_decoder_by_name(LoadProc(FAvCodec,

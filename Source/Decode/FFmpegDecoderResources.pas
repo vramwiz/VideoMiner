@@ -14,7 +14,7 @@ procedure ReleaseDecoderResources(Context: TFFmpegDecoderContext);
 implementation
 
 uses
-  FFmpegApi;
+  FFmpegApi, FFmpegForwardReadBuffer;
 
 // decoder context が保持する FFmpeg リソースを安全に解放する。
 procedure ReleaseDecoderResources(Context: TFFmpegDecoderContext);
@@ -104,6 +104,12 @@ begin
   begin
     TFFmpegApi.avformat_close_input(@TypedFormatContext);
     Context.FormatContext := nil;
+  end;
+
+  if Context.InputBuffer <> nil then
+  begin
+    Context.InputBuffer.Free;
+    Context.InputBuffer := nil;
   end;
 end;
 

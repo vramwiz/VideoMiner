@@ -278,8 +278,11 @@ begin
     WM_VM_OPEN_PENDING);
   FExternalOpenController.OnOpenAndPlay := OpenAndPlayFile;
   FDecoder := TFFmpegDecoder.Create;
+  FDecoder.Role := fdrPlaybackMain;
   FPreviewDecoder := TFFmpegDecoder.Create;
+  FPreviewDecoder.Role := fdrSeekPreview;
   FSeekHoverPreviewDecoder := TFFmpegDecoder.Create;
+  FSeekHoverPreviewDecoder.Role := fdrSeekPreview;
   FAudioPlayback := TVideoMinerAudioPlayback.Create;
   FMediaList := TVideoMinerMediaList.Create;
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);

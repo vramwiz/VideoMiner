@@ -30,6 +30,13 @@
      - VideoMiner は open 時に同じ動画を複数 decoder で開くため、decoder 個別 buffer では同じファイルを重複して先読みし、USB/NAS に対しても不利になりやすい。
      - 次に再挑戦するなら、decoder 個別ではなく「現在再生中ファイル単位の共有 I/O cache」にするか、再生本体 decoder だけに限定する。
      - 比較ログは Codex 作業フォルダの `outputs\usb_buffer_compare` に保存済み。
+   - 2026-06-26: 再生本体 decoder 限定 buffer を `VIDEOMINER_FILE_BUFFER_MODE=main` で試せるようにした。`off` / `main` / `all` を切り替え、decoder role と buffer summary をログに出す。
+     - USB の `E:\videominer_4k30_motion_debug.mp4` で比較した。主順序 3 回 + 逆順 1 回の combined では、baseline `playback_tick` p50 11.964ms / p95 14.186ms、main p50 11.453ms / p95 13.872ms、all p50 11.412ms / p95 13.593ms。
+     - ただし逆順 1 回では all が baseline より悪く、all の改善は OS/USB cache の温まり影響が混ざっている可能性が高い。main は逆順でも baseline より少し良かった。
+     - open 時の `format_open_ms` は baseline p50 1.538ms、main p50 1.203ms、all p50 17.469ms。all は重複先読みで open 負荷が大きいため既定有効にしない。
+     - graceful close の summary では main は main decoder だけ buffer 有効で、約 41MB 読み込み、約 35MB hit、未使用見込み約 5.6MB。all は複数 decoder で buffer open するため引き続き慎重に扱う。
+     - 現時点では、継続検証するなら all ではなく main 限定を候補にする。次は NAS/より遅いUSB、または OS cache の影響を減らした条件で再測定する。
+     - 結論: 通常は off とする。NAS 環境を用意できてから、NAS/低速ストレージ判定時だけ main 限定で有効化する方針を改めて確認する。
 3. 映像再生が少しカクつく場合の原因を切り分ける。
    - 同期ズレではなく、描画、デコード、タイマー周りの負荷や間隔が原因の可能性がある。
    - まず Debug ログ量を絞り、`playback_tick`、`paint`、`decode_ms`、`paint_ms`、`timer_interval` を確認する。

@@ -52,6 +52,7 @@ uses
   FFmpegAudioConvert in 'Source\Decode\FFmpegAudioConvert.pas',
   FFmpegAudioOpen in 'Source\Decode\FFmpegAudioOpen.pas',
   FFmpegDecoder in 'Source\Decode\FFmpegDecoder.pas',
+  FFmpegForwardReadBuffer in 'Source\Decode\FFmpegForwardReadBuffer.pas',
   FFmpegDecoderAudioPlayback in 'Source\Decode\FFmpegDecoderAudioPlayback.pas',
   FFmpegDecoderAudioRead in 'Source\Decode\FFmpegDecoderAudioRead.pas',
   FFmpegDecoderContext in 'Source\Decode\FFmpegDecoderContext.pas',

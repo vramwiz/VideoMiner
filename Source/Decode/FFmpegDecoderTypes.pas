@@ -9,6 +9,13 @@ uses
   Winapi.MMSystem;
 
 type
+  TFFmpegDecoderRole = (
+    fdrAuxiliary,      // 情報取得や一時 decode など、既定の補助用途
+    fdrPlaybackMain,   // 現在再生中の本体 decoder
+    fdrSeekPreview,    // seek hover / loop 先頭確認などの補助 preview decoder
+    fdrThumbnail       // サムネイル一覧や hover digest 用 decoder
+  );
+
   PAudioWaveBuffer = ^TAudioWaveBuffer;
   TAudioWaveBuffer = record
     Header : TWaveHdr; // waveOut に渡すバッファヘッダ
@@ -39,6 +46,22 @@ type
     RotationDegrees : Integer;    // 表示時に反映する反時計回りの回転角度
     Audio           : TAudioInfo; // 同じ入力ファイルから読んだ音声情報
   end;
+
+function FFmpegDecoderRoleText(Role: TFFmpegDecoderRole): string;
 implementation
+
+function FFmpegDecoderRoleText(Role: TFFmpegDecoderRole): string;
+begin
+  case Role of
+    fdrPlaybackMain:
+      Result := 'main';
+    fdrSeekPreview:
+      Result := 'seek_preview';
+    fdrThumbnail:
+      Result := 'thumbnail';
+  else
+    Result := 'aux';
+  end;
+end;
 
 end.

@@ -7,7 +7,7 @@ interface
 
 uses
   Winapi.Windows, Winapi.MMSystem, System.SysUtils, System.Generics.Collections,
-  Vcl.Graphics, FFmpegDecoderTypes, FFmpegDecoderContext;
+  System.SyncObjs, Vcl.Graphics, FFmpegDecoderTypes, FFmpegDecoderContext;
 
 type
   // FFmpegデコード処理で発生した例外を表すクラス。
@@ -17,6 +17,7 @@ type
   TFFmpegDecoder = class
   private
     FFileName            : string;                  // 現在開いている動画ファイル名
+    FInputBuffer         : TObject;                 // custom AVIO 用の一時前方読み込みバッファ
     FFormatContext       : Pointer;                 // avformatで開いた入力コンテキスト
     FCodecContext        : Pointer;                 // avcodecで開いたデコードコンテキスト
     FStream              : Pointer;                 // 対象の映像ストリーム
@@ -36,6 +37,7 @@ type
     FVideoDecoderName    : string;                  // 実際に開いた映像デコーダ名
     FVideoUsesQsv        : Boolean;                 // QSV decoderを使っているかどうか
     FInfo                : TVideoInfo;              // 現在開いている動画の基本情報
+    FRole                : TFFmpegDecoderRole;      // この decoder の用途
     FDirectSwsContext    : Pointer;                 // VideoMinerバッファ直接出力用の色変換コンテキスト
     FDirectSwsSrcWidth   : Integer;                 // 直接出力用swsの入力幅
     FDirectSwsSrcHeight  : Integer;                 // 直接出力用swsの入力高さ
@@ -105,6 +107,7 @@ type
     property DecodeGeneration: Int64 read FDecodeGeneration;
     property Info: TVideoInfo read FInfo;
     property FileName: string read FFileName;
+    property Role: TFFmpegDecoderRole read FRole write FRole;
   end;
 
 implementation
@@ -115,8 +118,11 @@ uses
   FFmpegDecoderNextI420, FFmpegDecoderNextYuy2, FFmpegDecoderNextYc48,
   FFmpegDecoderResources, FFmpegDecoderSeekBgr24, FFmpegDecoderSeekBgrx32,
   FFmpegDecoderSeekI420, FFmpegDecoderSeekYuy2, FFmpegDecoderSeekYc48,
-  FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo, VideoMinerDebugLog,
-  VideoMinerSettings;
+  FFmpegForwardReadBuffer, FFmpegFrameConvert, FFmpegQsvDecode, FFmpegStreamInfo,
+  VideoMinerDebugLog, VideoMinerSettings;
+
+var
+  GlobalDecoderOpenSequence: Int64;
 
 // pixel format 名から alpha channel/plane を持つ形式か推定する
 function PixelFormatHasAlpha(const PixelFormatText: string): Boolean;
@@ -166,6 +172,7 @@ end;
 constructor TFFmpegDecoder.Create;
 begin
   inherited Create;
+  FRole := fdrAuxiliary;
   FStreamIndex := -1;
   FAudioStreamIndex := -1;
   FWaveOut := 0;
@@ -186,6 +193,7 @@ end;
 procedure TFFmpegDecoder.SyncContextFromFields;
 begin
   FContext.FileName := FFileName;
+  FContext.InputBuffer := FInputBuffer;
   FContext.FormatContext := FFormatContext;
   FContext.CodecContext := FCodecContext;
   FContext.Stream := FStream;
@@ -212,6 +220,7 @@ end;
 procedure TFFmpegDecoder.SyncFieldsFromContext;
 begin
   FFileName := FContext.FileName;
+  FInputBuffer := FContext.InputBuffer;
   FFormatContext := FContext.FormatContext;
   FCodecContext := FContext.CodecContext;
   FStream := FContext.Stream;
@@ -245,6 +254,7 @@ begin
   SyncFieldsFromContext;
 
   FFileName := '';
+  FInputBuffer := nil;
   FStream := nil;
   FStreamIndex := -1;
   FVideoDecoderName := '';
@@ -311,6 +321,7 @@ end;
 function TFFmpegDecoder.Open(const FileName: string; out Info: TVideoInfo; out ErrorMessage: string): Boolean;
 var
   FormatContext     : PAVFormatContext;    // avformatで開く入力コンテキスト
+  InputBuffer       : TFFmpegForwardReadBuffer; // custom AVIO 用の一時読み込みバッファ
   CodecContext      : PAVCodecContext;     // 映像デコードコンテキスト
   AudioCodecContext : PAVCodecContext;     // 音声デコードコンテキスト
   Codec             : PAVCodec;            // 映像ストリームに対応するFFmpegデコーダ
@@ -336,6 +347,8 @@ var
   DecoderMode       : TVideoDecoderMode;
   DecodeBackend     : string;
   GpuInferred       : string;
+  OpenSequence      : Int64;
+  UseForwardBuffer  : Boolean;
 {$IFDEF DEBUG}
   ApiLoadMs         : Double;
   AudioOpenMs       : Double;
@@ -356,6 +369,7 @@ begin
   ErrorMessage := '';
   Result := False;
   FormatContext := nil;
+  InputBuffer := nil;
   CodecContext := nil;
   AudioCodecContext := nil;
   Packet := nil;
@@ -369,6 +383,8 @@ begin
   OpenedWithQsv := False;
   VideoDecoderName := '';
   DecoderMode := GetVideoDecoderMode;
+  OpenSequence := TInterlocked.Increment(GlobalDecoderOpenSequence);
+  UseForwardBuffer := VideoMinerForwardReadBufferEnabled(FRole);
 
   try
     TFFmpegApi.EnsureLoaded;
@@ -377,8 +393,33 @@ begin
     StepWatch := TStopwatch.StartNew;
 {$ENDIF}
 
-    Utf8FileName := UTF8String(FileName);
-    Ret := TFFmpegApi.avformat_open_input(@FormatContext, PAnsiChar(Utf8FileName), nil, nil);
+    WriteVideoMinerSlowLog(Format(
+      'decoder_open_begin seq=%d role=%s file="%s" drive="%s" buffer_mode=%s buffer_enabled=%s',
+      [OpenSequence, FFmpegDecoderRoleText(FRole), ExtractFileName(FileName),
+       ExtractFileDrive(FileName), VideoMinerForwardReadBufferModeText,
+       BoolToStr(UseForwardBuffer, True)]));
+
+    if UseForwardBuffer then
+    begin
+      InputBuffer := TFFmpegForwardReadBuffer.Create(FRole, OpenSequence);
+      if not InputBuffer.Open(FileName, ErrorMessage) then
+        Exit;
+      if not InputBuffer.CreateAvioContext(ErrorMessage) then
+        Exit;
+      FormatContext := TFFmpegApi.avformat_alloc_context();
+      if FormatContext = nil then
+      begin
+        ErrorMessage := 'avformat_alloc_context failed.';
+        Exit;
+      end;
+      FormatContext.pb := InputBuffer.AvioContext;
+      Ret := TFFmpegApi.avformat_open_input(@FormatContext, nil, nil, nil);
+    end
+    else
+    begin
+      Utf8FileName := UTF8String(FileName);
+      Ret := TFFmpegApi.avformat_open_input(@FormatContext, PAnsiChar(Utf8FileName), nil, nil);
+    end;
 {$IFDEF DEBUG}
     FormatOpenMs := StepWatch.Elapsed.TotalMilliseconds;
     StepWatch := TStopwatch.StartNew;
@@ -610,6 +651,7 @@ begin
     end;
 
     FFileName := FileName;
+    FInputBuffer := InputBuffer;
     FFormatContext := FormatContext;
     FCodecContext := CodecContext;
     FStream := Stream;
@@ -628,6 +670,7 @@ begin
     FInfo := Info;
 
     FormatContext := nil;
+    InputBuffer := nil;
     CodecContext := nil;
     AudioCodecContext := nil;
     Packet := nil;
@@ -645,6 +688,10 @@ begin
        TotalWatch.Elapsed.TotalMilliseconds, VideoDecoderName,
        Info.Width, Info.Height, Info.RotationDegrees,
        BoolToStr(Info.Audio.Present, True), Info.Audio.OpenError]));
+    WriteVideoMinerSlowLog(Format(
+      'decoder_open_role seq=%d role=%s buffer_enabled=%s total_ms=%.3f',
+      [OpenSequence, FFmpegDecoderRoleText(FRole),
+       BoolToStr(UseForwardBuffer, True), TotalWatch.Elapsed.TotalMilliseconds]));
 {$ENDIF}
   except
     on E: Exception do
@@ -669,6 +716,7 @@ begin
     TFFmpegApi.avcodec_free_context(@CodecContext);
   if Assigned(FormatContext) then
     TFFmpegApi.avformat_close_input(@FormatContext);
+  InputBuffer.Free;
 end;
 
 // 指定ミリ秒位置へシークしてフレームをBitmapへ変換する

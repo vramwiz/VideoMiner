@@ -13,6 +13,7 @@ type
   TFFmpegDecoderContext = class
   public
     FileName                : string;     // 現在開いている入力ファイル
+    InputBuffer             : TObject;    // custom AVIO 用の一時前方読み込みバッファ
     FormatContext           : Pointer;    // 入力コンテナを読む AVFormatContext
     CodecContext            : Pointer;    // 動画ストリーム用の AVCodecContext
     Stream                  : Pointer;    // 選択された動画 AVStream

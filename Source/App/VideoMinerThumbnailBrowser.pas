@@ -565,6 +565,7 @@ begin
 
   Source := TBitmap.Create;
   Decoder := TFFmpegDecoder.Create;
+  Decoder.Role := fdrThumbnail;
   try
     try
       if not Decoder.Open(FileName, Info, ErrorMessage) then
@@ -668,6 +669,7 @@ begin
     FPreviewStarted := False;
 
     FPreviewDecoder := TFFmpegDecoder.Create;
+    FPreviewDecoder.Role := fdrThumbnail;
     if not FPreviewDecoder.Open(FileName, FPreviewInfo, ErrorMessage) then
     begin
       FreeAndNil(FPreviewDecoder);
