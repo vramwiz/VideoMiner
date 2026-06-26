@@ -2,13 +2,39 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-26 フォームリサイズ時の D3D backbuffer 同期修正
+- フォームサイズ変更直後、D3D frame が現在有効と判定されると `Paint` が早期 return し、D3D target size / seek bar overlay layout の更新が次の present まで遅れていた。
+- そのため、リサイズ直後に seek bar などの幅が古いままになり、フォームを広げた領域には未描画のゴミが見えることがあった。
+- `TVideoMinerVideoSurface.Resize` を override し、サイズ変更直後に D3D target window、ズーム状態、seek bar overlay state を同期するようにした。
+- リサイズ中に同期的な D3D swap chain 再作成 / Present を連打すると独自タイトルバーの VCL 再描画と競合してちらつくため、Resize では `Nv12TextureD3DFramePresented` と直近 D3D frame tick を明示的に落とし、通常 `Paint` へ戻す。
+- タイトルバー付近のちらつき対策として、リサイズドラッグ中は frame guide の hover 枠を強制的に非表示にするようにした。タイトルバー上では `WM_NCHITTEST` と timer で hover 枠の表示/最前面化が走るため、ドラッグ中にタイトルバー部分だけ表示が揺れる原因になり得る。
+- シークバー表示中だけちらつくことが分かったため、`WM_ENTERSIZEMOVE` から `WM_EXITSIZEMOVE` まで `FLiveResizeActive` を立て、ドラッグ中は `Paint` からの D3D 再表示 / BGRX32 upload と `Resize` からの D3D target 再同期を抑えるようにした。終了時にだけ現在サイズで D3D 側を同期し直す。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+
 ## 2026-06-26 ホイールズームの D3D 表示対応
 - ホイールズーム時に `D3DFramePresentationBlockReason` が `zoom_active` になり、D3D 表示から CPU/GDI 側の再取得・再描画へ落ちていた。
 - D3D presenter に `TD3D11VideoZoomState` と `SetNv12TextureD3DVideoZoom` を追加し、GDI 側と同じ source crop を正規化座標で渡すようにした。
 - NV12 直通、BGRX32 upload、保持中 frame の再表示の各経路で共通の `BuildVideoViewport` を使い、ズーム中は viewport を拡大・オフセットして render target でクリップする方式にした。
 - `zoom_active` を D3D frame presentation のブロック理由から外し、ホイールズームとパンではまず保持中 D3D frame の再表示、次に現在 bitmap の BGRX32 D3D upload を試し、失敗時だけ従来の invalidate / CPU 再取得へ戻すようにした。
+- ユーザー確認で安定しており、従来より速くなっているため正式採用とした。
+- 4K などフォームサイズを超える動画でも、D3D 経路では元 texture を先にフォームサイズへ潰さず、保持済み texture の表示 viewport を変えるため、ズーム時も元解像度の情報を活かせる。
+- 現在の sampler は `D3D11_FILTER_MIN_MAG_MIP_POINT`。整数倍率かつ pixel 境界が揃う場合はくっきり表示される一方、非整数倍率では硬さやジャギーが出る可能性がある。画質優先で調整するなら linear sampler 化を後続候補にする。
 - 確認:
   - Win64 Debug: 成功、警告 0 / エラー 0。
+
+## 2026-06-26 ファイル前方読み込み buffer 実験
+- FFmpeg custom AVIO で decoder ごとに単一ファイル前方読み込み buffer を持たせる実験をしたが、decoder 個別 buffer 案は不採用としてコミット時点へ戻した。
+- ローカル SSD の `C:\Users\vramw\Videos\videominer_4k30_motion_debug.mp4` では、buffer 有効時に 32MB 初期読み込みの分だけ `format_open_ms` と `playback_tick` が悪化した。
+- USB 接続の `E:\videominer_4k30_motion_debug.mp4` でも、従来経路の `playback_tick` p50 10.665ms / p95 13.679ms に対し、buffer 32MB は p50 11.810ms / p95 14.400ms、buffer 4MB は p50 11.915ms / p95 14.251ms で改善しなかった。
+- open 時の `format_open_ms` も従来 p50 0.466ms に対し、buffer 32MB は 17.293ms、buffer 4MB は 11.479ms へ増えた。
+- VideoMiner は open 時に同じ動画を複数 decoder で開くため、decoder 個別 buffer では同じファイルを重複して先読みし、USB/NAS に対しても不利になりやすい。
+- 再生本体 decoder 限定 buffer を `VIDEOMINER_FILE_BUFFER_MODE=main` で試せるようにした。`off` / `main` / `all` を切り替え、decoder role と buffer summary をログに出す。
+- USB の `E:\videominer_4k30_motion_debug.mp4` で比較した。主順序 3 回 + 逆順 1 回の combined では、baseline `playback_tick` p50 11.964ms / p95 14.186ms、main p50 11.453ms / p95 13.872ms、all p50 11.412ms / p95 13.593ms。
+- ただし逆順 1 回では all が baseline より悪く、all の改善は OS/USB cache の温まり影響が混ざっている可能性が高い。main は逆順でも baseline より少し良かった。
+- open 時の `format_open_ms` は baseline p50 1.538ms、main p50 1.203ms、all p50 17.469ms。all は重複先読みで open 負荷が大きいため既定有効にしない。
+- graceful close の summary では main は main decoder だけ buffer 有効で、約 41MB 読み込み、約 35MB hit、未使用見込み約 5.6MB。all は複数 decoder で buffer open するため引き続き慎重に扱う。
+- 結論として通常は off とする。NAS 環境を用意できてから、NAS/低速ストレージ判定時だけ main 限定で有効化する方針を改めて確認する。
 
 ## 2026-06-26 メインフォームの入力/タイトルバー処理切り出し
 - `VideoMinerMainForm.pas` の肥大化対策として、アプリ全体メッセージ処理のうちマウス戻る/進む、ブラウザー戻る/進むキーのログと前後動画移動キュー化を `VideoMinerInputMessageRouter.pas` へ切り出した。

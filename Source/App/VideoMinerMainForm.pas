@@ -198,6 +198,10 @@ type
     procedure WMNavigate(var Message: TMessage); message WM_VM_NAVIGATE;
     // 通常表示時のサイズ変更を window controller へ通知する
     procedure WMSize(var Message: TWMSize); message WM_SIZE;
+    // ユーザー操作によるフォームリサイズ開始を動画表示面へ通知する
+    procedure WMEnterSizeMove(var Message: TMessage); message WM_ENTERSIZEMOVE;
+    // ユーザー操作によるフォームリサイズ終了を動画表示面へ通知する
+    procedure WMExitSizeMove(var Message: TMessage); message WM_EXITSIZEMOVE;
     // VCL のフォーカス移動処理より先に Tab を一覧切り替えとして拾う
     procedure CMDialogKey(var Message: TCMDialogKey); message CM_DIALOGKEY;
     // 指定ミリ秒位置のフレームを表示する
@@ -1625,6 +1629,22 @@ begin
     FWindowModeController.HandleSize;
   if FThumbnailBrowserController <> nil then
     FThumbnailBrowserController.AdjustResizeEdges;
+  if FFrameGuideController <> nil then
+    FFrameGuideController.UpdateLayout;
+end;
+
+procedure TVideoMinerMainForm.WMEnterSizeMove(var Message: TMessage);
+begin
+  inherited;
+  if FVideoView <> nil then
+    FVideoView.BeginLiveResize;
+end;
+
+procedure TVideoMinerMainForm.WMExitSizeMove(var Message: TMessage);
+begin
+  inherited;
+  if FVideoView <> nil then
+    FVideoView.EndLiveResize;
   if FFrameGuideController <> nil then
     FFrameGuideController.UpdateLayout;
 end;

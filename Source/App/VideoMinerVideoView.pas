@@ -134,6 +134,8 @@ type
     procedure Clear;
     // 読み込み中インジケータを表示し始める
     procedure BeginLoadingIndicator;
+    // フォームのライブリサイズ中はサーフェスの D3D 復帰を抑える
+    procedure BeginLiveResize;
     // 次の明示デコード前に表示フレームキャッシュだけを空にする
     procedure ClearFrameCache;
     // 停止状態から再生へ入る直前に、停止中 overlay の残りを閉じる
@@ -190,6 +192,8 @@ type
     procedure ClearSeekHoverPreview;
     // 読み込み中インジケータを消す
     procedure EndLoadingIndicator;
+    // フォームのライブリサイズ終了をサーフェスへ伝える
+    procedure EndLiveResize;
     property BossMode: Boolean write SetBossMode;
     property CanNavigateNext: Boolean write SetCanNavigateNext;
     property CanNavigatePrevious: Boolean write SetCanNavigatePrevious;
@@ -594,6 +598,12 @@ begin
     FSurface.BeginLoadingIndicator;
 end;
 
+procedure TVideoMinerVideoView.BeginLiveResize;
+begin
+  if FSurface <> nil then
+    FSurface.BeginLiveResize;
+end;
+
 procedure TVideoMinerVideoView.Present(Bitmap: TBitmap);
 begin
   if FSurface <> nil then
@@ -866,6 +876,12 @@ begin
     FSurface.EndLoadingIndicator;
     TryPresentSurfaceBitmapWithD3D;
   end;
+end;
+
+procedure TVideoMinerVideoView.EndLiveResize;
+begin
+  if FSurface <> nil then
+    FSurface.EndLiveResize;
 end;
 
 procedure TVideoMinerVideoView.SetSeekWheelFrameStepMs(Value: Integer);

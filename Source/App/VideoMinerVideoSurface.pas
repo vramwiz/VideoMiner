@@ -32,6 +32,7 @@ type
     FLastD3DStateLogText    : string;                            // 直近に出した D3D 表示判定ログ
     FLastD3DStateLogTick    : UInt64;                            // 直近に D3D 表示判定ログを出した時刻
     FForceCompactSeekBarPaint : Boolean;                         // ループ再開中の一時 GDI 表示でも D3D 風に描くか
+    FLiveResizeActive       : Boolean;                           // フォームのドラッグリサイズ中か
     FLastSeekBarPaintLogText: string;                            // 直近に出した GDI seek bar 描画ログ
     FLastSeekBarPaintLogTick: UInt64;                            // 直近に GDI seek bar 描画ログを出した時刻
     FLastD3DFramePresentedTick: UInt64;                           // 直近に D3D frame を表示した時刻
@@ -250,6 +251,8 @@ type
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean; override;
     // 動画、overlay、ボスが来た画面を現在状態に応じて描画する
     procedure Paint; override;
+    // リサイズ直後に D3D backbuffer と overlay 座標を現在サイズへ同期する
+    procedure Resize; override;
   public
     // 動画表示用 Bitmap、overlay 部品、入力タイマーを生成する
     constructor Create(AOwner: TComponent); override;
@@ -259,6 +262,8 @@ type
     procedure Clear;
     // 読み込み中インジケータを表示し始める
     procedure BeginLoadingIndicator;
+    // フォームのライブリサイズ中は D3D 再表示を抑えて VCL 再描画と競合しないようにする
+    procedure BeginLiveResize;
     // ボスが来たモード中のヘルプページを前後へ切り替える
     procedure ChangeBossHelpPage(Delta: Integer);
     // 外部から渡されたホイール操作をこの表示面で処理する
@@ -304,6 +309,8 @@ type
     procedure ClearSeekHoverPreview;
     // 読み込み中インジケータを消す
     procedure EndLoadingIndicator;
+    // フォームのライブリサイズ終了後に通常の D3D 表示へ戻れる状態にする
+    procedure EndLiveResize;
     property BossMode: Boolean read FBossMode write SetBossMode;
     property Bitmap: TBitmap read FBitmap;
     property CanNavigateNext: Boolean write SetCanNavigateNext;
@@ -449,6 +456,17 @@ begin
     FLoadingTimer.Enabled := True;
   Invalidate;
   Repaint;
+end;
+
+procedure TVideoMinerVideoSurface.BeginLiveResize;
+begin
+  if FLiveResizeActive then
+    Exit;
+
+  FLiveResizeActive := True;
+  ClearNv12TextureD3DFramePresented;
+  FLastD3DFramePresentedTick := 0;
+  Invalidate;
 end;
 
 procedure TVideoMinerVideoSurface.DblClick;
@@ -2063,6 +2081,29 @@ begin
   Result := True;
 end;
 
+procedure TVideoMinerVideoSurface.Resize;
+begin
+  inherited Resize;
+  if (csDestroying in ComponentState) or (ClientWidth <= 0) or
+     (ClientHeight <= 0) or (not HandleAllocated) then
+    Exit;
+
+  if FLiveResizeActive then
+  begin
+    ClearNv12TextureD3DFramePresented;
+    FLastD3DFramePresentedTick := 0;
+    Invalidate;
+    Exit;
+  end;
+
+  SetNv12TextureProbeTargetWindow(Handle, ClientWidth, ClientHeight);
+  UpdateD3DVideoZoomState;
+  UpdateD3DSeekBarOverlayState;
+  ClearNv12TextureD3DFramePresented;
+  FLastD3DFramePresentedTick := 0;
+  Invalidate;
+end;
+
 procedure TVideoMinerVideoSurface.Paint;
 var
 {$IFDEF DEBUG}
@@ -2090,7 +2131,8 @@ begin
 
   D3DFrameCurrent := Nv12TextureD3DFramePresented and CanUseD3DCompositedFramePresentation;
   CenterOverlayDrawnByD3D := D3DFrameCurrent;
-  if (not D3DFrameCurrent) and CanUseD3DCompositedFramePresentation and
+  if (not FLiveResizeActive) and (not D3DFrameCurrent) and
+     CanUseD3DCompositedFramePresentation and
      (FOverlayVisible or FSeekBarVisible or
       ((FSeekBar <> nil) and FSeekBar.Dragging) or
       ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible) or
@@ -2317,6 +2359,20 @@ begin
   FLoadingActive := False;
   if FLoadingTimer <> nil then
     FLoadingTimer.Enabled := False;
+  Invalidate;
+end;
+
+procedure TVideoMinerVideoSurface.EndLiveResize;
+begin
+  if not FLiveResizeActive then
+    Exit;
+
+  FLiveResizeActive := False;
+  SetNv12TextureProbeTargetWindow(Handle, ClientWidth, ClientHeight);
+  UpdateD3DVideoZoomState;
+  UpdateD3DSeekBarOverlayState;
+  ClearNv12TextureD3DFramePresented;
+  FLastD3DFramePresentedTick := 0;
   Invalidate;
 end;
 
