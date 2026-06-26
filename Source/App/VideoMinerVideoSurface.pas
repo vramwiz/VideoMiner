@@ -135,8 +135,10 @@ type
     function RefreshD3DFramePresentation: Boolean;
     // D3D11 直接表示を止めている最初の理由を返す
     function D3DFramePresentationBlockReason: string;
+    function D3DFramePresentationBlockReasonEx(AllowAlpha: Boolean): string;
     // D3D11 直接表示の現在状態を状態変化時または低頻度でログへ出す
-    procedure LogD3DFramePresentationState(const Context: string; Force: Boolean = False);
+    procedure LogD3DFramePresentationState(const Context: string;
+      Force: Boolean = False; AllowAlpha: Boolean = False);
     // GDI seek bar を描いた時の見た目と状態を状態変化時または低頻度でログへ出す
     procedure LogSeekBarPaintState(CompactStyle, D3DFrameCurrent: Boolean);
     // 直近に D3D frame を表示していて backbuffer を維持できる可能性があるか返す
@@ -269,10 +271,16 @@ type
     function ChapterMarkerToleranceMs(MaxMs, PixelTolerance: Integer): Integer;
     // D3D11 直接表示で動画本体だけを描いてよい状態か返す
     function CanUseD3DFramePresentation: Boolean;
+    // alpha 合成済み BGRX32 など、CPU 確定フレームを D3D 表示してよい状態か返す
+    function CanUseD3DCompositedFramePresentation: Boolean;
     // D3D overlay を更新するため、表示用フレームを確保したい状態か返す
     function NeedsD3DOverlayFrame: Boolean;
     // D3D11 直接表示直前に target window と overlay 座標を同期する
     function PrepareD3DFramePresentation: Boolean;
+    // CPU 側で確定した BGRX32 フレームを D3D 表示する直前に target window と overlay 座標を同期する
+    function PrepareD3DCompositedFramePresentation: Boolean;
+    // 現在の BGRX32 フレームを必要なら alpha 市松合成して D3D 表示する
+    function PresentCurrentBgrx32FrameWithD3D: Boolean;
     // D3D11 直接表示で実際に frame が出たことを記録する
     procedure MarkD3DFramePresented;
     // ズーム操作後に現在位置の CPU frame 再表示が必要なら True を返して消費する
@@ -557,8 +565,14 @@ end;
 
 function TVideoMinerVideoSurface.D3DFramePresentationBlockReason: string;
 begin
+  Result := D3DFramePresentationBlockReasonEx(False);
+end;
+
+function TVideoMinerVideoSurface.D3DFramePresentationBlockReasonEx(
+  AllowAlpha: Boolean): string;
+begin
   Result := '';
-  if FSourceHasAlpha then
+  if FSourceHasAlpha and (not AllowAlpha) then
     Result := 'source_has_alpha'
   else if FSeekPreviewVisible then
     Result := 'seek_preview_visible'
@@ -571,14 +585,14 @@ begin
 end;
 
 procedure TVideoMinerVideoSurface.LogD3DFramePresentationState(
-  const Context: string; Force: Boolean);
+  const Context: string; Force, AllowAlpha: Boolean);
 var
   D3DReady: Boolean;
   NowTick: UInt64;
   Reason: string;
   Text: string;
 begin
-  Reason := D3DFramePresentationBlockReason;
+  Reason := D3DFramePresentationBlockReasonEx(AllowAlpha);
   D3DReady := Reason = '';
   if D3DReady and ((ClientWidth <= 0) or (ClientHeight <= 0)) then
   begin
@@ -650,9 +664,14 @@ begin
   Result := D3DFramePresentationBlockReason = '';
 end;
 
+function TVideoMinerVideoSurface.CanUseD3DCompositedFramePresentation: Boolean;
+begin
+  Result := D3DFramePresentationBlockReasonEx(True) = '';
+end;
+
 function TVideoMinerVideoSurface.NeedsD3DOverlayFrame: Boolean;
 begin
-  Result := CanUseD3DFramePresentation and FPlaybackActive and
+  Result := CanUseD3DCompositedFramePresentation and FPlaybackActive and
     (FSeekBarVisible or
      ((FSeekBar <> nil) and FSeekBar.Dragging) or
      FOverlayVisible or
@@ -679,6 +698,64 @@ begin
 
   SetNv12TextureProbeTargetWindow(Handle, ClientWidth, ClientHeight);
   UpdateD3DSeekBarOverlayState;
+end;
+
+function TVideoMinerVideoSurface.PrepareD3DCompositedFramePresentation: Boolean;
+begin
+  Result := CanUseD3DCompositedFramePresentation and (ClientWidth > 0) and
+    (ClientHeight > 0) and HandleAllocated;
+  LogD3DFramePresentationState('prepare_composited', not Result, True);
+  if not Result then
+  begin
+    SetNv12TextureD3DSeekBarOverlay(Default(TD3D11SeekBarOverlayState));
+    Exit;
+  end;
+
+  SetNv12TextureProbeTargetWindow(Handle, ClientWidth, ClientHeight);
+  UpdateD3DSeekBarOverlayState;
+end;
+
+function TVideoMinerVideoSurface.PresentCurrentBgrx32FrameWithD3D: Boolean;
+var
+  Buffer: Pointer;
+  BufferStride: Integer;
+  FrameBitmap: TBitmap;
+begin
+  Result := False;
+  if (FBitmap = nil) or (FBitmap.Width <= 0) or (FBitmap.Height <= 0) then
+    Exit;
+  if not PrepareD3DCompositedFramePresentation then
+    Exit;
+
+  FrameBitmap := FBitmap;
+  if FSourceHasAlpha then
+  begin
+    EnsureAlphaCompositeBitmap;
+    if (FAlphaCompositeBitmap.Width <> FBitmap.Width) or
+       (FAlphaCompositeBitmap.Height <> FBitmap.Height) then
+      Exit;
+    FrameBitmap := FAlphaCompositeBitmap;
+  end;
+
+  if FrameBitmap.PixelFormat <> pf32bit then
+    FrameBitmap.PixelFormat := pf32bit;
+  Buffer := FrameBitmap.ScanLine[0];
+  if FrameBitmap.Height > 1 then
+    BufferStride := NativeInt(FrameBitmap.ScanLine[1]) - NativeInt(Buffer)
+  else
+    BufferStride := FrameBitmap.Width * 4;
+  if (Buffer = nil) or (BufferStride = 0) then
+    Exit;
+
+  SetNv12TextureD3DDisplayAllowed(True);
+  try
+    Result := PresentBgrx32TextureFrame(Buffer, BufferStride,
+      FrameBitmap.Width, FrameBitmap.Height);
+  finally
+    SetNv12TextureD3DDisplayAllowed(False);
+  end;
+  if Result then
+    MarkD3DFramePresented;
 end;
 
 function TVideoMinerVideoSurface.ConsumeZoomFrameRefreshNeeded: Boolean;
@@ -1346,7 +1423,8 @@ end;
 function TVideoMinerVideoSurface.RefreshD3DFramePresentation: Boolean;
 begin
   Result := False;
-  if FSourceHasAlpha or (FLastD3DFramePresentedTick = 0) then
+  if (FLastD3DFramePresentedTick = 0) or
+     (not CanUseD3DCompositedFramePresentation) then
     Exit;
 
   SetNv12TextureProbeTargetWindow(Handle, ClientWidth, ClientHeight);
@@ -1695,7 +1773,7 @@ begin
       (not FSeekBar.Dragging) and
       FSeekBar.HoverPositionFromPoint(MousePoint, HoverPositionMs)) then
   begin
-    if HIDE_LEGACY_SEEK_BAR_PAINT and CanUseD3DFramePresentation and
+    if HIDE_LEGACY_SEEK_BAR_PAINT and CanUseD3DCompositedFramePresentation and
        (Nv12TextureD3DFramePresented or D3DFrameRecentlyPresented) then
     begin
       if FSeekPreviewVisible and Assigned(FOnSeekHoverPreviewEnd) then
@@ -1936,9 +2014,9 @@ begin
     Exit;
   end;
 
-  D3DFrameCurrent := Nv12TextureD3DFramePresented and CanUseD3DFramePresentation;
+  D3DFrameCurrent := Nv12TextureD3DFramePresented and CanUseD3DCompositedFramePresentation;
   CenterOverlayDrawnByD3D := D3DFrameCurrent;
-  if (not D3DFrameCurrent) and CanUseD3DFramePresentation and
+  if (not D3DFrameCurrent) and CanUseD3DCompositedFramePresentation and
      D3DFrameRecentlyPresented and
      (FOverlayVisible or FSeekBarVisible or
       ((FSeekBar <> nil) and FSeekBar.Dragging) or
@@ -1956,7 +2034,7 @@ begin
 {$IFDEF DEBUG}
     WriteVideoMinerSlowLog(Format(
       'paint_skip_d3d_frame client_w=%d client_h=%d surface_ready=%s d3d_current=%s d3d_recent=%s paint_ms=%.3f',
-      [ClientWidth, ClientHeight, BoolToStr(CanUseD3DFramePresentation, True),
+      [ClientWidth, ClientHeight, BoolToStr(CanUseD3DCompositedFramePresentation, True),
        BoolToStr(Nv12TextureD3DFramePresented, True),
        BoolToStr(D3DFrameRecentlyPresented, True),
        PaintWatch.Elapsed.TotalMilliseconds]));

@@ -322,42 +322,12 @@ begin
 end;
 
 function TVideoMinerVideoView.TryPresentSurfaceBitmapWithD3D: Boolean;
-var
-  Bitmap: TBitmap;
-  Buffer: Pointer;
-  BufferStride: Integer;
 begin
   Result := False;
   if FSurface = nil then
     Exit;
 
-  Bitmap := FSurface.Bitmap;
-  if (Bitmap = nil) or (Bitmap.Width <= 0) or (Bitmap.Height <= 0) then
-    Exit;
-  if Bitmap.PixelFormat <> pf32bit then
-    Bitmap.PixelFormat := pf32bit;
-
-  Buffer := Bitmap.ScanLine[0];
-  if Bitmap.Height > 1 then
-    BufferStride := NativeInt(Bitmap.ScanLine[1]) - NativeInt(Buffer)
-  else
-    BufferStride := Bitmap.Width * 4;
-  if (Buffer = nil) or (BufferStride = 0) then
-    Exit;
-
-  Result := FSurface.PrepareD3DFramePresentation;
-  if not Result then
-    Exit;
-
-  SetNv12TextureD3DDisplayAllowed(True);
-  try
-    Result := PresentBgrx32TextureFrame(Buffer, BufferStride, Bitmap.Width,
-      Bitmap.Height);
-  finally
-    SetNv12TextureD3DDisplayAllowed(False);
-  end;
-  if Result then
-    FSurface.MarkD3DFramePresented;
+  Result := FSurface.PresentCurrentBgrx32FrameWithD3D;
 end;
 
 constructor TVideoMinerVideoView.Create(Image: TImage);
