@@ -58,14 +58,14 @@ const
         '| Home / End | First / last frame area |',
         '| R | Rotate display 90 degrees |',
         '| S | Playback speed 1.0x / 1.5x / 2.0x |',
+        '| Ctrl+Up / Ctrl+Down | Brightness |',
+        '| Shift+Up / Shift+Down | Contrast |',
         '| Up / Down | Volume |',
         '| M | Mute |',
-        '| F1 / F11 | Help screen / full screen |',
-        '| Esc | Exit full screen or boss mode |',
+        '| F1 / F11 / Esc | Help / full screen / exit |',
         '',
         'Mouse:',
-        '- Click: play / stop, double click: full screen',
-        '- Wheel: zoom, drag while zoomed: pan');
+        '- Click: play/stop, double: full screen, wheel: zoom, drag: pan');
       StatusText: 'help/basic  Ln 1, Col 1  Markdown  UTF-8'
     ),
     (

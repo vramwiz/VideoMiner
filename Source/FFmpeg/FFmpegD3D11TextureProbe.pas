@@ -15,6 +15,8 @@ type
   end;
 
   TD3D11SeekBarOverlayState = record
+    StatusVisible : Boolean; // 左上の一時ステータス表示を描くか
+    StatusText    : string;  // 左上に描く一時ステータス文字列
     Visible        : Boolean; // D3D 側で簡易 seek bar を描くか
     Bounds         : TRect;   // 下部バー全体の client 座標
     Track          : TRect;   // progress track の client 座標
@@ -68,6 +70,11 @@ type
     Height: Double;  // 表示する source 矩形の高さ。0.0..1.0 の正規化座標
   end;
 
+  TD3D11VideoColorAdjustment = record
+    Brightness: Single; // -1.0..1.0。0 が標準
+    Contrast  : Single; // 1.0 が標準
+  end;
+
 // NV12 frame を D3D11 texture へアップロードし、計測ログを出す。
 procedure ProbeNv12TextureUpload(Frame: PAVFrame);
 procedure SetNv12TextureProbeTargetWindow(WindowHandle: HWND; Width, Height: Integer);
@@ -81,6 +88,7 @@ procedure ClearNv12TextureD3DFramePresented;
 procedure SetNv12TextureD3DDisplayAllowed(Allowed: Boolean);
 procedure SetNv12TextureD3DSeekBarOverlay(const State: TD3D11SeekBarOverlayState);
 procedure SetNv12TextureD3DVideoZoom(const State: TD3D11VideoZoomState);
+procedure SetNv12TextureD3DColorAdjustment(const State: TD3D11VideoColorAdjustment);
 
 implementation
 
@@ -114,6 +122,7 @@ type
     FDisplayRenderView: ID3D11RenderTargetView; // 実表示 backbuffer view
     FVertexShader   : ID3D11VertexShader;  // fullscreen triangle vertex shader
     FPixelShader    : ID3D11PixelShader;   // NV12 -> RGB pixel shader
+    FColorAdjustBuffer: ID3D11Buffer;       // 動画本体の明るさ/コントラスト constant buffer
     FRectVertexShader  : ID3D11VertexShader; // overlay 矩形描画用 vertex shader
     FRectPixelShader   : ID3D11PixelShader;  // overlay 矩形描画用 pixel shader
     FRectConstantBuffer: ID3D11Buffer;        // overlay 矩形描画用 constant buffer
@@ -147,6 +156,8 @@ type
     function EnsureBgrxTexture(Width, Height: Integer; out Recreated: Boolean;
       out ErrorMessage: string): Boolean;
     function EnsureBgrxShaderPipeline(out ErrorMessage: string): Boolean;
+    function EnsureColorAdjustBuffer(out ErrorMessage: string): Boolean;
+    procedure ApplyColorAdjustmentConstants;
     function EnsureRectPipeline(out ErrorMessage: string): Boolean;
     function EnsureProbeWindow(out ErrorMessage: string): Boolean;
     function EnsureSwapChain(out Recreated: Boolean; out ErrorMessage: string): Boolean;
@@ -206,6 +217,7 @@ var
   GlobalD3DFramePresented: Boolean;
   GlobalD3DSeekBarOverlay: TD3D11SeekBarOverlayState;
   GlobalD3DVideoZoom: TD3D11VideoZoomState;
+  GlobalD3DColorAdjustment: TD3D11VideoColorAdjustment;
   LastD3DPresentLogTick: UInt64;
   LastD3DMemoryLogTick: UInt64;
   LastD3DPresentOverlayVisible: Boolean;
@@ -305,6 +317,52 @@ end;
 procedure SetNv12TextureD3DVideoZoom(const State: TD3D11VideoZoomState);
 begin
   GlobalD3DVideoZoom := State;
+end;
+
+procedure SetNv12TextureD3DColorAdjustment(
+  const State: TD3D11VideoColorAdjustment);
+begin
+  GlobalD3DColorAdjustment := State;
+end;
+
+function TNv12TextureProbe.EnsureColorAdjustBuffer(
+  out ErrorMessage: string): Boolean;
+var
+  BufferDesc: D3D11_BUFFER_DESC;
+  Ret: HRESULT;
+begin
+  Result := True;
+  ErrorMessage := '';
+  if Assigned(FColorAdjustBuffer) then
+    Exit;
+
+  FillChar(BufferDesc, SizeOf(BufferDesc), 0);
+  BufferDesc.ByteWidth := 16;
+  BufferDesc.Usage := D3D11_USAGE_DEFAULT;
+  BufferDesc.BindFlags := D3D11_BIND_CONSTANT_BUFFER;
+  Ret := FDevice.CreateBuffer(BufferDesc, nil, FColorAdjustBuffer);
+  if not Succeeded(Ret) then
+  begin
+    ErrorMessage := Format('CreateBuffer color adjustment failed. HRESULT=$%.8x',
+      [Cardinal(Ret)]);
+    Result := False;
+  end;
+end;
+
+procedure TNv12TextureProbe.ApplyColorAdjustmentConstants;
+var
+  Constants: array[0..3] of Single;
+begin
+  if not Assigned(FColorAdjustBuffer) then
+    Exit;
+
+  Constants[0] := GlobalD3DColorAdjustment.Brightness;
+  Constants[1] := GlobalD3DColorAdjustment.Contrast;
+  Constants[2] := 0;
+  Constants[3] := 0;
+  FDeviceContext.UpdateSubresource(FColorAdjustBuffer, 0, nil,
+    @Constants[0], 0, 0);
+  FDeviceContext.PSSetConstantBuffers(0, 1, FColorAdjustBuffer);
 end;
 
 procedure TNv12TextureProbe.BuildVideoViewport(FrameWidth, FrameHeight: Integer;
@@ -531,13 +589,16 @@ const
     'Texture2D yTex : register(t0);' + #10 +
     'Texture2D uvTex : register(t1);' + #10 +
     'SamplerState samp0 : register(s0);' + #10 +
+    'cbuffer ColorAdjust : register(b0) { float brightness; float contrast; float2 colorPad; };' + #10 +
     'float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {' + #10 +
     '  float y = saturate((yTex.Sample(samp0, uv).r - (16.0 / 255.0)) * (255.0 / 219.0));' + #10 +
     '  float2 chroma = (uvTex.Sample(samp0, uv).rg - float2(128.0 / 255.0, 128.0 / 255.0)) * (255.0 / 224.0);' + #10 +
     '  float r = y + 1.5748 * chroma.y;' + #10 +
     '  float g = y - 0.1873 * chroma.x - 0.4681 * chroma.y;' + #10 +
     '  float b = y + 1.8556 * chroma.x;' + #10 +
-    '  return float4(saturate(float3(r, g, b)), 1.0);' + #10 +
+    '  float3 rgb = saturate(float3(r, g, b));' + #10 +
+    '  rgb = saturate((rgb - 0.5) * contrast + 0.5 + brightness);' + #10 +
+    '  return float4(rgb, 1.0);' + #10 +
     '}';
 var
   Desc: D3D11_TEXTURE2D_DESC;
@@ -594,6 +655,9 @@ begin
       Exit;
     end;
   end;
+
+  if not EnsureColorAdjustBuffer(ErrorMessage) then
+    Exit;
 
   if Assigned(FRenderTexture) and Assigned(FRenderView) and
      (FTextureWidth = Width) and (FTextureHeight = Height) then
@@ -690,8 +754,11 @@ const
   PIXEL_SHADER_SOURCE: AnsiString =
     'Texture2D frameTex : register(t0);' + #10 +
     'SamplerState samp0 : register(s0);' + #10 +
+    'cbuffer ColorAdjust : register(b0) { float brightness; float contrast; float2 colorPad; };' + #10 +
     'float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {' + #10 +
-    '  return float4(frameTex.Sample(samp0, uv).rgb, 1.0);' + #10 +
+    '  float3 rgb = frameTex.Sample(samp0, uv).rgb;' + #10 +
+    '  rgb = saturate((rgb - 0.5) * contrast + 0.5 + brightness);' + #10 +
+    '  return float4(rgb, 1.0);' + #10 +
     '}';
 var
   PixelBlob: ID3DBlob;
@@ -749,6 +816,9 @@ begin
       Exit;
     end;
   end;
+
+  if not EnsureColorAdjustBuffer(ErrorMessage) then
+    Exit;
 
   Result := True;
 end;
@@ -1152,6 +1222,7 @@ begin
   FDeviceContext.PSSetShader(FPixelShader, nil, 0);
   FDeviceContext.PSSetShaderResources(0, Length(ResourceViews), ResourceViews[0]);
   FDeviceContext.PSSetSamplers(0, 1, FSampler);
+  ApplyColorAdjustmentConstants;
   FDeviceContext.RSSetViewports(1, @Viewport);
   FDeviceContext.OMSetRenderTargets(1, FRenderView, nil);
   FDeviceContext.Draw(3, 0);
@@ -1218,6 +1289,7 @@ begin
   FDeviceContext.PSSetShader(FPixelShader, nil, 0);
   FDeviceContext.PSSetShaderResources(0, Length(ResourceViews), ResourceViews[0]);
   FDeviceContext.PSSetSamplers(0, 1, FSampler);
+  ApplyColorAdjustmentConstants;
   FDeviceContext.RSSetViewports(1, @Viewport);
   FDeviceContext.OMSetRenderTargets(1, FSwapRenderView, nil);
   FDeviceContext.Draw(3, 0);
@@ -1501,6 +1573,30 @@ begin
   end;
 
   case UpCase(Ch) of
+    'B':
+    begin
+      DrawOverlayRect(Rect(X, Y + Scale, X + Scale, Y + Scale * 10),
+        R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale, Y + Scale, X + Scale * 5,
+        Y + Scale * 2), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 5, Y + Scale * 2, X + Scale * 6,
+        Y + Scale * 5), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale, Y + Scale * 5, X + Scale * 5,
+        Y + Scale * 6), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 5, Y + Scale * 6, X + Scale * 6,
+        Y + Scale * 9), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale, Y + Scale * 9, X + Scale * 5,
+        Y + Scale * 10), R, G, B, A);
+    end;
+    'C':
+    begin
+      DrawOverlayRect(Rect(X + Scale, Y + Scale, X + Scale * 6,
+        Y + Scale * 2), R, G, B, A);
+      DrawOverlayRect(Rect(X, Y + Scale * 2, X + Scale,
+        Y + Scale * 9), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale, Y + Scale * 9, X + Scale * 6,
+        Y + Scale * 10), R, G, B, A);
+    end;
     'V':
     begin
       DrawOverlayRect(Rect(X, Y + Scale, X + Scale, Y + Scale * 8), R, G, B, A);
@@ -1586,6 +1682,30 @@ begin
       DrawOverlayRect(Rect(X + Scale, Y + Scale * 5, X + Scale * 5,
         Y + Scale * 6), R, G, B, A);
       DrawOverlayRect(Rect(X + Scale, Y + Scale * 9, X + Scale * 6,
+        Y + Scale * 10), R, G, B, A);
+    end;
+    'H':
+    begin
+      DrawOverlayRect(Rect(X, Y + Scale, X + Scale, Y + Scale * 10),
+        R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 5, Y + Scale, X + Scale * 6,
+        Y + Scale * 10), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale, Y + Scale * 5, X + Scale * 5,
+        Y + Scale * 6), R, G, B, A);
+    end;
+    'K':
+    begin
+      DrawOverlayRect(Rect(X, Y + Scale, X + Scale, Y + Scale * 10),
+        R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 4, Y + Scale, X + Scale * 5,
+        Y + Scale * 3), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 3, Y + Scale * 3, X + Scale * 4,
+        Y + Scale * 5), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale, Y + Scale * 5, X + Scale * 3,
+        Y + Scale * 6), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 3, Y + Scale * 6, X + Scale * 4,
+        Y + Scale * 8), R, G, B, A);
+      DrawOverlayRect(Rect(X + Scale * 4, Y + Scale * 8, X + Scale * 5,
         Y + Scale * 10), R, G, B, A);
     end;
     '%':
@@ -1901,7 +2021,7 @@ begin
     FullRect.Bottom);
   CheckRect := Rect(EndRect.Left - 84, EndRect.Top, EndRect.Left - 8,
     EndRect.Bottom);
-  DeleteRect := Rect(CheckRect.Left - 38, CheckRect.Top, CheckRect.Left - 6,
+  DeleteRect := Rect(CheckRect.Left - 56, CheckRect.Top, CheckRect.Left - 24,
     CheckRect.Bottom);
   AddRect := Rect(DeleteRect.Left - 38, DeleteRect.Top, DeleteRect.Left - 6,
     DeleteRect.Bottom);
@@ -1930,14 +2050,14 @@ begin
     State.CheckEnabled);
   if BackAlpha > 0 then
     DrawOverlayRect(CheckRect, 0.91, 0.14, 0.14, BackAlpha);
-  TextWidth := OverlayTextWidth('Check', Scale);
+  TextWidth := OverlayTextWidth('CHECK', Scale);
   X := CheckRect.Left + (CheckRect.Width - TextWidth) div 2;
   Y := ToolTop;
-  DrawOverlayText(X + 1, Y + 1, Scale, 'Check', 0, 0, 0, 0.55);
+  DrawOverlayText(X + 1, Y + 1, Scale, 'CHECK', 0, 0, 0, 0.55);
   if State.CheckEnabled then
-    DrawOverlayText(X, Y, Scale, 'Check', 0.95, 0.20, 0.20, 0.95)
+    DrawOverlayText(X, Y, Scale, 'CHECK', 0.95, 0.20, 0.20, 0.95)
   else
-    DrawOverlayText(X, Y, Scale, 'Check', 1, 1, 1, 0.78);
+    DrawOverlayText(X, Y, Scale, 'CHECK', 1, 1, 1, 0.78);
 end;
 
 procedure TNv12TextureProbe.DrawSeekBarFullScreen(
@@ -2303,7 +2423,8 @@ begin
   DrawSeekBar := State.Visible and (not State.Bounds.IsEmpty) and
     (not State.Track.IsEmpty) and (State.MaxMs > 0);
   if (not DrawSeekBar) and (not State.TransportVisible) and
-     (not State.PreviousFileVisible) and (not State.NextFileVisible) then
+     (not State.PreviousFileVisible) and (not State.NextFileVisible) and
+     (not State.StatusVisible) then
     Exit;
   if not EnsureRectPipeline(ErrorMessage) then
   begin
@@ -2321,6 +2442,13 @@ begin
   Viewport.MaxDepth := 1;
   FDeviceContext.RSSetViewports(1, @Viewport);
   FDeviceContext.OMSetRenderTargets(1, FDisplayRenderView, nil);
+
+  if State.StatusVisible and (State.StatusText <> '') then
+  begin
+    DrawOverlayRect(Rect(18, 18, 18 + Max(120, Length(State.StatusText) * 36),
+      58), 0, 0, 0, 0.48);
+    DrawOverlayText(27, 26, 3, State.StatusText, 1, 1, 1, 0.90);
+  end;
 
   DrawTransportOverlay(State);
   if State.PreviousFileVisible then
@@ -2664,6 +2792,7 @@ begin
   FDeviceContext.PSSetShader(FBgrxPixelShader, nil, 0);
   FDeviceContext.PSSetShaderResources(0, 1, ResourceView);
   FDeviceContext.PSSetSamplers(0, 1, FSampler);
+  ApplyColorAdjustmentConstants;
   FDeviceContext.RSSetViewports(1, @Viewport);
   FDeviceContext.OMSetRenderTargets(1, FDisplayRenderView, nil);
   FDeviceContext.Draw(3, 0);
@@ -2771,6 +2900,7 @@ begin
     FDeviceContext.PSSetShader(FBgrxPixelShader, nil, 0);
     FDeviceContext.PSSetShaderResources(0, 1, ResourceView);
     FDeviceContext.PSSetSamplers(0, 1, FSampler);
+    ApplyColorAdjustmentConstants;
     FDeviceContext.RSSetViewports(1, @Viewport);
     FDeviceContext.OMSetRenderTargets(1, FDisplayRenderView, nil);
     FDeviceContext.Draw(3, 0);
@@ -2836,6 +2966,7 @@ begin
   FDeviceContext.PSSetShader(FPixelShader, nil, 0);
   FDeviceContext.PSSetShaderResources(0, Length(ResourceViews), ResourceViews[0]);
   FDeviceContext.PSSetSamplers(0, 1, FSampler);
+  ApplyColorAdjustmentConstants;
   FDeviceContext.RSSetViewports(1, @Viewport);
   FDeviceContext.OMSetRenderTargets(1, FDisplayRenderView, nil);
   FDeviceContext.Draw(3, 0);
@@ -3035,6 +3166,8 @@ begin
 end;
 
 initialization
+  GlobalD3DColorAdjustment.Brightness := 0.0;
+  GlobalD3DColorAdjustment.Contrast := 1.0;
 
 finalization
   try

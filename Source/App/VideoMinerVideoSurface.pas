@@ -90,6 +90,11 @@ type
     FSkipBackwardButton     : TVideoMinerOverlaySkipButton;      // 10 秒戻しの中央ボタン
     FSkipForwardButton      : TVideoMinerOverlaySkipButton;      // 10 秒進みの中央ボタン
     FSourceHasAlpha         : Boolean;                           // 現在の動画が alpha を持つ形式か
+    FTransientStatusText    : string;                            // 左上に短時間表示する汎用ステータス文字列
+    FTransientStatusTimer   : TTimer;                            // 汎用ステータス表示を消すタイマー
+    FTransientStatusVisible : Boolean;                           // 汎用ステータスを表示中か
+    FVideoBrightness        : Single;                            // D3D 動画本体の明るさ補正
+    FVideoContrast          : Single;                            // D3D 動画本体のコントラスト補正
     FZoomCenterX            : Double;                            // ズーム表示の画像中心 X
     FZoomCenterY            : Double;                            // ズーム表示の画像中心 Y
     FZoomFrameRefreshNeeded : Boolean;                           // D3D 表示後にズーム用 CPU frame 再取得が必要か
@@ -112,6 +117,8 @@ type
     procedure DrawSafeAreaGuide(Canvas: TCanvas; const DestRect: TRect);
     // シークバー hover 位置のフレームプレビューを描く
     procedure DrawSeekHoverPreview(Canvas: TCanvas);
+    // 左上の汎用一時ステータスを描く
+    procedure DrawTransientStatus(Canvas: TCanvas);
     // 旧パネルを含まない最小 seek bar fallback を描く
     procedure DrawMinimalSeekBarFallback(Canvas: TCanvas);
     // 読み込み中であることを示すテキストを描く
@@ -140,6 +147,8 @@ type
     procedure UpdateD3DSeekBarOverlayState;
     // D3D 表示中の動画 texture 拡大表示状態を更新する
     procedure UpdateD3DVideoZoomState;
+    // D3D 動画本体の明るさ/コントラスト補正を更新する
+    procedure UpdateD3DColorAdjustmentState;
     // 保持中の D3D frame へ現在の簡易シークバー状態を重ねて再表示する
     function RefreshD3DFramePresentation: Boolean;
     // D3D11 直接表示を止めている最初の理由を返す
@@ -238,6 +247,8 @@ type
     procedure SetSourceHasAlpha(Value: Boolean);
     // 音量パーセントを overlay へ渡す
     procedure SetVolumePercent(Value: Integer);
+    // 左上の汎用一時ステータスを消す
+    procedure TransientStatusTimer(Sender: TObject);
     // 読み込み中インジケータを 1 段階進める
     procedure LoadingTimer(Sender: TObject);
     // マウス停止後に操作領域外ならカーソルを隠す
@@ -317,6 +328,10 @@ type
     procedure SetSeekHoverPreview(Bitmap: TBitmap; PositionMs: Integer; const AnchorPoint: TPoint);
     // シークバー hover プレビューを消す
     procedure ClearSeekHoverPreview;
+    // D3D 動画本体の明るさ/コントラスト補正を設定する
+    procedure SetVideoColorAdjustment(Brightness, Contrast: Single);
+    // 左上に汎用一時ステータスを短時間表示する
+    procedure ShowTransientStatus(const Text: string);
     // 読み込み中インジケータを消す
     procedure EndLoadingIndicator;
     // フォームのライブリサイズ終了後に通常の D3D 表示へ戻れる状態にする
@@ -362,6 +377,8 @@ type
     property SourceHasAlpha: Boolean read FSourceHasAlpha write SetSourceHasAlpha;
     property Muted: Boolean write SetMuted;
     property VolumePercent: Integer write SetVolumePercent;
+    property VideoBrightness: Single read FVideoBrightness;
+    property VideoContrast: Single read FVideoContrast;
   end;
 
 implementation
@@ -387,6 +404,7 @@ const
   LOADING_GAP_SEGMENTS  = 7;     // 欠けとして空ける線分数
   LOADING_LAP_TICKS     = 24;    // 色を切り替える周回の tick 数
   CURSOR_HIDE_DELAY_MS  = 1200;  // 操作領域外でマウスカーソルを隠すまでの待ち時間
+  TRANSIENT_STATUS_MS   = 1200;  // 左上ステータス表示の維持時間 ms
 
 constructor TVideoMinerVideoSurface.Create(AOwner: TComponent);
 begin
@@ -409,6 +427,9 @@ begin
   FSeekBarHoverPositionMs := -1;
   FSeekPreviewVisible := False;
   FSeekWheelFrameStepMs := DEFAULT_FRAME_STEP_MS;
+  FVideoBrightness := 0.0;
+  FVideoContrast := 1.0;
+  UpdateD3DColorAdjustmentState;
   ResetZoom;
   FPreviousFileButton := TVideoMinerOverlayFileNavButton.Create(fndPrevious);
   FFirstFrameButton := TVideoMinerOverlayEdgeButton.Create(edFirst);
@@ -432,6 +453,10 @@ begin
   FCursorHideTimer.Enabled := False;
   FCursorHideTimer.Interval := CURSOR_HIDE_DELAY_MS;
   FCursorHideTimer.OnTimer := CursorHideTimer;
+  FTransientStatusTimer := TTimer.Create(Self);
+  FTransientStatusTimer.Enabled := False;
+  FTransientStatusTimer.Interval := TRANSIENT_STATUS_MS;
+  FTransientStatusTimer.OnTimer := TransientStatusTimer;
   FPreviousFileButton.Visible := False;
   FFirstFrameButton.Visible := False;
   FSkipBackwardButton.Visible := False;
@@ -447,6 +472,7 @@ begin
   CancelPendingSurfaceClick;
   Cursor := crDefault;
   FCursorHidden := False;
+  FTransientStatusTimer.Free;
   FCursorHideTimer.Free;
   FLoadingTimer.Free;
   FSurfaceClickTimer.Free;
@@ -1122,6 +1148,28 @@ begin
   Canvas.Brush.Style := bsSolid;
 end;
 
+procedure TVideoMinerVideoSurface.DrawTransientStatus(Canvas: TCanvas);
+var
+  TextRect: TRect;
+begin
+  if (not FTransientStatusVisible) or (FTransientStatusText = '') then
+    Exit;
+
+  TextRect := Rect(18, 18, 18 + Max(120, Length(FTransientStatusText) * 18),
+    58);
+  Canvas.Brush.Color := clBlack;
+  Canvas.FillRect(TextRect);
+  Canvas.Pen.Color := $00606060;
+  Canvas.Rectangle(TextRect);
+  InflateRect(TextRect, -9, 0);
+  Canvas.Font.Color := clWhite;
+  Canvas.Font.Size := 12;
+  Canvas.Font.Style := [fsBold];
+  DrawText(Canvas.Handle, PChar(FTransientStatusText), -1, TextRect,
+    DT_SINGLELINE or DT_VCENTER or DT_END_ELLIPSIS);
+  Canvas.Font.Style := [];
+end;
+
 procedure TVideoMinerVideoSurface.DrawMinimalSeekBarFallback(Canvas: TCanvas);
 var
   FilledRect: TRect;
@@ -1412,6 +1460,10 @@ var
   TrackRect: TRect;
 begin
   FillChar(State, SizeOf(State), 0);
+  State.StatusVisible := FTransientStatusVisible and
+    (FTransientStatusText <> '') and (not FSafeAreaVisible) and
+    (not FLoadingActive);
+  State.StatusText := FTransientStatusText;
   if (FPreviousFileButton <> nil) and FPreviousFileButton.Visible and
      (not FSafeAreaVisible) and (not FLoadingActive) then
   begin
@@ -1489,6 +1541,15 @@ begin
     end;
   end;
   SetNv12TextureD3DSeekBarOverlay(State);
+end;
+
+procedure TVideoMinerVideoSurface.UpdateD3DColorAdjustmentState;
+var
+  State: TD3D11VideoColorAdjustment;
+begin
+  State.Brightness := FVideoBrightness;
+  State.Contrast := FVideoContrast;
+  SetNv12TextureD3DColorAdjustment(State);
 end;
 
 procedure TVideoMinerVideoSurface.UpdateD3DVideoZoomState;
@@ -2246,6 +2307,7 @@ begin
       end;
     end;
     DrawSeekHoverPreview(DrawCanvas);
+    DrawTransientStatus(DrawCanvas);
     DrawLoadingIndicator(DrawCanvas);
     if UsePaintBuffer then
       Canvas.Draw(0, 0, FPaintBuffer);
@@ -2329,6 +2391,7 @@ begin
     end;
   end;
   DrawSeekHoverPreview(DrawCanvas);
+  DrawTransientStatus(DrawCanvas);
   DrawLoadingIndicator(DrawCanvas);
   if UsePaintBuffer then
     Canvas.Draw(0, 0, FPaintBuffer);
@@ -2511,6 +2574,48 @@ begin
     RefreshD3DFramePresentation;
     Invalidate;
   end;
+end;
+
+procedure TVideoMinerVideoSurface.SetVideoColorAdjustment(Brightness,
+  Contrast: Single);
+var
+  D3DRefreshed: Boolean;
+begin
+  FVideoBrightness := Max(-1.0, Min(1.0, Brightness));
+  FVideoContrast := Max(0.0, Min(3.0, Contrast));
+  UpdateD3DColorAdjustmentState;
+
+  D3DRefreshed := RefreshD3DFramePresentation;
+  if (not D3DRefreshed) and (FBitmap <> nil) and
+     (FBitmap.Width > 0) and (FBitmap.Height > 0) then
+    D3DRefreshed := PresentCurrentBgrx32FrameWithD3D;
+  if not D3DRefreshed then
+    Invalidate;
+end;
+
+procedure TVideoMinerVideoSurface.ShowTransientStatus(const Text: string);
+begin
+  FTransientStatusText := Text;
+  FTransientStatusVisible := Text <> '';
+  if FTransientStatusTimer <> nil then
+  begin
+    FTransientStatusTimer.Enabled := False;
+    FTransientStatusTimer.Enabled := FTransientStatusVisible;
+  end;
+  UpdateD3DSeekBarOverlayState;
+  if not RefreshD3DFramePresentation then
+    Invalidate;
+end;
+
+procedure TVideoMinerVideoSurface.TransientStatusTimer(Sender: TObject);
+begin
+  if FTransientStatusTimer <> nil then
+    FTransientStatusTimer.Enabled := False;
+  FTransientStatusVisible := False;
+  FTransientStatusText := '';
+  UpdateD3DSeekBarOverlayState;
+  if not RefreshD3DFramePresentation then
+    Invalidate;
 end;
 
 procedure TVideoMinerVideoSurface.HidePlaybackStartOverlays;

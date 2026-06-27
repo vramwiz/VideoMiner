@@ -20,7 +20,8 @@ uses
   VideoMinerNavigationController, VideoMinerSeekHoverPreviewController, VideoMinerThumbnailBrowserController,
   VideoMinerPlaybackController, VideoMinerPlaybackTiming, VideoMinerPlaybackUiActions,
   VideoMinerStartupOpenController, VideoMinerTitleBarUi,
-  VideoMinerVideoView, VideoMinerWindowChrome, VideoMinerWindowModeController;
+  VideoMinerVideoAdjustmentController, VideoMinerVideoView, VideoMinerWindowChrome,
+  VideoMinerWindowModeController;
 
 const
   WM_VM_OPEN_PENDING = WM_APP + 1; // 他プロセスから受けたファイルを安全なタイミングで開く独自メッセージ
@@ -99,6 +100,7 @@ type
     FStartupOpenController           : TVideoMinerStartupOpenController; // 起動後 open 予約と遅延実行の管理
     FTitleIcon                       : TImage;                          // 独自タイトルバー左端のアイコン
     FFrameGuideController            : TVideoMinerFrameGuideController; // hover 用フォーム枠制御
+    FVideoAdjustmentController       : TVideoMinerVideoAdjustmentController; // 一時的な明るさ/コントラスト補正
     FLoadingVideo                    : Boolean;                         // 動画読み込み処理中か
     FPreviousApplicationOnMessage    : TMessageEvent;                   // 前段のアプリ全体メッセージフック
     // 子コントロールへ届いたマウス戻る/進む系入力を前後動画移動として扱う
@@ -290,6 +292,7 @@ begin
   FAudioPlayback := TVideoMinerAudioPlayback.Create;
   FMediaList := TVideoMinerMediaList.Create;
   FVideoView := TVideoMinerVideoView.Create(ImagePreview);
+  FVideoAdjustmentController := TVideoMinerVideoAdjustmentController.Create(FVideoView);
   FInfoController := TVideoMinerInfoController.Create(Self, LabelAppTitle,
     FMediaSession, FMediaList, FAudioPlayback, FVideoView);
   FInfoController.OnCurrentPosition := CurrentPlaybackPositionMs;
@@ -478,6 +481,7 @@ begin
     FChapterController.Free;
     FNavigationController.Free;
     FInfoController.Free;
+    FVideoAdjustmentController.Free;
     FVideoView.Free;
     FMediaList.Free;
     FMediaSession.Free;
@@ -1448,6 +1452,10 @@ begin
     Key := 0;
     Exit;
   end;
+
+  if (FVideoAdjustmentController <> nil) and
+     FVideoAdjustmentController.HandleKeyDown(Key, Shift) then
+    Exit;
 
   if (FNavigationController <> nil) and
      FNavigationController.HandleKeyDown(Key, Shift) then

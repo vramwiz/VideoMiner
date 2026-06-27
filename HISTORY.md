@@ -2,6 +2,35 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-27 明るさ・コントラスト操作のヘルプ追記
+- README の基本操作表へ `Ctrl+Up/Down` の明るさ変更、`Shift+Up/Down` のコントラスト変更を追加した。
+- `F1` で表示するヘルプ兼用画面の Basic controls にも同じ操作を追加した。
+- F1 ヘルプの行数上限に収めるため、全画面/ヘルプ/解除とマウス操作の説明を少し整理した。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+
+## 2026-06-27 D3D シークバー Check 表示修正
+- D3D 下段ツール行で `CHECK` と表示したい箇所が、簡易文字に `H` / `K` がなく `CEC` のように欠けて見えていた。
+- D3D オーバーレイ文字へ `H` / `K` を追加し、Check ボタンの表示文字列を `CHECK` に統一した。
+- `CHECK` とチャプター追加/削除の `+` / `-` が近かったため、`+` / `-` のボタン矩形を左へ寄せて間隔を広げた。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+  - Win64 Release は `Win64\Release\VideoMiner.exe` が起動中だったため、最終 exe 作成でロックされ失敗した。
+
+## 2026-06-27 D3D 明るさ・コントラスト一時補正
+- D3D 表示化に合わせ、動画本体の pixel shader で明るさとコントラストを手動補正できるようにした。サムネイル処理には適用しない。
+- `TD3D11VideoColorAdjustment` と `SetNv12TextureD3DColorAdjustment` を追加し、NV12 -> RGB shader と BGRX32 表示 shader の両方で `rgb = (rgb - 0.5) * contrast + 0.5 + brightness` の補正を行う。
+- 操作状態は保存せず、起動中だけ `TVideoMinerVideoAdjustmentController` が保持する。
+- 仮操作として `Ctrl+Up/Down` を明るさ、`Shift+Up/Down` をコントラストへ割り当てた。
+- 左上の汎用一時ステータス表示を `TVideoMinerVideoSurface` に追加し、D3D overlay と GDI fallback の両方で表示できるようにした。現在は `B +5`、`C 105%` のような短いASCII表示にしている。
+- メインフォーム肥大化を避けるため、メインフォーム側は `TVideoMinerVideoAdjustmentController` の生成・破棄・KeyDown 委譲だけにした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、エラー 0。既存の hint warning 18 件のみ。
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+
 ## 2026-06-27 フォルダ履歴の代表サムネイル非同期復元
 - フォルダ履歴行で、左側の選択中フォルダだけ代表サムネイルが表示され、他の履歴フォルダが空になる現象が再発した。
 - NAS 同期走査を避ける修正後、未選択フォルダは同期的に `MediaList` を作らない方針になっていたが、代表サムネイル用の `FFolderHistoryMediaLists` へ非同期で一覧を補充する経路がなくなっていた。

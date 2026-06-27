@@ -195,6 +195,10 @@ type
     procedure EndLoadingIndicator;
     // フォームのライブリサイズ終了をサーフェスへ伝える
     procedure EndLiveResize;
+    // D3D 動画本体の明るさ/コントラスト補正を設定する
+    procedure SetVideoColorAdjustment(Brightness, Contrast: Single);
+    // 左上に汎用一時ステータスを短時間表示する
+    procedure ShowTransientStatus(const Text: string);
     property BossMode: Boolean write SetBossMode;
     property CanNavigateNext: Boolean write SetCanNavigateNext;
     property CanNavigatePrevious: Boolean write SetCanNavigatePrevious;
@@ -887,6 +891,19 @@ procedure TVideoMinerVideoView.EndLiveResize;
 begin
   if FSurface <> nil then
     FSurface.EndLiveResize;
+end;
+
+procedure TVideoMinerVideoView.SetVideoColorAdjustment(Brightness,
+  Contrast: Single);
+begin
+  if FSurface <> nil then
+    FSurface.SetVideoColorAdjustment(Brightness, Contrast);
+end;
+
+procedure TVideoMinerVideoView.ShowTransientStatus(const Text: string);
+begin
+  if FSurface <> nil then
+    FSurface.ShowTransientStatus(Text);
 end;
 
 procedure TVideoMinerVideoView.SetSeekWheelFrameStepMs(Value: Integer);

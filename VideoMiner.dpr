@@ -31,6 +31,7 @@ uses
   VideoMinerThumbnailBrowserController in 'Source\App\VideoMinerThumbnailBrowserController.pas',
   VideoMinerThumbnailCache in 'Source\App\VideoMinerThumbnailCache.pas',
   VideoMinerTitleBarUi in 'Source\App\VideoMinerTitleBarUi.pas',
+  VideoMinerVideoAdjustmentController in 'Source\App\VideoMinerVideoAdjustmentController.pas',
   VideoMinerVideoSurface in 'Source\App\VideoMinerVideoSurface.pas',
   VideoMinerVideoView in 'Source\App\VideoMinerVideoView.pas',
   VideoMinerWindowChrome in 'Source\App\VideoMinerWindowChrome.pas',
