@@ -571,8 +571,10 @@ begin
 end;
 
 function TVideoMinerVideoView.TryPresentLoopFrameCache(StartMs: Integer): Boolean;
+{$IFDEF DEBUG}
 var
   HitText: string;
+{$ENDIF}
 begin
   Result := (FSurface <> nil) and (FLoopFrameCacheStartMs = StartMs) and
     (FLoopFrameCacheCount > 0) and (FLoopFrameCache[0] <> nil) and
@@ -590,7 +592,8 @@ begin
     Exit;
 
   FSurface.Bitmap.Assign(FLoopFrameCache[0]);
-  FSurface.PresentImmediateAsPlaybackFallback;
+  if not TryPresentSurfaceBitmapWithD3D then
+    FSurface.PresentImmediateAsPlaybackFallback;
 end;
 
 procedure TVideoMinerVideoView.BeginLoadingIndicator;

@@ -2,6 +2,51 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-27 ループ先頭キャッシュ表示のズーム維持
+- 拡大表示中にループ先頭へ戻った瞬間だけ、画像サイズが初期化されたように黒枠が一瞬見えることがあった。
+- シークバーやアイコンが表示中は問題が出ないため、D3D overlay 表示時の再合成経路との差分を確認した。
+- 通常の表示済みフレームキャッシュは D3D BGRX32 upload を優先していたが、ループ先頭フレームキャッシュだけ `PresentImmediateAsPlaybackFallback` へ直行していた。
+- ループ先頭キャッシュ表示でもまず `TryPresentSurfaceBitmapWithD3D` を通し、D3D 側の zoom state / overlay state を反映した状態で提示するようにした。D3D 表示に失敗した場合だけ従来の playback fallback へ戻す。
+- 追加確認で、D3D current 判定が一瞬落ちた時の `Paint` は、シークバー / 中央アイコン / 左右ナビ表示中だけ D3D 再表示を試し、ズーム中のみの状態では GDI fallback へ落ちることが分かった。
+- GDI fallback の `DrawFrame` はズーム中でも元動画の fit 矩形外を黒く塗るため、D3D のズーム表示とは違い「ズーム前の黒枠」が見える。
+- `Paint` の D3D 再表示条件へ `FZoomScale > MIN_ZOOM` を追加し、overlay が出ていないズーム中でも、GDI fallback へ落ちる前に保持中 D3D frame の再表示または BGRX32 D3D upload を試すようにした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+  - Win64 Release は `Win64\Release\VideoMiner.exe` が起動中だったため、最終 exe 作成でロックされ失敗した。
+
+## 2026-06-27 サムネイル表示時の選択位置スクロール
+- サムネイル一覧を開いた時、現在選択中のサムネイルが画面範囲外にある場合があった。
+- サムネイル表示時は選択中タイルを優先し、選択がない場合は現在再生中タイルが画面内に入るようにスクロールする `ScrollToSelectionOrCurrent` を追加した。
+- 通常の `Open`、表示中の `SetMediaList` 差し替え、履歴復元 worker 完了後、履歴フォルダ表示時に同じスクロール補正を使うようにした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - NAS の `b9fbf80d-bb96-44ff-82dc-2493237a667b.m4v` を開いて Tab を送り、`current=76 selected=76` の一覧状態でサムネイル表示されることをログで確認した。
+
+## 2026-06-27 起動直後サムネイル表示の NAS 同期走査抑制
+- 起動直後に前回 NAS ファイル復元が skip された状態でサムネイル一覧を開くと、空一覧からの履歴復元や履歴タイル描画が NAS フォルダを同期走査し、黒画面または無反応に見える可能性があった。
+- 履歴タイル描画中に、過去フォルダの代表サムネイル用 `MediaList` を同期構築しないようにした。既にキャッシュ済みの一覧がある場合だけ代表サムネイルを描く。
+- 空一覧からの履歴復元タイマーは 900ms 後に遅らせ、履歴フォルダの先頭動画検索と `MediaList` 構築を worker thread で行うようにした。
+- worker 完了後は UI thread で一覧だけを差し替え、表示済みのサムネイル画面に通常どおりサムネイル生成キューが入るようにした。
+- サムネイル一覧を開いた直後に `Update` して、最初の描画を履歴復元より先に流すようにした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - 起動直後に Tab を送るログで、`thumbnail paint_begin` / `toggle_end` の後に `history_restore_after_open index=0`、`set_media_end count=81` が出て、画面表示後に NAS フォルダ一覧とサムネイルキューが復元されることを確認した。
+
+## 2026-06-27 NAS 1080p60 H.264 動画の QSV 自動判定
+- `\\taketani\bbb\Balloon\b9fbf80d-bb96-44ff-82dc-2493237a667b.m4v` が NAS 越しの再生で大きくカクつく状態を確認した。
+- Debug ログでは 1920x1080 / 60fps / H.264 だが、従来の自動判定は H.264 の QSV decoder を 4K 以上でしか試さないため、software decoder で開いていた。
+- H.264 でも 1920x1080 以上かつ 50fps 以上なら QSV decoder を自動選択するようにし、判定ログへ fps も出すようにした。
+- QSV 化後も残るカクつきは、音声キュー補充の `audio_pump` が再生 tick 上で 200〜460ms 程度止まることが主因だったため、音声 pump を worker thread へ移し、再生 tick では worker のエラー確認だけを行うようにした。
+- NAS の一時的な音声 packet 読み待ちを吸収しやすいように、通常再生時の音声キュー目標を 1400ms、開始前キューを 500ms へ増やした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、エラー 0。
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+  - 対象ファイルが `decoder="h264_qsv"` で開くことを確認した。
+  - 修正前は video decode が 45〜60ms 程度まで伸びて音声から数秒遅れていたが、修正後は安定時の decode が概ね 7〜12ms になり、通常の遅れは 0〜30ms 程度へ収まった。
+  - 音声 pump worker 化後は `playback_tick` の `pump_ms` が p99 0.260ms / max 0.636ms まで下がった。残るスパイクは video decode 側で、今回の 35 秒計測では `playback_tick total_ms` p99 38.003ms / max 92.127ms。
+
 ## 2026-06-27 動画面カーソルの自動非表示
 - 動画面上でマウスがシークバー、中央操作アイコン、左右ナビアイコンの上にないまま一定時間止まった場合、カーソルを `crNone` へ切り替えて非表示にするようにした。
 - マウス移動、クリック、ホイール操作、ボスモード切替、動画面外への移動では `crDefault` へ戻し、操作領域上では自動非表示タイマーを止める。

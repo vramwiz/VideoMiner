@@ -649,7 +649,7 @@ begin
     Exit;
   end;
 
-  if not FAudioPlayback.Pump(ErrorMessage) then
+  if not FAudioPlayback.CheckPumpWorker(ErrorMessage) then
   begin
     ErrorMessage := 'Failed to play audio: ' + ErrorMessage;
     Exit;

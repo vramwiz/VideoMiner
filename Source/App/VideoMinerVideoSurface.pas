@@ -2190,7 +2190,7 @@ begin
   CenterOverlayDrawnByD3D := D3DFrameCurrent;
   if (not FLiveResizeActive) and (not D3DFrameCurrent) and
      CanUseD3DCompositedFramePresentation and
-     (FOverlayVisible or FSeekBarVisible or
+     ((FZoomScale > MIN_ZOOM) or FOverlayVisible or FSeekBarVisible or
       ((FSeekBar <> nil) and FSeekBar.Dragging) or
       ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible) or
       ((FNextFileButton <> nil) and FNextFileButton.Visible)) then

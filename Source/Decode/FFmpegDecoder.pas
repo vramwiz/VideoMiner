@@ -139,9 +139,21 @@ begin
     (Pos('ya', LowerName) = 1);
 end;
 
+function StreamFrameRate(Stream: PAVStream): Double;
+begin
+  Result := 0;
+  if Stream = nil then
+    Exit;
+
+  Result := RationalToDouble(Stream.avg_frame_rate);
+  if Result <= 0 then
+    Result := RationalToDouble(Stream.r_frame_rate);
+end;
+
 function ShouldTryQsvDecoder(DecoderMode: TVideoDecoderMode;
-  CodecPar: PAVCodecParameters): Boolean;
+  CodecPar: PAVCodecParameters; Stream: PAVStream): Boolean;
 var
+  Fps: Double;
   PixelCount: Int64;
 begin
   Result := False;
@@ -156,9 +168,11 @@ begin
   end;
 
   PixelCount := Int64(CodecPar.width) * Int64(CodecPar.height);
+  Fps := StreamFrameRate(Stream);
   case CodecPar.codec_id of
     AV_CODEC_ID_H264:
-      Result := PixelCount >= Int64(3840) * Int64(2160);
+      Result := (PixelCount >= Int64(3840) * Int64(2160)) or
+        ((PixelCount >= Int64(1920) * Int64(1080)) and (Fps >= 50.0));
     AV_CODEC_ID_HEVC, AV_CODEC_ID_AV1:
       Result := PixelCount >= Int64(1920) * Int64(1080);
     AV_CODEC_ID_VP9:
@@ -481,13 +495,14 @@ begin
       QsvDecoderName := QsvDecoderNameForCodecId(CodecPar.codec_id);
 {$IFDEF DEBUG}
       WriteVideoMinerSlowLog(Format(
-        'decoder_qsv_choice file="%s" mode=%s codec_id=%d video=%dx%d qsv_decoder="%s" try_qsv=%s',
+        'decoder_qsv_choice file="%s" mode=%s codec_id=%d video=%dx%d fps=%.3f qsv_decoder="%s" try_qsv=%s',
         [ExtractFileName(FileName), VideoDecoderModeToText(DecoderMode),
          CodecPar.codec_id, CodecPar.width, CodecPar.height,
+         StreamFrameRate(Stream),
          string(QsvDecoderName),
-         BoolToStr(ShouldTryQsvDecoder(DecoderMode, CodecPar), True)]));
+         BoolToStr(ShouldTryQsvDecoder(DecoderMode, CodecPar, Stream), True)]));
 {$ENDIF}
-      if ShouldTryQsvDecoder(DecoderMode, CodecPar) and (QsvDecoderName <> '') then
+      if ShouldTryQsvDecoder(DecoderMode, CodecPar, Stream) and (QsvDecoderName <> '') then
       begin
         Codec := TFFmpegApi.avcodec_find_decoder_by_name(PAnsiChar(QsvDecoderName));
         if Assigned(Codec) and CreateQsvDevice(QsvDeviceContext, QsvErrorMessage) then

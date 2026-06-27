@@ -27,6 +27,8 @@ type
     FFolderHistoryMediaLists : TObjectDictionary<string, TVideoMinerMediaList>; // 履歴フォルダの代表サムネイル用一覧
     FFolderHistorySelectedIndex : Integer;                 // キーボード操作対象のフォルダ履歴位置
     FHistoryRestoreTimer    : TTimer;                      // 空一覧表示後に履歴フォルダを遅延復元するタイマー
+    FHistoryRestoreGeneration : Integer;                   // 履歴復元 worker の世代番号
+    FHistoryRestoreRunning  : Boolean;                     // 履歴復元 worker が動作中か
     FHoverIndex              : Integer;                    // マウスが重なっているタイル位置
     FMediaList               : TVideoMinerMediaList;       // 表示対象になる同一フォルダ内の動画一覧
     FOnSelected              : TVideoMinerThumbnailSelectedEvent; // タイル選択の通知先
@@ -64,8 +66,6 @@ type
     function VisibleFolderHistoryCount: Integer;
     // 現在の列数とタイル幅から、サムネイルグリッドの左端を返す
     function GridLeftStart: Integer;
-    // 履歴フォルダの代表サムネイル用メディア一覧を返す
-    function FolderHistoryMediaList(const Folder: string): TVideoMinerMediaList;
     // スクロール量を有効範囲へ収める
     procedure ClampScrollOffset;
     // 指定位置にあるフォルダ履歴 index を返す
@@ -76,6 +76,8 @@ type
     procedure SelectTile(Index: Integer; EnsureVisible: Boolean);
     // 選択中タイルが画面内に入るようスクロールする
     procedure ScrollToSelected;
+    // 選択中タイルを優先し、なければ現在再生中タイルが画面内に入るようスクロールする
+    procedure ScrollToSelectionOrCurrent;
     // 選択中タイルを指定量だけ移動する
     procedure MoveSelection(Delta: Integer);
     // 指定タイルを開く
@@ -92,6 +94,11 @@ type
     procedure ShowFolderHistoryWhenMediaListEmpty;
     // 画面表示後に履歴フォルダのスキャンと一覧復元を行う
     procedure HistoryRestoreTimer(Sender: TObject);
+    // 履歴復元 worker を開始する
+    procedure StartHistoryRestoreWorker;
+    // 履歴復元 worker の結果を UI に反映する
+    procedure ApplyHistoryRestoreResult(Generation, Index: Integer;
+      const Folder: string; MediaList: TVideoMinerMediaList);
     // 表示中一覧で現在開いている動画の位置を返す
     function ActiveFileIndexInMediaList: Integer;
     // 指定方向のズームボタン矩形を返す
@@ -260,6 +267,7 @@ const
   PREVIEW_THUMBNAIL_WAIT_MS      = 120;       // 通常サムネイル生成中に hover プレビュー開始を延期する時間 ms
   PREVIEW_FRAME_INTERVAL_MS      = 40;        // hover 本プレビューの更新間隔 ms
   PREVIEW_START_PERCENT          = 10;        // hover 本プレビューの開始位置 %
+  HISTORY_RESTORE_DELAY_MS       = 900;       // 空一覧から表示後、履歴フォルダ復元を始めるまでの待ち時間 ms
   HOVER_REAL_PREVIEW_DEFAULT     = True;      // hover 中のタイルで音なし実動画プレビューを行う
 
 var
@@ -300,7 +308,7 @@ begin
   FPreviewTimer.OnTimer := PreviewTimer;
   FHistoryRestoreTimer := TTimer.Create(Self);
   FHistoryRestoreTimer.Enabled := False;
-  FHistoryRestoreTimer.Interval := 40;
+  FHistoryRestoreTimer.Interval := HISTORY_RESTORE_DELAY_MS;
   FHistoryRestoreTimer.OnTimer := HistoryRestoreTimer;
   FFolderHistoryMediaLists := TObjectDictionary<string, TVideoMinerMediaList>.Create(
     [doOwnsValues]);
@@ -308,6 +316,7 @@ end;
 
 destructor TVideoMinerThumbnailBrowser.Destroy;
 begin
+  Inc(FHistoryRestoreGeneration);
   StopPreview;
   ClearThumbnails;
   FOwnedMediaList.Free;
@@ -381,36 +390,6 @@ begin
   Cols := ColumnCount;
   TotalWidth := Cols * FTileWidth + Max(0, Cols - 1) * TILE_GAP;
   Result := Max(TILE_MARGIN, (ClientWidth - TotalWidth) div 2);
-end;
-
-function TVideoMinerThumbnailBrowser.FolderHistoryMediaList(
-  const Folder: string): TVideoMinerMediaList;
-var
-  FileName: string;
-  Key: string;
-  MediaList: TVideoMinerMediaList;
-begin
-  Result := nil;
-  if Folder = '' then
-    Exit;
-
-  Key := IncludeTrailingPathDelimiter(Folder);
-  if FFolderHistoryMediaLists.TryGetValue(Key, Result) then
-    Exit;
-
-  FileName := TVideoMinerMediaList.FirstMediaFileInFolder(Key);
-  if FileName = '' then
-    Exit;
-
-  MediaList := TVideoMinerMediaList.Create;
-  try
-    MediaList.BuildForFile(FileName);
-    FFolderHistoryMediaLists.Add(Key, MediaList);
-    Result := MediaList;
-  except
-    MediaList.Free;
-    raise;
-  end;
 end;
 
 procedure TVideoMinerThumbnailBrowser.ClampScrollOffset;
@@ -867,6 +846,8 @@ procedure TVideoMinerThumbnailBrowser.Close;
 begin
   if FHistoryRestoreTimer <> nil then
     FHistoryRestoreTimer.Enabled := False;
+  Inc(FHistoryRestoreGeneration);
+  FHistoryRestoreRunning := False;
   StopPreview;
   FScrollIndicatorDragging := False;
   FScrollIndicatorDragOffset := 0;
@@ -1268,10 +1249,9 @@ begin
 
   if IsCurrentFolder then
     RepresentativeList := FMediaList
-  else if (FMediaList = nil) or (FMediaList.Count <= 0) then
-    RepresentativeList := nil
-  else
-    RepresentativeList := FolderHistoryMediaList(FolderPath);
+  else if not FFolderHistoryMediaLists.TryGetValue(
+    IncludeTrailingPathDelimiter(FolderPath), RepresentativeList) then
+    RepresentativeList := nil;
 
   if RepresentativeList <> nil then
   begin
@@ -1821,14 +1801,18 @@ begin
     FCurrentIndex := FMediaList.CurrentIndex
   else
     FCurrentIndex := -1;
-  FSelectedIndex := FCurrentIndex;
-  ScrollToCurrent;
+  if FSelectedIndex < 0 then
+    FSelectedIndex := FCurrentIndex
+  else if (FMediaList <> nil) and (FSelectedIndex >= FMediaList.Count) then
+    FSelectedIndex := FMediaList.Count - 1;
+  ScrollToSelectionOrCurrent;
   Visible := True;
   BringToFront;
   SetFocus;
   if (FThumbnailTimer <> nil) and (NextQueuedThumbnailIndex >= 0) then
     FThumbnailTimer.Enabled := True;
   Invalidate;
+  Update;
   WriteThumbnailLog(Format('open_end count=%d current=%d queued=%d',
     [Length(FThumbnailStates), FCurrentIndex, NextQueuedThumbnailIndex]));
 end;
@@ -2020,6 +2004,15 @@ begin
   LayoutTiles;
 end;
 
+procedure TVideoMinerThumbnailBrowser.ScrollToSelectionOrCurrent;
+begin
+  if (FMediaList <> nil) and (FSelectedIndex >= 0) and
+     (FSelectedIndex < FMediaList.Count) then
+    ScrollToSelected
+  else
+    ScrollToCurrent;
+end;
+
 procedure TVideoMinerThumbnailBrowser.SelectTile(Index: Integer;
   EnsureVisible: Boolean);
 begin
@@ -2070,6 +2063,8 @@ begin
     MediaCount := 0;
   WriteThumbnailLog(Format('set_media_begin media_count=%d visible=%s',
     [MediaCount, BoolToStr(Visible, True)]));
+  Inc(FHistoryRestoreGeneration);
+  FHistoryRestoreRunning := False;
   StopPreview;
   FreeAndNil(FOwnedMediaList);
   FMediaList := MediaList;
@@ -2098,6 +2093,8 @@ begin
   if FFolderHistorySelectedIndex >= Length(FFolderHistory) then
     FFolderHistorySelectedIndex := -1;
   EnsureThumbnailSlots;
+  if Visible then
+    ScrollToSelectionOrCurrent;
   ClampScrollOffset;
   LayoutTiles;
   Invalidate;
@@ -2119,6 +2116,8 @@ begin
   FSelectedIndex := -1;
   FFolderHistorySelectedIndex := -1;
   FFolderHistoryHoverIndex := -1;
+  Inc(FHistoryRestoreGeneration);
+  FHistoryRestoreRunning := False;
   ClampScrollOffset;
   LayoutTiles;
   Invalidate;
@@ -2137,32 +2136,126 @@ begin
 end;
 
 procedure TVideoMinerThumbnailBrowser.HistoryRestoreTimer(Sender: TObject);
-var
-  FileName: string;
-  I: Integer;
 begin
   if FHistoryRestoreTimer <> nil then
     FHistoryRestoreTimer.Enabled := False;
   if (not Visible) or ((FMediaList <> nil) and (FMediaList.Count > 0)) then
     Exit;
 
-  FFolderHistory := LoadFolderHistory;
-  for I := 0 to High(FFolderHistory) do
-  begin
-    FileName := TVideoMinerMediaList.FirstMediaFileInFolder(FFolderHistory[I]);
-    if FileName = '' then
-      Continue;
+  StartHistoryRestoreWorker;
+end;
 
-    FFolderHistorySelectedIndex := I;
-    FFolderHistoryHoverIndex := -1;
-    ShowFolderHistory(I, False, FileName);
-    WriteThumbnailLog(Format(
-      'history_restore_after_open index=%d folder="%s"',
-      [I, FFolderHistory[I]]));
+procedure TVideoMinerThumbnailBrowser.StartHistoryRestoreWorker;
+var
+  Folders: TVideoMinerFolderHistory;
+  Generation: Integer;
+  Worker: TThread;
+begin
+  if FHistoryRestoreRunning then
+    Exit;
+
+  Folders := LoadFolderHistory;
+  if Length(Folders) <= 0 then
+  begin
+    WriteThumbnailLog('history_restore_after_open no_media');
     Exit;
   end;
 
-  WriteThumbnailLog('history_restore_after_open no_media');
+  FFolderHistory := Folders;
+  Inc(FHistoryRestoreGeneration);
+  Generation := FHistoryRestoreGeneration;
+  FHistoryRestoreRunning := True;
+  Worker := TThread.CreateAnonymousThread(
+    procedure
+    var
+      FileName: string;
+      Folder: string;
+      I: Integer;
+      MediaList: TVideoMinerMediaList;
+    begin
+      try
+        for I := 0 to High(Folders) do
+        begin
+          Folder := Folders[I];
+          FileName := TVideoMinerMediaList.FirstMediaFileInFolder(Folder);
+          if FileName = '' then
+            Continue;
+
+          MediaList := TVideoMinerMediaList.Create;
+          try
+            MediaList.BuildForFile(FileName);
+          except
+            MediaList.Free;
+            raise;
+          end;
+
+          TThread.Queue(nil,
+            procedure
+            begin
+              ApplyHistoryRestoreResult(Generation, I, Folder, MediaList);
+            end);
+          Exit;
+        end;
+
+        TThread.Queue(nil,
+          procedure
+          begin
+            ApplyHistoryRestoreResult(Generation, -1, '', nil);
+          end);
+      except
+        TThread.Queue(nil,
+          procedure
+          begin
+            ApplyHistoryRestoreResult(Generation, -1, '', nil);
+          end);
+      end;
+    end);
+  Worker.FreeOnTerminate := True;
+  Worker.Start;
+end;
+
+procedure TVideoMinerThumbnailBrowser.ApplyHistoryRestoreResult(
+  Generation, Index: Integer; const Folder: string;
+  MediaList: TVideoMinerMediaList);
+begin
+  FHistoryRestoreRunning := False;
+  if (Generation <> FHistoryRestoreGeneration) or (not Visible) or
+     ((FMediaList <> nil) and (FMediaList.Count > 0)) then
+  begin
+    MediaList.Free;
+    Exit;
+  end;
+
+  if (Index < 0) or (MediaList = nil) then
+  begin
+    WriteThumbnailLog('history_restore_after_open no_media');
+    Exit;
+  end;
+
+  StopPreview;
+  ClearThumbnails;
+  FreeAndNil(FOwnedMediaList);
+  FOwnedMediaList := MediaList;
+  FMediaList := FOwnedMediaList;
+  FFolderHistorySelectedIndex := Index;
+  FFolderHistoryHoverIndex := -1;
+  FActiveFileName := '';
+  FCurrentIndex := -1;
+  if FMediaList.Count > 0 then
+    FSelectedIndex := 0
+  else
+    FSelectedIndex := -1;
+  FScrollOffset := 0;
+  EnsureThumbnailSlots;
+  ScrollToSelectionOrCurrent;
+  ClampScrollOffset;
+  LayoutTiles;
+  Invalidate;
+  WriteThumbnailLog(Format(
+    'history_restore_after_open index=%d folder="%s"',
+    [Index, Folder]));
+  WriteThumbnailLog(Format('set_media_end count=%d current=%d selected=%d',
+    [Length(FThumbnailStates), FCurrentIndex, FSelectedIndex]));
 end;
 
 procedure TVideoMinerThumbnailBrowser.ShowFolderHistory(Index: Integer;
@@ -2215,6 +2308,7 @@ begin
     FSelectedIndex := -1;
   FScrollOffset := 0;
   EnsureThumbnailSlots;
+  ScrollToSelectionOrCurrent;
   ClampScrollOffset;
   LayoutTiles;
   Invalidate;

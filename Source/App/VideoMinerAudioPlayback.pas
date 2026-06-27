@@ -7,7 +7,7 @@
 interface
 
 uses
-  System.Diagnostics, System.Math, System.SysUtils, FFmpegDecoder,
+  System.Classes, System.Diagnostics, System.Math, System.SysUtils, FFmpegDecoder,
   FFmpegDecoderTypes, FFmpegAudioTempo, VideoMinerDebugLog;
 
 type
@@ -19,9 +19,9 @@ type
   private const
     OUTPUT_SAMPLE_RATE   = 48000; // waveOut へ渡す PCM のサンプルレート
     OUTPUT_CHANNELS      = 2;     // waveOut へ渡す PCM のチャンネル数
-    TARGET_QUEUE_MS      = 600;   // 1.0x 再生中に維持したい音声キュー長 ms
+    TARGET_QUEUE_MS      = 1400;  // 1.0x 再生中に維持したい音声キュー長 ms
     RATE_TARGET_QUEUE_MS = 220;   // 倍速再生中に維持したい音声キュー長 ms
-    START_QUEUE_MS       = 100;   // 再生開始前に先読みする音声キュー長 ms
+    START_QUEUE_MS       = 500;   // 再生開始前に先読みする音声キュー長 ms
     FADE_IN_MS           = 12;    // seek 直後のクリックノイズを抑えるフェードイン長 ms
     SLOW_START_LOG_MS    = 120;   // 音声開始処理を slow log に出す閾値 ms
     SLOW_PUMP_LOG_MS     = 60;    // 音声 pump を slow log に出す閾値 ms
@@ -40,6 +40,10 @@ type
     FPlaybackClock       : TStopwatch;                       // 再生位置を求める単調時計
     FPlaybackClockActive : Boolean;                          // 単調時計を再生位置として使えるか
     FPlaybackBaseMs      : Integer;                          // 単調時計の基準となる開始位置 ms
+    FPumpThread          : TThread;                           // 再生中の音声補充 worker
+    FPumpThreadStop      : Boolean;                           // 音声補充 worker の停止要求
+    FPumpThreadFailed    : Boolean;                           // worker 側で pump が失敗したか
+    FPumpThreadError     : string;                            // worker 側の最後の pump エラー
     // 次に投入する PCM の先頭へ短いフェードインを適用する
     procedure ApplyFadeIn(var Pcm: TBytes);
     // 現在の音量/ミュート設定を waveOut 側へ反映する
@@ -57,6 +61,13 @@ type
       out OutputPcm: TBytes; out OutputSampleCount: Integer): Boolean;
     // 現在の再生速度に応じて waveOut へ先行投入する目標キュー長を返す
     function TargetQueueMs: Integer;
+    // 音声補充 worker を開始する
+    procedure StartPumpWorker;
+    // 音声補充 worker を停止する
+    procedure StopPumpWorker;
+    // 音声キューを必要量まで補充する。worker では PCM 通知を行わない。
+    function PumpInternal(NotifyPcmDecoded: Boolean;
+      out ErrorMessage: string): Boolean;
   public
     // 音声デコーダを作成し、既定の音量/速度状態を初期化する
     constructor Create;
@@ -73,6 +84,8 @@ type
     procedure SilenceOutput;
     // 再生中の音声キューを必要量まで先読みして投入する
     function Pump(out ErrorMessage: string): Boolean;
+    // 音声補充 worker のエラー状態を確認する
+    function CheckPumpWorker(out ErrorMessage: string): Boolean;
     // 単調時計ベースの現在再生位置 ms を返す
     function PlaybackPositionMs: Integer;
     property Muted: Boolean read FMuted write SetMuted;
@@ -288,6 +301,8 @@ begin
   begin
     FPlaybackClock := TStopwatch.StartNew;
     FPlaybackClockActive := True;
+    if not FFinished then
+      StartPumpWorker;
     WriteVideoMinerRateLog(Format(
       'audio_start_summary pos_ms=%d rate=%.3f reused_decoder=%s start_samples=%d queued_output_samples=%d output_start_ms=%.3f queue_ms=%.3f total_ms=%.3f finished=%s',
       [PositionMs, FPlaybackRate, BoolToStr(OpenMs = 0, True),
@@ -336,6 +351,7 @@ end;
 
 procedure TVideoMinerAudioPlayback.StopOutput;
 begin
+  StopPumpWorker;
   if FDecoder <> nil then
     FDecoder.ResetAudioPlayback;
   FFinished := True;
@@ -345,6 +361,60 @@ begin
   FApplyFadeInNext := False;
   FPlaybackClockActive := False;
   FPlaybackBaseMs := 0;
+end;
+
+procedure TVideoMinerAudioPlayback.StartPumpWorker;
+var
+  Thread: TThread;
+begin
+  StopPumpWorker;
+  FPumpThreadStop := False;
+  FPumpThreadFailed := False;
+  FPumpThreadError := '';
+
+  Thread := TThread.CreateAnonymousThread(
+    procedure
+    var
+      ErrorMessage: string;
+    begin
+      while not FPumpThreadStop do
+      begin
+        ErrorMessage := '';
+        if not PumpInternal(False, ErrorMessage) then
+        begin
+          FPumpThreadError := ErrorMessage;
+          FPumpThreadFailed := True;
+          Break;
+        end;
+        TThread.Sleep(8);
+      end;
+    end);
+  Thread.FreeOnTerminate := False;
+  FPumpThread := Thread;
+  FPumpThread.Start;
+end;
+
+procedure TVideoMinerAudioPlayback.StopPumpWorker;
+var
+  Thread: TThread;
+begin
+  Thread := FPumpThread;
+  if Thread = nil then
+    Exit;
+
+  FPumpThreadStop := True;
+  Thread.WaitFor;
+  FPumpThread := nil;
+  Thread.Free;
+end;
+
+function TVideoMinerAudioPlayback.CheckPumpWorker(
+  out ErrorMessage: string): Boolean;
+begin
+  ErrorMessage := '';
+  Result := not FPumpThreadFailed;
+  if not Result then
+    ErrorMessage := FPumpThreadError;
 end;
 
 procedure TVideoMinerAudioPlayback.SilenceOutput;
@@ -591,6 +661,12 @@ begin
 end;
 
 function TVideoMinerAudioPlayback.Pump(out ErrorMessage: string): Boolean;
+begin
+  Result := PumpInternal(True, ErrorMessage);
+end;
+
+function TVideoMinerAudioPlayback.PumpInternal(NotifyPcmDecoded: Boolean;
+  out ErrorMessage: string): Boolean;
 var
   Pcm: TBytes;
   OutputPcm: TBytes;
@@ -678,7 +754,7 @@ begin
   FQueuedSamples := SampleCount;
   FFinished := Finished;
 
-  if Assigned(FOnPcmDecoded) then
+  if NotifyPcmDecoded and Assigned(FOnPcmDecoded) then
     FOnPcmDecoded(Self, StartSample, Pcm);
   StepWatch := TStopwatch.StartNew;
   if not TransformPcmForPlaybackRate(Pcm, OutputPcm, OutputSampleCount) then
