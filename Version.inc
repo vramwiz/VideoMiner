@@ -1,2 +1,2 @@
-﻿#define VM_APP_VERSION "0.0.13"
-#define VM_FILE_VERSION 0,0,13,0
+﻿#define VM_APP_VERSION "0.0.14"
+#define VM_FILE_VERSION 0,0,14,0
