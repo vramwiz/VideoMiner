@@ -25,6 +25,8 @@ type
     FFolderHistory           : TVideoMinerFolderHistory;   // 保存済みフォルダ閲覧履歴
     FFolderHistoryHoverIndex : Integer;                    // マウスが重なっているフォルダ履歴位置
     FFolderHistoryMediaLists : TObjectDictionary<string, TVideoMinerMediaList>; // 履歴フォルダの代表サムネイル用一覧
+    FFolderHistoryMediaListGeneration : Integer;           // 代表サムネイル用一覧 worker の世代番号
+    FFolderHistoryMediaListLoading : TDictionary<string, Boolean>; // 代表サムネイル用一覧を読み込み中のフォルダ
     FFolderHistorySelectedIndex : Integer;                 // キーボード操作対象のフォルダ履歴位置
     FHistoryRestoreTimer    : TTimer;                      // 空一覧表示後に履歴フォルダを遅延復元するタイマー
     FHistoryRestoreGeneration : Integer;                   // 履歴復元 worker の世代番号
@@ -99,6 +101,11 @@ type
     // 履歴復元 worker の結果を UI に反映する
     procedure ApplyHistoryRestoreResult(Generation, Index: Integer;
       const Folder: string; MediaList: TVideoMinerMediaList);
+    // 履歴フォルダの代表サムネイル用一覧を非同期で読み込む
+    procedure QueueFolderHistoryMediaList(const FolderPath: string);
+    // 代表サムネイル用一覧 worker の結果を UI に反映する
+    procedure ApplyFolderHistoryMediaList(Generation: Integer;
+      const FolderPath: string; MediaList: TVideoMinerMediaList);
     // 表示中一覧で現在開いている動画の位置を返す
     function ActiveFileIndexInMediaList: Integer;
     // 指定方向のズームボタン矩形を返す
@@ -312,14 +319,17 @@ begin
   FHistoryRestoreTimer.OnTimer := HistoryRestoreTimer;
   FFolderHistoryMediaLists := TObjectDictionary<string, TVideoMinerMediaList>.Create(
     [doOwnsValues]);
+  FFolderHistoryMediaListLoading := TDictionary<string, Boolean>.Create;
 end;
 
 destructor TVideoMinerThumbnailBrowser.Destroy;
 begin
   Inc(FHistoryRestoreGeneration);
+  Inc(FFolderHistoryMediaListGeneration);
   StopPreview;
   ClearThumbnails;
   FOwnedMediaList.Free;
+  FFolderHistoryMediaListLoading.Free;
   FFolderHistoryMediaLists.Free;
   inherited Destroy;
 end;
@@ -1251,7 +1261,10 @@ begin
     RepresentativeList := FMediaList
   else if not FFolderHistoryMediaLists.TryGetValue(
     IncludeTrailingPathDelimiter(FolderPath), RepresentativeList) then
+  begin
+    QueueFolderHistoryMediaList(FolderPath);
     RepresentativeList := nil;
+  end;
 
   if RepresentativeList <> nil then
   begin
@@ -1893,6 +1906,7 @@ begin
   Folder := FFolderHistory[DeleteIndex];
   DeleteFolderHistory(Folder);
   FFolderHistoryMediaLists.Remove(IncludeTrailingPathDelimiter(Folder));
+  FFolderHistoryMediaListLoading.Remove(IncludeTrailingPathDelimiter(Folder));
   FFolderHistory := LoadFolderHistory;
 
   if Length(FFolderHistory) <= 0 then
@@ -1935,6 +1949,8 @@ begin
   end;
 
   FFolderHistoryMediaLists.Clear;
+  FFolderHistoryMediaListLoading.Clear;
+  Inc(FFolderHistoryMediaListGeneration);
   FFolderHistorySelectedIndex := NewSelectedIndex;
   if FFolderHistoryHoverIndex >= Length(FFolderHistory) then
     FFolderHistoryHoverIndex := -1;
@@ -2256,6 +2272,87 @@ begin
     [Index, Folder]));
   WriteThumbnailLog(Format('set_media_end count=%d current=%d selected=%d',
     [Length(FThumbnailStates), FCurrentIndex, FSelectedIndex]));
+end;
+
+procedure TVideoMinerThumbnailBrowser.QueueFolderHistoryMediaList(
+  const FolderPath: string);
+var
+  FolderKey: string;
+  Generation: Integer;
+  Worker: TThread;
+begin
+  if FolderPath = '' then
+    Exit;
+
+  FolderKey := IncludeTrailingPathDelimiter(FolderPath);
+  if FFolderHistoryMediaLists.ContainsKey(FolderKey) or
+     FFolderHistoryMediaListLoading.ContainsKey(FolderKey) then
+    Exit;
+
+  FFolderHistoryMediaListLoading.Add(FolderKey, True);
+  Generation := FFolderHistoryMediaListGeneration;
+  Worker := TThread.CreateAnonymousThread(
+    procedure
+    var
+      FileName: string;
+      MediaList: TVideoMinerMediaList;
+      WorkerFolder: string;
+    begin
+      WorkerFolder := FolderKey;
+      MediaList := nil;
+      try
+        FileName := TVideoMinerMediaList.FirstMediaFileInFolder(WorkerFolder);
+        if FileName <> '' then
+        begin
+          MediaList := TVideoMinerMediaList.Create;
+          try
+            MediaList.BuildForFile(FileName);
+          except
+            FreeAndNil(MediaList);
+            raise;
+          end;
+        end;
+
+        TThread.Queue(nil,
+          procedure
+          begin
+            ApplyFolderHistoryMediaList(Generation, WorkerFolder, MediaList);
+          end);
+      except
+        MediaList.Free;
+        TThread.Queue(nil,
+          procedure
+          begin
+            ApplyFolderHistoryMediaList(Generation, WorkerFolder, nil);
+          end);
+      end;
+    end);
+  Worker.FreeOnTerminate := True;
+  Worker.Start;
+end;
+
+procedure TVideoMinerThumbnailBrowser.ApplyFolderHistoryMediaList(
+  Generation: Integer; const FolderPath: string;
+  MediaList: TVideoMinerMediaList);
+var
+  FolderKey: string;
+begin
+  FolderKey := IncludeTrailingPathDelimiter(FolderPath);
+  if FFolderHistoryMediaListLoading <> nil then
+    FFolderHistoryMediaListLoading.Remove(FolderKey);
+
+  if (Generation <> FFolderHistoryMediaListGeneration) or
+     (not Visible) or (MediaList = nil) or (MediaList.Count <= 0) then
+  begin
+    MediaList.Free;
+    Exit;
+  end;
+
+  FFolderHistoryMediaLists.AddOrSetValue(FolderKey, MediaList);
+  Invalidate;
+  WriteThumbnailLog(Format(
+    'folder_history_media_list_loaded folder="%s" count=%d',
+    [FolderKey, MediaList.Count]));
 end;
 
 procedure TVideoMinerThumbnailBrowser.ShowFolderHistory(Index: Integer;
