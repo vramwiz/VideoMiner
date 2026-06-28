@@ -59,6 +59,8 @@ type
     PreviousFileButton: TRect; // 左端の前ファイル移動ボタン
     NextFileVisible: Boolean; // 右端の次ファイル移動ボタンを描くか
     NextFileButton: TRect; // 右端の次ファイル移動ボタン
+    SafeAreaVisible: Boolean; // 90% セーフエリア確認枠を描くか
+    SafeAreaRect   : TRect; // セーフエリア確認枠の client 座標
     Chapters       : TArray<TD3D11SeekBarOverlayChapter>; // D3D 側で描くチャプター目盛り
   end;
 
@@ -2424,7 +2426,7 @@ begin
     (not State.Track.IsEmpty) and (State.MaxMs > 0);
   if (not DrawSeekBar) and (not State.TransportVisible) and
      (not State.PreviousFileVisible) and (not State.NextFileVisible) and
-     (not State.StatusVisible) then
+     (not State.StatusVisible) and (not State.SafeAreaVisible) then
     Exit;
   if not EnsureRectPipeline(ErrorMessage) then
   begin
@@ -2448,6 +2450,26 @@ begin
     DrawOverlayRect(Rect(18, 18, 18 + Max(120, Length(State.StatusText) * 36),
       58), 0, 0, 0, 0.48);
     DrawOverlayText(27, 26, 3, State.StatusText, 1, 1, 1, 0.90);
+  end;
+
+  if State.SafeAreaVisible and (not State.SafeAreaRect.IsEmpty) then
+  begin
+    DrawOverlayLine(State.SafeAreaRect.Left, State.SafeAreaRect.Top,
+      State.SafeAreaRect.Right, State.SafeAreaRect.Top, 8, 0, 0, 0, 1);
+    DrawOverlayLine(State.SafeAreaRect.Right, State.SafeAreaRect.Top,
+      State.SafeAreaRect.Right, State.SafeAreaRect.Bottom, 8, 0, 0, 0, 1);
+    DrawOverlayLine(State.SafeAreaRect.Right, State.SafeAreaRect.Bottom,
+      State.SafeAreaRect.Left, State.SafeAreaRect.Bottom, 8, 0, 0, 0, 1);
+    DrawOverlayLine(State.SafeAreaRect.Left, State.SafeAreaRect.Bottom,
+      State.SafeAreaRect.Left, State.SafeAreaRect.Top, 8, 0, 0, 0, 1);
+    DrawOverlayLine(State.SafeAreaRect.Left, State.SafeAreaRect.Top,
+      State.SafeAreaRect.Right, State.SafeAreaRect.Top, 5, 0, 1, 0.376, 1);
+    DrawOverlayLine(State.SafeAreaRect.Right, State.SafeAreaRect.Top,
+      State.SafeAreaRect.Right, State.SafeAreaRect.Bottom, 5, 0, 1, 0.376, 1);
+    DrawOverlayLine(State.SafeAreaRect.Right, State.SafeAreaRect.Bottom,
+      State.SafeAreaRect.Left, State.SafeAreaRect.Bottom, 5, 0, 1, 0.376, 1);
+    DrawOverlayLine(State.SafeAreaRect.Left, State.SafeAreaRect.Bottom,
+      State.SafeAreaRect.Left, State.SafeAreaRect.Top, 5, 0, 1, 0.376, 1);
   end;
 
   DrawTransportOverlay(State);
@@ -2574,17 +2596,23 @@ end;
 function TNv12TextureProbe.PresentFrame(Frame: PAVFrame): Boolean;
 var
   ChromaHeight : Integer;    // NV12 UV plane の高さ
+  ChromaWidth  : Integer;    // YUV420 chroma plane の幅
   ClearColor   : TFourSingleArray; // letterbox 領域を塗る黒
   ClearMs      : Double;     // backbuffer clear 時間
+  Col          : Integer;    // YUV420P UV interleave 用列 index
+  DstRow       : PByte;      // YUV420P UV interleave 先
   DrawMs       : Double;     // 実 backbuffer への描画時間
   ErrorMessage : string;     // D3D 表示失敗理由
   PresentMs    : Double;     // Present 呼び出し時間
   Recreated    : Boolean;    // swap chain を今回作り直したか
   OverlayMs    : Double;     // D3D overlay 描画時間
   ResourceViews: array[0..1] of ID3D11ShaderResourceView;
+  Row          : Integer;    // YUV420P UV interleave 用行 index
   StepWatch    : TStopwatch; // 各 step の計測
   TotalWatch   : TStopwatch; // D3D 表示全体の計測
   UploadMs     : Double;     // Y/UV plane upload 合計時間
+  URow         : PByte;      // YUV420P U plane 行
+  VRow         : PByte;      // YUV420P V plane 行
   ViewHeight   : Double;     // アスペクト比維持後の描画高さ
   ViewLeft     : Double;     // アスペクト比維持後の描画左位置
   ViewTop      : Double;     // アスペクト比維持後の描画上位置
@@ -2595,9 +2623,14 @@ begin
   GlobalD3DFramePresented := False;
   if (not Nv12TextureD3DDisplayEnabled) or (not GlobalD3DDisplayAllowed) then
     Exit;
-  if (Frame = nil) or (Frame.format <> AV_PIX_FMT_NV12) or
+  if (Frame = nil) or
+     ((Frame.format <> AV_PIX_FMT_NV12) and
+      (Frame.format <> AV_PIX_FMT_YUV420P)) or
      (Frame.data[0] = nil) or (Frame.data[1] = nil) or
      (Frame.linesize[0] <= 0) or (Frame.linesize[1] <= 0) then
+    Exit;
+  if (Frame.format = AV_PIX_FMT_YUV420P) and
+     ((Frame.data[2] = nil) or (Frame.linesize[2] <= 0)) then
     Exit;
   if not EnsureDevice(ErrorMessage) then
   begin
@@ -2624,12 +2657,31 @@ begin
 
   TotalWatch := TStopwatch.StartNew;
   ChromaHeight := (Frame.height + 1) div 2;
+  ChromaWidth := (Frame.width + 1) div 2;
 
   StepWatch := TStopwatch.StartNew;
   FDeviceContext.UpdateSubresource(FYTexture, 0, nil, Frame.data[0],
     Cardinal(Frame.linesize[0]), Cardinal(Frame.linesize[0] * Frame.height));
-  FDeviceContext.UpdateSubresource(FUvTexture, 0, nil, Frame.data[1],
-    Cardinal(Frame.linesize[1]), Cardinal(Frame.linesize[1] * ChromaHeight));
+  if Frame.format = AV_PIX_FMT_NV12 then
+    FDeviceContext.UpdateSubresource(FUvTexture, 0, nil, Frame.data[1],
+      Cardinal(Frame.linesize[1]), Cardinal(Frame.linesize[1] * ChromaHeight))
+  else
+  begin
+    SetLength(FPackedBuffer, ChromaWidth * ChromaHeight * 2);
+    for Row := 0 to ChromaHeight - 1 do
+    begin
+      URow := PByte(NativeUInt(Frame.data[1]) + NativeUInt(Row * Frame.linesize[1]));
+      VRow := PByte(NativeUInt(Frame.data[2]) + NativeUInt(Row * Frame.linesize[2]));
+      DstRow := PByte(NativeUInt(@FPackedBuffer[0]) + NativeUInt(Row * ChromaWidth * 2));
+      for Col := 0 to ChromaWidth - 1 do
+      begin
+        DstRow[Col * 2] := URow[Col];
+        DstRow[Col * 2 + 1] := VRow[Col];
+      end;
+    end;
+    FDeviceContext.UpdateSubresource(FUvTexture, 0, nil, @FPackedBuffer[0],
+      Cardinal(ChromaWidth * 2), Cardinal(ChromaWidth * ChromaHeight * 2));
+  end;
   UploadMs := StepWatch.Elapsed.TotalMilliseconds;
 
   BuildVideoViewport(Frame.width, Frame.height, Viewport, ViewLeft, ViewTop,
@@ -2652,6 +2704,7 @@ begin
   FDeviceContext.PSSetShader(FPixelShader, nil, 0);
   FDeviceContext.PSSetShaderResources(0, Length(ResourceViews), ResourceViews[0]);
   FDeviceContext.PSSetSamplers(0, 1, FSampler);
+  ApplyColorAdjustmentConstants;
   FDeviceContext.RSSetViewports(1, @Viewport);
   FDeviceContext.OMSetRenderTargets(1, FDisplayRenderView, nil);
   FDeviceContext.Draw(3, 0);

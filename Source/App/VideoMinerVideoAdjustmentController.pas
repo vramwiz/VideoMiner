@@ -48,8 +48,8 @@ begin
   if FVideoView = nil then
     Exit;
 
-  FVideoView.SetVideoColorAdjustment(FBrightness, FContrast);
-  FVideoView.ShowTransientStatus(LabelText);
+  FVideoView.SetVideoColorAdjustmentWithStatus(FBrightness, FContrast,
+    LabelText);
 end;
 
 function TVideoMinerVideoAdjustmentController.BrightnessText: string;

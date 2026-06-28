@@ -38,6 +38,7 @@ type
     FLastSeekBarPaintLogText: string;                            // 直近に出した GDI seek bar 描画ログ
     FLastSeekBarPaintLogTick: UInt64;                            // 直近に GDI seek bar 描画ログを出した時刻
     FLastD3DFramePresentedTick: UInt64;                           // 直近に D3D frame を表示した時刻
+    FPreferD3DPaintUntilTick  : UInt64;                           // 色調整直後に GDI fallback を避ける期限 tick
     FNextFileButton         : TVideoMinerOverlayFileNavButton;   // 次動画へ移動する右端ボタン
     FPanMoved               : Boolean;                           // 押下後にパン移動が発生したか
     FPanning                : Boolean;                           // ズーム中のドラッグ移動を処理中か
@@ -121,6 +122,8 @@ type
     procedure DrawTransientStatus(Canvas: TCanvas);
     // 旧パネルを含まない最小 seek bar fallback を描く
     procedure DrawMinimalSeekBarFallback(Canvas: TCanvas);
+    // 現在の表示状態で 90% セーフエリア確認枠の client 矩形を返す
+    function SafeAreaGuideRect(const DestRect: TRect): TRect;
     // 読み込み中であることを示すテキストを描く
     procedure DrawLoadingIndicator(Canvas: TCanvas);
     // 何も開いていない時の操作案内を描く
@@ -332,6 +335,9 @@ type
     procedure ClearSeekHoverPreview;
     // D3D 動画本体の明るさ/コントラスト補正を設定する
     procedure SetVideoColorAdjustment(Brightness, Contrast: Single);
+    // 色補正と左上ステータスを 1 回の D3D 再表示でまとめて反映する
+    procedure SetVideoColorAdjustmentWithStatus(Brightness, Contrast: Single;
+      const StatusText: string);
     // 左上に汎用一時ステータスを短時間表示する
     procedure ShowTransientStatus(const Text: string);
     // 読み込み中インジケータを消す
@@ -642,8 +648,6 @@ begin
     Result := 'source_has_alpha'
   else if FSeekPreviewVisible then
     Result := 'seek_preview_visible'
-  else if FSafeAreaVisible then
-    Result := 'safe_area_visible'
   else if FLoadingActive then
     Result := 'loading_active'
 end;
@@ -738,6 +742,7 @@ begin
   Result := CanUseD3DCompositedFramePresentation and FPlaybackActive and
     (FSeekBarVisible or
      ((FSeekBar <> nil) and FSeekBar.Dragging) or
+     FSafeAreaVisible or
      FOverlayVisible or
      ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible) or
      ((FNextFileButton <> nil) and FNextFileButton.Visible));
@@ -1016,10 +1021,9 @@ begin
   Canvas.CopyRect(DestRect, FrameBitmap.Canvas, SourceRect);
 end;
 
-procedure TVideoMinerVideoSurface.DrawSafeAreaGuide(Canvas: TCanvas; const DestRect: TRect);
+function TVideoMinerVideoSurface.SafeAreaGuideRect(
+  const DestRect: TRect): TRect;
 var
-  ClipState: Integer;
-  GuideRect: TRect;
   SafeBottom: Double;
   SafeLeft: Double;
   SafeRight: Double;
@@ -1040,16 +1044,8 @@ var
     Result := DestRect.Top + Round((ImageY - SourceTop) * DestRect.Height / SourceHeight);
   end;
 
-  procedure DrawGuideRectangle(Width: Integer; Color: TColor);
-  begin
-    Canvas.Pen.Style := psSolid;
-    Canvas.Pen.Width := Width;
-    Canvas.Pen.Color := Color;
-    Canvas.Brush.Style := bsClear;
-    Canvas.Rectangle(GuideRect);
-  end;
-
 begin
+  Result := TRect.Empty;
   if (not FSafeAreaVisible) or DestRect.IsEmpty or
      (FBitmap.Width <= 0) or (FBitmap.Height <= 0) then
     Exit;
@@ -1091,7 +1087,29 @@ begin
   SafeRight := FBitmap.Width * 0.95;
   SafeBottom := FBitmap.Height * 0.95;
 
-  GuideRect := Rect(MapX(SafeLeft), MapY(SafeTop), MapX(SafeRight), MapY(SafeBottom));
+  Result := Rect(MapX(SafeLeft), MapY(SafeTop), MapX(SafeRight),
+    MapY(SafeBottom));
+end;
+
+procedure TVideoMinerVideoSurface.DrawSafeAreaGuide(Canvas: TCanvas; const DestRect: TRect);
+var
+  ClipState: Integer;
+  GuideRect: TRect;
+
+  procedure DrawGuideRectangle(Width: Integer; Color: TColor);
+  begin
+    Canvas.Pen.Style := psSolid;
+    Canvas.Pen.Width := Width;
+    Canvas.Pen.Color := Color;
+    Canvas.Brush.Style := bsClear;
+    Canvas.Rectangle(GuideRect);
+  end;
+
+begin
+  GuideRect := SafeAreaGuideRect(DestRect);
+  if GuideRect.IsEmpty then
+    Exit;
+
   ClipState := SaveDC(Canvas.Handle);
   try
     IntersectClipRect(Canvas.Handle, DestRect.Left, DestRect.Top, DestRect.Right, DestRect.Bottom);
@@ -1462,9 +1480,12 @@ var
   TrackRect: TRect;
 begin
   FillChar(State, SizeOf(State), 0);
+  State.SafeAreaVisible := FSafeAreaVisible and (not FLoadingActive) and
+    (FBitmap <> nil) and (FBitmap.Width > 0) and (FBitmap.Height > 0);
+  if State.SafeAreaVisible then
+    State.SafeAreaRect := SafeAreaGuideRect(FitRect);
   State.StatusVisible := FTransientStatusVisible and
-    (FTransientStatusText <> '') and (not FSafeAreaVisible) and
-    (not FLoadingActive);
+    (FTransientStatusText <> '') and (not FLoadingActive);
   State.StatusText := FTransientStatusText;
   if (FPreviousFileButton <> nil) and FPreviousFileButton.Visible and
      (not FSafeAreaVisible) and (not FLoadingActive) then
@@ -2254,6 +2275,7 @@ begin
   if (not FLiveResizeActive) and (not D3DFrameCurrent) and
      CanUseD3DCompositedFramePresentation and
      ((FZoomScale > MIN_ZOOM) or FOverlayVisible or FSeekBarVisible or
+      FSafeAreaVisible or
       ((FSeekBar <> nil) and FSeekBar.Dragging) or
       ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible) or
       ((FNextFileButton <> nil) and FNextFileButton.Visible)) then
@@ -2265,7 +2287,26 @@ begin
       D3DFrameCurrent := PresentCurrentBgrx32FrameWithD3D;
     CenterOverlayDrawnByD3D := D3DFrameCurrent;
   end;
+  if (not D3DFrameCurrent) and (FPreferD3DPaintUntilTick > 0) then
+  begin
+    if GetTickCount64 <= FPreferD3DPaintUntilTick then
+    begin
+      if CanUseD3DCompositedFramePresentation and D3DFrameRecentlyPresented then
+      begin
+{$IFDEF DEBUG}
+        WriteVideoMinerSlowLog(Format(
+          'paint_skip_d3d_preferred client_w=%d client_h=%d d3d_recent=%s paint_ms=%.3f',
+          [ClientWidth, ClientHeight, BoolToStr(D3DFrameRecentlyPresented, True),
+           PaintWatch.Elapsed.TotalMilliseconds]));
+{$ENDIF}
+        Exit;
+      end;
+    end
+    else
+      FPreferD3DPaintUntilTick := 0;
+  end;
   UsePaintBuffer := FOverlayVisible or FSeekBarVisible or FSeekPreviewVisible or
+    FSafeAreaVisible or
     ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible) or
     ((FNextFileButton <> nil) and FNextFileButton.Visible);
   if D3DFrameCurrent then
@@ -2618,6 +2659,37 @@ begin
     Invalidate;
 end;
 
+procedure TVideoMinerVideoSurface.SetVideoColorAdjustmentWithStatus(
+  Brightness, Contrast: Single; const StatusText: string);
+var
+  D3DRefreshed: Boolean;
+begin
+  FVideoBrightness := Max(-1.0, Min(1.0, Brightness));
+  FVideoContrast := Max(0.0, Min(3.0, Contrast));
+  FPreferD3DPaintUntilTick := GetTickCount64 + 250;
+  FTransientStatusText := StatusText;
+  FTransientStatusVisible := StatusText <> '';
+  if FTransientStatusTimer <> nil then
+  begin
+    FTransientStatusTimer.Enabled := False;
+    FTransientStatusTimer.Enabled := FTransientStatusVisible;
+  end;
+
+  UpdateD3DColorAdjustmentState;
+  UpdateD3DSeekBarOverlayState;
+  if FPlaybackActive and CanUseD3DCompositedFramePresentation and
+     D3DFrameRecentlyPresented then
+    Exit;
+
+  D3DRefreshed := RefreshD3DFramePresentation;
+  if (not D3DRefreshed) and (FBitmap <> nil) and
+     (FBitmap.Width > 0) and (FBitmap.Height > 0) then
+    D3DRefreshed := PresentCurrentBgrx32FrameWithD3D;
+  if (not D3DRefreshed) and
+     (not (CanUseD3DCompositedFramePresentation and D3DFrameRecentlyPresented)) then
+    Invalidate;
+end;
+
 procedure TVideoMinerVideoSurface.ShowTransientStatus(const Text: string);
 begin
   FTransientStatusText := Text;
@@ -2720,13 +2792,21 @@ begin
 end;
 
 procedure TVideoMinerVideoSurface.SetSafeAreaVisible(Value: Boolean);
+var
+  D3DRefreshed: Boolean;
 begin
   if FSafeAreaVisible = Value then
     Exit;
 
   FSafeAreaVisible := Value;
   LogD3DFramePresentationState('safe_area_visible', True);
-  Invalidate;
+  UpdateD3DSeekBarOverlayState;
+  D3DRefreshed := RefreshD3DFramePresentation;
+  if (not D3DRefreshed) and (FBitmap <> nil) and
+     (FBitmap.Width > 0) and (FBitmap.Height > 0) then
+    D3DRefreshed := PresentCurrentBgrx32FrameWithD3D;
+  if not D3DRefreshed then
+    Invalidate;
 end;
 procedure TVideoMinerVideoSurface.SetSeekWheelFrameStepMs(Value: Integer);
 begin

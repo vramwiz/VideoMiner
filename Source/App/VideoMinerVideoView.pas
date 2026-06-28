@@ -197,6 +197,9 @@ type
     procedure EndLiveResize;
     // D3D 動画本体の明るさ/コントラスト補正を設定する
     procedure SetVideoColorAdjustment(Brightness, Contrast: Single);
+    // 色補正と左上ステータスをまとめて反映する
+    procedure SetVideoColorAdjustmentWithStatus(Brightness, Contrast: Single;
+      const StatusText: string);
     // 左上に汎用一時ステータスを短時間表示する
     procedure ShowTransientStatus(const Text: string);
     property BossMode: Boolean write SetBossMode;
@@ -898,6 +901,13 @@ procedure TVideoMinerVideoView.SetVideoColorAdjustment(Brightness,
 begin
   if FSurface <> nil then
     FSurface.SetVideoColorAdjustment(Brightness, Contrast);
+end;
+
+procedure TVideoMinerVideoView.SetVideoColorAdjustmentWithStatus(
+  Brightness, Contrast: Single; const StatusText: string);
+begin
+  if FSurface <> nil then
+    FSurface.SetVideoColorAdjustmentWithStatus(Brightness, Contrast, StatusText);
 end;
 
 procedure TVideoMinerVideoView.ShowTransientStatus(const Text: string);

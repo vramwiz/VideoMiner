@@ -148,6 +148,7 @@
         <DCCReference Include="Source\App\VideoMinerThumbnailBrowserController.pas"/>
         <DCCReference Include="Source\App\VideoMinerThumbnailCache.pas"/>
         <DCCReference Include="Source\App\VideoMinerTitleBarUi.pas"/>
+        <DCCReference Include="Source\App\VideoMinerVideoAdjustmentController.pas"/>
         <DCCReference Include="Source\App\VideoMinerVideoSurface.pas"/>
         <DCCReference Include="Source\App\VideoMinerVideoView.pas"/>
         <DCCReference Include="Source\App\VideoMinerWindowChrome.pas"/>

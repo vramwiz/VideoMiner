@@ -1479,6 +1479,44 @@ var
   TotalMs: Double;
   NextSeekPositionMs: Integer;
   LoopFrameCacheShown: Boolean;
+
+  function RestartLoopAtSegmentStart(const Reason: string): Boolean;
+  begin
+    Result := False;
+    if (EndAction <> eaLoop) or (LoopSegmentStartMs < 0) or
+       (LoopSegmentEndMs <= LoopSegmentStartMs) then
+      Exit;
+
+    LoopTargetMs := LoopSegmentStartMs;
+    LoopFrameCacheShown := (FVideoView <> nil) and
+      FVideoView.TryPresentLoopFrameCache(LoopTargetMs);
+    WriteVideoMinerRateLog(Format(
+      'loop_restart_%s_summary file="%s" current_ms=%d audio_ms=%d target_ms=%d segment_start_ms=%d segment_end_ms=%d cache_shown=%s pump_ms=%.3f decode_ms=%.3f sync_ms=%.3f',
+      [Reason, ExtractFileName(VideoFile), CurrentVideoPositionMs,
+       AudioPositionMs, LoopTargetMs, LoopSegmentStartMs, LoopSegmentEndMs,
+       BoolToStr(LoopFrameCacheShown, True), PumpMs, DecodeMs, SyncMs]));
+{$IFDEF DEBUG}
+    WriteVideoMinerSlowLog(Format(
+      'loop_restart_%s file="%s" current_ms=%d audio_ms=%d target_ms=%d segment_start_ms=%d segment_end_ms=%d cache_shown=%s pump_ms=%.3f decode_ms=%.3f sync_ms=%.3f',
+      [Reason, ExtractFileName(VideoFile), CurrentVideoPositionMs,
+       AudioPositionMs, LoopTargetMs, LoopSegmentStartMs, LoopSegmentEndMs,
+       BoolToStr(LoopFrameCacheShown, True), PumpMs, DecodeMs, SyncMs]));
+{$ENDIF}
+    if Assigned(SeekToMs) then
+    begin
+      UpdatingSeek := True;
+      try
+        SeekPositionMs := LoopTargetMs;
+        CurrentVideoPositionMs := LoopTargetMs;
+      finally
+        UpdatingSeek := False;
+      end;
+      if Assigned(UpdatePlaybackProgress) then
+        UpdatePlaybackProgress(SeekPositionMs);
+      SeekToMs(LoopTargetMs, LoopFrameCacheShown);
+    end;
+    Result := True;
+  end;
 begin
   DebugLogEnabled := VideoMinerDebugLogEnabled;
   SlowLogEnabled := VideoMinerSlowLogEnabled;
@@ -1507,6 +1545,9 @@ begin
     if ShouldFinishAtAudioWaitEnd(EndAction, SeekMaxMs, LoopSegmentStartMs,
       LoopSegmentEndMs, CurrentVideoPositionMs) then
     begin
+      if RestartLoopAtSegmentStart('audio_wait_near_end') then
+        Exit;
+
       WriteVideoMinerRateLog(Format(
         'finish_audio_wait_near_end_summary file="%s" action="%s" current_ms=%d audio_ms=%d seek_max_ms=%d segment_start_ms=%d segment_end_ms=%d tolerance_ms=%d pump_ms=%.3f',
         [ExtractFileName(VideoFile), EndActionText(EndAction),
