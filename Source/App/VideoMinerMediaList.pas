@@ -22,6 +22,8 @@ type
     class function FirstMediaFileInFolder(const Folder: string): string; static;
     // 一覧と現在位置を未構築状態へ戻す
     procedure Clear;
+    // 既に構築済みの一覧をコピーする
+    procedure AssignFrom(Source: TVideoMinerMediaList);
     // 指定ファイルのフォルダから動画一覧を作り、指定ファイルを現在位置にする
     procedure BuildForFile(const FileName: string);
     // 一覧外なら空文字を返し、一覧内なら指定位置のファイル名を返す
@@ -83,6 +85,20 @@ procedure TVideoMinerMediaList.Clear;
 begin
   SetLength(FFiles, 0);
   FCurrentIndex := -1;
+end;
+
+procedure TVideoMinerMediaList.AssignFrom(Source: TVideoMinerMediaList);
+var
+  I: Integer;
+begin
+  Clear;
+  if Source = nil then
+    Exit;
+
+  SetLength(FFiles, Source.Count);
+  for I := 0 to Source.Count - 1 do
+    FFiles[I] := Source.FileAt(I);
+  FCurrentIndex := Source.CurrentIndex;
 end;
 
 // 対象拡張子だけをフォルダ内ナビゲーションへ含める

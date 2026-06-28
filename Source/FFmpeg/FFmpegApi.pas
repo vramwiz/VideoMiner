@@ -96,6 +96,11 @@ type
 
   PAVFormatContext = ^TAVFormatContext;
   PPAVFormatContext = ^PAVFormatContext;
+  TAVIOInterruptCallback = function(opaque: Pointer): Integer; cdecl;
+  TAVIOInterruptCB = record
+    callback : TAVIOInterruptCallback; // 0 以外を返すと FFmpeg の I/O 待ちを中断する
+    opaque   : Pointer;                // callback に渡す呼び出し側データ
+  end;
   // FFmpegの入力フォーマットコンテキスト。
   TAVFormatContext = record
     av_class         : Pointer;    // FFmpeg内部クラス情報
@@ -113,6 +118,25 @@ type
     url              : PAnsiChar;  // 入力URL
     start_time       : Int64;      // 入力全体の開始時刻
     duration         : Int64;      // 入力全体の長さ
+    bit_rate         : Int64;      // 入力全体のビットレート
+    packet_size      : Cardinal;   // packet size
+    max_delay        : Integer;    // 最大遅延
+    flags            : Integer;    // format flags
+    probesize        : Int64;      // probe size
+    max_analyze_duration: Int64;   // stream info 解析の最大長
+    key              : PByte;      // deprecated key
+    keylen           : Integer;    // deprecated key length
+    nb_programs      : Cardinal;   // program count
+    programs         : Pointer;    // AVProgram**
+    video_codec_id   : Integer;    // forced video codec id
+    audio_codec_id   : Integer;    // forced audio codec id
+    subtitle_codec_id: Integer;    // forced subtitle codec id
+    data_codec_id    : Integer;    // forced data codec id
+    metadata         : Pointer;    // metadata dictionary
+    start_time_realtime: Int64;    // realtime start
+    fps_probe_size   : Integer;    // fps probe size
+    error_recognition: Integer;    // error recognition flags
+    interrupt_callback: TAVIOInterruptCB; // I/O 中断 callback
   end;
 
   PAVCodec = Pointer;

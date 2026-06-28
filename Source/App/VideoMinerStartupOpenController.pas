@@ -21,6 +21,7 @@ type
     FFormHandle     : HWND;                                // 遅延開始メッセージの投稿先
     FMessageId      : Cardinal;                            // フォーム表示後 open 用の独自メッセージ
     FOpenRemembered : Boolean;                             // 前回ファイル復元を予約中か
+    FDelayMs        : Integer;                             // 次回 open timer の遅延
     FTimer          : TTimer;                              // フォーム表示後に open を少し遅らせる timer
     FOnLoadFile     : TVideoMinerStartupOpenFileEvent;     // 指定ファイルを開く callback
     FOnOpenRemembered: TVideoMinerStartupOpenSimpleEvent;  // 前回ファイルを開く callback
@@ -41,6 +42,8 @@ type
     procedure RestartTimer;
     // 実行前の予約 timer を止める
     procedure Stop;
+    // 実行前の予約を破棄する
+    procedure Cancel;
     property OnLoadFile: TVideoMinerStartupOpenFileEvent read FOnLoadFile write FOnLoadFile;
     property OnOpenRemembered: TVideoMinerStartupOpenSimpleEvent read FOnOpenRemembered write FOnOpenRemembered;
     property OnSetStatus: TVideoMinerStartupOpenStatusEvent read FOnSetStatus write FOnSetStatus;
@@ -53,6 +56,7 @@ uses
 
 const
   STARTUP_OPEN_DELAY_MS = 120; // 初回描画後に open を少し遅らせる時間
+  STARTUP_REMEMBERED_OPEN_DELAY_MS = 1500; // 空画面操作を優先するため前回復元は遅らせる
 
 constructor TVideoMinerStartupOpenController.Create(Owner: TComponent;
   FormHandle: HWND; MessageId: Cardinal);
@@ -60,6 +64,7 @@ begin
   inherited Create;
   FFormHandle := FormHandle;
   FMessageId := MessageId;
+  FDelayMs := STARTUP_OPEN_DELAY_MS;
   FTimer := TTimer.Create(Owner);
   FTimer.Enabled := False;
   FTimer.Interval := STARTUP_OPEN_DELAY_MS;
@@ -78,6 +83,7 @@ begin
   FFileName := FileName;
   FAutoPlay := AutoPlay;
   FOpenRemembered := False;
+  FDelayMs := STARTUP_OPEN_DELAY_MS;
   PostMessage(FFormHandle, FMessageId, 0, 0);
 end;
 
@@ -92,6 +98,7 @@ begin
   FFileName := '';
   FAutoPlay := False;
   FOpenRemembered := True;
+  FDelayMs := STARTUP_REMEMBERED_OPEN_DELAY_MS;
   PostMessage(FFormHandle, FMessageId, 0, 0);
 end;
 
@@ -101,6 +108,10 @@ begin
     Exit;
 
   FTimer.Enabled := False;
+  if FDelayMs > 0 then
+    FTimer.Interval := FDelayMs
+  else
+    FTimer.Interval := STARTUP_OPEN_DELAY_MS;
   FTimer.Enabled := True;
 end;
 
@@ -108,6 +119,15 @@ procedure TVideoMinerStartupOpenController.Stop;
 begin
   if FTimer <> nil then
     FTimer.Enabled := False;
+end;
+
+procedure TVideoMinerStartupOpenController.Cancel;
+begin
+  Stop;
+  FFileName := '';
+  FAutoPlay := False;
+  FOpenRemembered := False;
+  FDelayMs := STARTUP_OPEN_DELAY_MS;
 end;
 
 procedure TVideoMinerStartupOpenController.TimerTick(Sender: TObject);

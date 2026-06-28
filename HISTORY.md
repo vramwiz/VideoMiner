@@ -2,6 +2,88 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-28 末尾の音声待ちによる終端処理共通化
+- 特定の mp4 でループ再生時、映像位置が末尾付近まで進んだ後に音声位置が少し手前で止まり、映像側が音声待ちに入り続けてループ再開判定へ到達しない問題を調査した。
+- 音声より映像が先行して待機する分岐で、終端から短い許容範囲内に入っている場合は待機せず、既存の終端処理 `FinishPlaybackAtEnd` へ進めるようにした。
+- ループ専用の個別処理ではなく、Stop / Loop / Next が共通の終端処理を通る形にして、音声と映像の長さ差の扱いを揃えた。
+- 通常のループ到達判定は従来通り厳密な終端到達のままとし、末尾の音声待ち分岐だけに許容範囲を限定した。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、エラー 0。既存の hint warning のみ。
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+
+## 2026-06-28 サムネイル hover プレビュー速度改善
+- サムネイル表示中に本体再生を止めても hover プレビューが本来の再生より遅く見える問題を調査した。
+- hover プレビューが固定 40ms ごとに次の 1 フレームだけ進める作りだったため、60fps 動画では実時間より遅いスロー再生になっていた。
+- hover プレビューの更新間隔を 16ms に短縮し、実時間の経過に対して遅れている場合は中間フレームを変換なしで読み飛ばして、動画時間が実時間に追いつくようにした。
+- プレビュー更新時に対象タイルだけを invalidate していても、Paint 側がクリップ範囲を見ず画面内タイルをすべて描いていたため、クリップ外タイルの描画をスキップするようにした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、エラー 0。既存の hint warning 18 件のみ。
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+
+## 2026-06-28 サムネイル表示中の本体再生一時停止
+- サムネイル hover プレビューの遅さを Debug ログで調査し、NAS 上ファイルでは hover 対象の decoder open と seek/decode に加えて、本体再生 decode/audio pump が同時に走って負担になっていることを確認した。
+- サムネイル画面を開く時、再生中または再開待ちなら本体再生を一時停止し、サムネイル画面を閉じた時に元が再生中だった場合だけ再開するようにした。
+- 右クリックなど `TVideoMinerThumbnailBrowser` 自身が閉じる経路でも再開漏れが出ないよう、Browser へ `OnClosed` 通知を追加し、Controller 側で再開を管理するようにした。
+- サムネイルから別ファイルを選択する場合は、閉じた後の元ファイル再開を抑止し、既存のファイル切り替え再生に任せるようにした。
+- hover プレビュー初回は重い 10% 位置 seek を避け、先頭から順方向に最初のフレームを読むようにした。開始待ちも短縮し、プレビュー更新時は対象タイルだけを再描画する。
+- サムネイル/seek preview 用 decoder では不要な音声 decoder open をスキップするようにした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、エラー 0。既存の hint warning 18 件のみ。
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+
+## 2026-06-28 サムネイル hover プレビューの優先表示
+- サムネイル新規生成の間引きにより、未生成サムネイルが残っている間 hover プレビュー開始が待たされ、プレビュー表示が遅く感じる状態になっていた。
+- hover プレビュー側はサムネイル生成タイマーや未生成キューの完了を待たずに開始するようにした。
+- 代わりに hover プレビュー待機/再生中は新規サムネイル生成だけを短く先送りし、キャッシュ読み込みや一覧表示は維持しつつ、目の前の hover 操作を優先するようにした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、エラー 0。既存の hint warning 18 件のみ。
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+
+## 2026-06-28 フォルダ履歴削除後のサムネイル一覧更新
+- サムネイル画面でフォルダ履歴を `Del` 削除した時、フォルダ履歴の選択位置だけが次の履歴へ移り、下のサムネイル一覧が削除前フォルダの内容のまま残ることがあった。
+- 履歴削除後はいったんプレビュー、所有メディアリスト、サムネイル、選択 index、スクロール位置を破棄し、残った選択履歴があればその履歴を改めて `ShowFolderHistory` で表示するようにした。
+- 履歴が空になった場合も、空のスロット状態へ戻して古いサムネイルが残らないようにした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、エラー 0。既存の hint warning 18 件のみ。
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+
+## 2026-06-28 起動直後の空画面案内とサムネイル操作優先
+- 何も動画を開いていない状態で真っ黒に見えるのをやめ、動画面中央に `Drop a video file here or press Ctrl+O to open a file` と表示するようにした。
+- 前回ファイル復元はフォーム表示直後 120ms ではなく 1500ms 後に遅延し、空画面表示とユーザー操作の猶予を作った。直接ファイル指定の起動 open は従来通り短い遅延のまま。
+- 右クリックでサムネイル表示、または `Ctrl+O` でファイルを開く操作が入った場合、未実行の起動時復元予約をキャンセルするようにした。
+- フォルダ履歴クリック時、代表サムネイル用 worker が作った一覧があれば同期スキャンせずコピーして使うようにした。
+- 代表一覧がまだ無い履歴フォルダは worker に読み込みを任せ、UI thread で `FirstMediaFileInFolder` / `BuildForFile` を直接実行しないようにした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、エラー 0。既存の hint warning 18 件のみ。
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+
+## 2026-06-28 サムネイルキャッシュ miss 時の生成間引き
+- サムネイル表示時、キャッシュ済み画像は高速に表示できる一方、キャッシュ miss の新規生成が同じタイマー tick で即実行され、メイン UI に負担が出ていた。
+- キャッシュ読み込みは従来通り 1 tick 最大 24 枚の burst を維持し、miss に当たった場合だけ新規生成開始を少し遅らせるようにした。
+- 新規生成は 1 枚ごとに cooldown を挟み、連続 decode でメインプロセスが重くなりにくいようにした。
+- 古いキャッシュで動画時間だけ未保存の場合に、キャッシュ hit 経路から動画情報を同期読み込みし直す処理をやめた。duration が無い場合はバッジを省略し、新規生成時に保存する。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、エラー 0。既存の hint warning 18 件のみ。
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+
+## 2026-06-28 動画読み込みエラー時のフリーズ抑止
+- 壊れた動画、読めない動画、NAS 上で応答が悪い動画を開いた時に、`avformat_open_input` / `avformat_find_stream_info` / `av_read_frame` / `av_seek_frame` が長時間戻らず UI が固まる可能性があった。
+- `AVFormatContext.interrupt_callback` を FFmpeg API 定義へ追加し、`TFFmpegDecoder` が用途別 timeout を超えた場合に FFmpeg の I/O 待ちを中断できるようにした。
+- 通常読み込み、seek/decode、順方向 decode、音声 read/seek を timeout guard で包み、失敗時は timeout と分かるエラーメッセージを返すようにした。
+- サムネイル生成も `fdrThumbnail` の短め timeout を使うため、読めないファイルで一覧タイマーごと固まる状態を抑止する。
+- timeout は環境変数 `VIDEOMINER_DECODER_OPEN_TIMEOUT_MAIN_MS`、`VIDEOMINER_DECODER_OPEN_TIMEOUT_AUX_MS`、`VIDEOMINER_DECODER_OPEN_TIMEOUT_THUMBNAIL_MS`、`VIDEOMINER_DECODER_DECODE_TIMEOUT_MAIN_MS`、`VIDEOMINER_DECODER_DECODE_TIMEOUT_AUX_MS`、`VIDEOMINER_DECODER_DECODE_TIMEOUT_THUMBNAIL_MS` で調整可能にした。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、エラー 0。既存の hint warning 18 件のみ。
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+
 ## 2026-06-27 明るさ・コントラスト操作のヘルプ追記
 - README の基本操作表へ `Ctrl+Up/Down` の明るさ変更、`Shift+Up/Down` のコントラスト変更を追加した。
 - `F1` で表示するヘルプ兼用画面の Basic controls にも同じ操作を追加した。

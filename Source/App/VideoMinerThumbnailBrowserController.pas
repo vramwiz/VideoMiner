@@ -12,6 +12,8 @@ uses
 type
   TVideoMinerThumbnailOpenFileFunc = function(const FileName: string;
     AutoPlay: Boolean; RestoreLoopPosition: Boolean = True): Boolean of object;
+  TVideoMinerThumbnailPlaybackStateFunc = function: Boolean of object;
+  TVideoMinerThumbnailPlaybackAction = procedure of object;
 
   TVideoMinerThumbnailBrowserController = class
   private
@@ -19,6 +21,17 @@ type
     FMediaList    : TVideoMinerMediaList;        // 表示対象の動画一覧
     FMediaSession : TVideoMinerMediaSession;     // 現在ファイル参照先
     FOnOpenFile   : TVideoMinerThumbnailOpenFileFunc; // 選択ファイルを開く委譲先
+    FOnPlaybackActive : TVideoMinerThumbnailPlaybackStateFunc; // 本体再生中かの問い合わせ
+    FOnPausePlayback  : TVideoMinerThumbnailPlaybackAction;    // サムネイル表示前の一時停止
+    FOnResumePlayback : TVideoMinerThumbnailPlaybackAction;    // サムネイル終了後の再開
+    FPausedPlaybackForBrowser : Boolean; // サムネイル表示のために停止したか
+    FSuppressResumeOnClose : Boolean;    // ファイル切り替え時など、閉じても再開しない
+    // サムネイル表示前に必要なら本体再生を止める
+    procedure PausePlaybackForBrowser;
+    // サムネイル終了後、必要なら本体再生を再開する
+    procedure ResumePlaybackAfterBrowserClose;
+    // Browser 自身が閉じた時の通知を受ける
+    procedure BrowserClosed(Sender: TObject);
     // 一覧タイル選択時に現在動画へ切り替える
     procedure ThumbnailSelected(Sender: TObject; Index: Integer; const FileName: string);
   public
@@ -46,6 +59,12 @@ type
     function Visible: Boolean;
     property Browser: TVideoMinerThumbnailBrowser read FBrowser;
     property OnOpenFile: TVideoMinerThumbnailOpenFileFunc read FOnOpenFile write FOnOpenFile;
+    property OnPlaybackActive: TVideoMinerThumbnailPlaybackStateFunc
+      read FOnPlaybackActive write FOnPlaybackActive;
+    property OnPausePlayback: TVideoMinerThumbnailPlaybackAction
+      read FOnPausePlayback write FOnPausePlayback;
+    property OnResumePlayback: TVideoMinerThumbnailPlaybackAction
+      read FOnResumePlayback write FOnResumePlayback;
   end;
 
 implementation
@@ -70,6 +89,7 @@ begin
     FBrowser.Anchors := SurfaceControl.Anchors;
   end;
   FBrowser.OnSelected := ThumbnailSelected;
+  FBrowser.OnClosed := BrowserClosed;
   FBrowser.SetMediaList(FMediaList);
 end;
 
@@ -106,7 +126,10 @@ begin
     [BoolToStr(FBrowser.Visible, True)]));
   FBrowser.SetMediaList(FMediaList);
   if not FBrowser.Visible then
+  begin
+    PausePlaybackForBrowser;
     FBrowser.ShowHistoryIfMediaListEmpty;
+  end;
   FBrowser.Toggle;
   WriteVideoMinerSlowLog(Format('thumbnail toggle_end visible=%s',
     [BoolToStr(FBrowser.Visible, True)]));
@@ -116,6 +139,44 @@ procedure TVideoMinerThumbnailBrowserController.Close;
 begin
   if FBrowser <> nil then
     FBrowser.Close;
+end;
+
+procedure TVideoMinerThumbnailBrowserController.PausePlaybackForBrowser;
+begin
+  if FPausedPlaybackForBrowser then
+    Exit;
+
+  if Assigned(FOnPlaybackActive) and FOnPlaybackActive() and
+     Assigned(FOnPausePlayback) then
+  begin
+    FOnPausePlayback;
+    FPausedPlaybackForBrowser := True;
+    WriteVideoMinerSlowLog('thumbnail playback_paused_for_browser');
+  end;
+end;
+
+procedure TVideoMinerThumbnailBrowserController.ResumePlaybackAfterBrowserClose;
+begin
+  if not FPausedPlaybackForBrowser then
+    Exit;
+
+  FPausedPlaybackForBrowser := False;
+  if FSuppressResumeOnClose then
+  begin
+    WriteVideoMinerSlowLog('thumbnail playback_resume_suppressed');
+    Exit;
+  end;
+
+  if Assigned(FOnResumePlayback) then
+  begin
+    WriteVideoMinerSlowLog('thumbnail playback_resume_after_browser');
+    FOnResumePlayback;
+  end;
+end;
+
+procedure TVideoMinerThumbnailBrowserController.BrowserClosed(Sender: TObject);
+begin
+  ResumePlaybackAfterBrowserClose;
 end;
 
 function TVideoMinerThumbnailBrowserController.HandleMouseWheel(
@@ -171,8 +232,13 @@ begin
 
   if Assigned(FOnOpenFile) then
   begin
+    FSuppressResumeOnClose := True;
     Close;
-    FOnOpenFile(FileName, True, True);
+    try
+      FOnOpenFile(FileName, True, True);
+    finally
+      FSuppressResumeOnClose := False;
+    end;
   end;
 end;
 

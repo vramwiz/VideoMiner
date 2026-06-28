@@ -44,11 +44,23 @@ type
     FDirectSwsSrcFormat  : Integer;                 // 直接出力用swsの入力ピクセル形式
     FDirectSwsDstFormat  : Integer;                 // 直接出力用swsの出力ピクセル形式
     FDecodeGeneration    : Int64;                   // seek/next decode でデコーダ位置が進んだ世代番号
+    FIoDeadlineTick      : UInt64;                  // FFmpeg I/O を中断する GetTickCount64 deadline
+    FIoTimeoutActive     : Boolean;                 // interrupt callback の timeout 判定を有効にするか
     FContext             : TFFmpegDecoderContext;   // サブユニットへ渡すデコード状態
     // 現在のフィールド状態をContextへ反映する
     procedure SyncContextFromFields;
     // Context側で解放/更新されたリソースポインタをフィールドへ戻す
     procedure SyncFieldsFromContext;
+    // FFmpeg の I/O 待ちが長引いた時に中断できる状態にする
+    procedure BeginIoTimeout(TimeoutMs: Cardinal);
+    // FFmpeg の I/O 中断判定を無効にする
+    procedure EndIoTimeout;
+    // interrupt callback から参照される timeout 判定
+    function IoTimeoutExpired: Boolean;
+    // 現在の用途に応じた open timeout を返す
+    function OpenTimeoutMs: Cardinal;
+    // 現在の用途に応じた frame read/seek timeout を返す
+    function DecodeTimeoutMs: Cardinal;
   public
     // デコーダインスタンスを初期化する
     constructor Create;
@@ -124,6 +136,32 @@ uses
 var
   GlobalDecoderOpenSequence: Int64;
 
+const
+  DECODER_OPEN_TIMEOUT_MAIN_MS      = 20000;
+  DECODER_OPEN_TIMEOUT_AUX_MS       = 10000;
+  DECODER_OPEN_TIMEOUT_THUMBNAIL_MS = 5000;
+  DECODER_DECODE_TIMEOUT_MAIN_MS      = 12000;
+  DECODER_DECODE_TIMEOUT_AUX_MS       = 7000;
+  DECODER_DECODE_TIMEOUT_THUMBNAIL_MS = 4000;
+
+function FFmpegDecoderInterruptCallback(Opaque: Pointer): Integer; cdecl;
+begin
+  if (Opaque <> nil) and TFFmpegDecoder(Opaque).IoTimeoutExpired then
+    Result := 1
+  else
+    Result := 0;
+end;
+
+function ReadTimeoutEnvMs(const Name: string; DefaultValue: Cardinal): Cardinal;
+var
+  Value: Integer;
+begin
+  if TryStrToInt(GetEnvironmentVariable(Name), Value) and (Value > 0) then
+    Result := Cardinal(Value)
+  else
+    Result := DefaultValue;
+end;
+
 // pixel format 名から alpha channel/plane を持つ形式か推定する
 function PixelFormatHasAlpha(const PixelFormatText: string): Boolean;
 var
@@ -137,6 +175,16 @@ begin
     (Pos('abgr', LowerName) = 1) or
     (Pos('gbrap', LowerName) = 1) or
     (Pos('ya', LowerName) = 1);
+end;
+
+procedure ConfigureFormatInterrupt(FormatContext: PAVFormatContext;
+  Decoder: TFFmpegDecoder);
+begin
+  if FormatContext = nil then
+    Exit;
+
+  FormatContext.interrupt_callback.callback := FFmpegDecoderInterruptCallback;
+  FormatContext.interrupt_callback.opaque := Decoder;
 end;
 
 function StreamFrameRate(Stream: PAVStream): Double;
@@ -193,6 +241,61 @@ begin
   FAudioBuffers := TList<PAudioWaveBuffer>.Create;
   FContext := TFFmpegDecoderContext.Create;
   FContext.AudioDiscardUntilSample := -1;
+end;
+
+procedure TFFmpegDecoder.BeginIoTimeout(TimeoutMs: Cardinal);
+begin
+  if TimeoutMs = 0 then
+  begin
+    FIoTimeoutActive := False;
+    FIoDeadlineTick := 0;
+    Exit;
+  end;
+
+  FIoDeadlineTick := GetTickCount64 + TimeoutMs;
+  FIoTimeoutActive := True;
+end;
+
+procedure TFFmpegDecoder.EndIoTimeout;
+begin
+  FIoTimeoutActive := False;
+  FIoDeadlineTick := 0;
+end;
+
+function TFFmpegDecoder.IoTimeoutExpired: Boolean;
+begin
+  Result := FIoTimeoutActive and (FIoDeadlineTick <> 0) and
+    (Int64(GetTickCount64 - FIoDeadlineTick) >= 0);
+end;
+
+function TFFmpegDecoder.OpenTimeoutMs: Cardinal;
+begin
+  case FRole of
+    fdrPlaybackMain:
+      Result := ReadTimeoutEnvMs('VIDEOMINER_DECODER_OPEN_TIMEOUT_MAIN_MS',
+        DECODER_OPEN_TIMEOUT_MAIN_MS);
+    fdrThumbnail:
+      Result := ReadTimeoutEnvMs('VIDEOMINER_DECODER_OPEN_TIMEOUT_THUMBNAIL_MS',
+        DECODER_OPEN_TIMEOUT_THUMBNAIL_MS);
+  else
+    Result := ReadTimeoutEnvMs('VIDEOMINER_DECODER_OPEN_TIMEOUT_AUX_MS',
+      DECODER_OPEN_TIMEOUT_AUX_MS);
+  end;
+end;
+
+function TFFmpegDecoder.DecodeTimeoutMs: Cardinal;
+begin
+  case FRole of
+    fdrPlaybackMain:
+      Result := ReadTimeoutEnvMs('VIDEOMINER_DECODER_DECODE_TIMEOUT_MAIN_MS',
+        DECODER_DECODE_TIMEOUT_MAIN_MS);
+    fdrThumbnail:
+      Result := ReadTimeoutEnvMs('VIDEOMINER_DECODER_DECODE_TIMEOUT_THUMBNAIL_MS',
+        DECODER_DECODE_TIMEOUT_THUMBNAIL_MS);
+  else
+    Result := ReadTimeoutEnvMs('VIDEOMINER_DECODER_DECODE_TIMEOUT_AUX_MS',
+      DECODER_DECODE_TIMEOUT_AUX_MS);
+  end;
 end;
 
 // 開いている動画を閉じてインスタンスを破棄する
@@ -363,6 +466,7 @@ var
   GpuInferred       : string;
   OpenSequence      : Int64;
   UseForwardBuffer  : Boolean;
+  TimedOut          : Boolean;
 {$IFDEF DEBUG}
   ApiLoadMs         : Double;
   AudioOpenMs       : Double;
@@ -413,26 +517,41 @@ begin
        ExtractFileDrive(FileName), VideoMinerForwardReadBufferModeText,
        BoolToStr(UseForwardBuffer, True)]));
 
-    if UseForwardBuffer then
-    begin
-      InputBuffer := TFFmpegForwardReadBuffer.Create(FRole, OpenSequence);
-      if not InputBuffer.Open(FileName, ErrorMessage) then
-        Exit;
-      if not InputBuffer.CreateAvioContext(ErrorMessage) then
-        Exit;
-      FormatContext := TFFmpegApi.avformat_alloc_context();
-      if FormatContext = nil then
+    BeginIoTimeout(OpenTimeoutMs);
+    try
+      if UseForwardBuffer then
       begin
-        ErrorMessage := 'avformat_alloc_context failed.';
-        Exit;
+        InputBuffer := TFFmpegForwardReadBuffer.Create(FRole, OpenSequence);
+        if not InputBuffer.Open(FileName, ErrorMessage) then
+          Exit;
+        if not InputBuffer.CreateAvioContext(ErrorMessage) then
+          Exit;
+        FormatContext := TFFmpegApi.avformat_alloc_context();
+        if FormatContext = nil then
+        begin
+          ErrorMessage := 'avformat_alloc_context failed.';
+          Exit;
+        end;
+        ConfigureFormatInterrupt(FormatContext, Self);
+        FormatContext.pb := InputBuffer.AvioContext;
+        Ret := TFFmpegApi.avformat_open_input(@FormatContext, nil, nil, nil);
+      end
+      else
+      begin
+        FormatContext := TFFmpegApi.avformat_alloc_context();
+        if FormatContext = nil then
+        begin
+          ErrorMessage := 'avformat_alloc_context failed.';
+          Exit;
+        end;
+        ConfigureFormatInterrupt(FormatContext, Self);
+        Utf8FileName := UTF8String(FileName);
+        Ret := TFFmpegApi.avformat_open_input(@FormatContext,
+          PAnsiChar(Utf8FileName), nil, nil);
       end;
-      FormatContext.pb := InputBuffer.AvioContext;
-      Ret := TFFmpegApi.avformat_open_input(@FormatContext, nil, nil, nil);
-    end
-    else
-    begin
-      Utf8FileName := UTF8String(FileName);
-      Ret := TFFmpegApi.avformat_open_input(@FormatContext, PAnsiChar(Utf8FileName), nil, nil);
+      TimedOut := IoTimeoutExpired;
+    finally
+      EndIoTimeout;
     end;
 {$IFDEF DEBUG}
     FormatOpenMs := StepWatch.Elapsed.TotalMilliseconds;
@@ -440,18 +559,32 @@ begin
 {$ENDIF}
     if Ret < 0 then
     begin
-      ErrorMessage := TFFmpegApi.ErrorText(Ret);
+      if TimedOut then
+        ErrorMessage := Format('Timed out while opening video (%d ms).',
+          [OpenTimeoutMs])
+      else
+        ErrorMessage := TFFmpegApi.ErrorText(Ret);
       Exit;
     end;
 
-    Ret := TFFmpegApi.avformat_find_stream_info(FormatContext, nil);
+    BeginIoTimeout(OpenTimeoutMs);
+    try
+      Ret := TFFmpegApi.avformat_find_stream_info(FormatContext, nil);
+      TimedOut := IoTimeoutExpired;
+    finally
+      EndIoTimeout;
+    end;
 {$IFDEF DEBUG}
     StreamInfoMs := StepWatch.Elapsed.TotalMilliseconds;
     StepWatch := TStopwatch.StartNew;
 {$ENDIF}
     if Ret < 0 then
     begin
-      ErrorMessage := TFFmpegApi.ErrorText(Ret);
+      if TimedOut then
+        ErrorMessage := Format('Timed out while reading stream info (%d ms).',
+          [OpenTimeoutMs])
+      else
+        ErrorMessage := TFFmpegApi.ErrorText(Ret);
       Exit;
     end;
 
@@ -647,7 +780,10 @@ begin
     StepWatch := TStopwatch.StartNew;
 {$ENDIF}
 
-    OpenAudioDecoder(FormatContext, Info, AudioCodecContext, AudioStream, AudioStreamIndex, AudioFrame, SwrContext);
+    if (not HasVideoStream) or
+       not (FRole in [fdrThumbnail, fdrSeekPreview]) then
+      OpenAudioDecoder(FormatContext, Info, AudioCodecContext, AudioStream,
+        AudioStreamIndex, AudioFrame, SwrContext);
 {$IFDEF DEBUG}
     AudioOpenMs := StepWatch.Elapsed.TotalMilliseconds;
     StepWatch := TStopwatch.StartNew;
@@ -761,55 +897,67 @@ begin
     Exit;
   end;
 
+  BeginIoTimeout(DecodeTimeoutMs);
   try
-    TargetTs := StreamTimestampFromMs(Stream, PositionMs);
-    DecodedAny := False;
-    Ret := TFFmpegApi.av_seek_frame(FormatContext, FStreamIndex, TargetTs, AVSEEK_FLAG_BACKWARD);
-    if Ret < 0 then
-    begin
-      ErrorMessage := TFFmpegApi.ErrorText(Ret);
-      Exit;
-    end;
-    TFFmpegApi.avcodec_flush_buffers(CodecContext);
-    if FAudioCodecContext <> nil then
-      TFFmpegApi.avcodec_flush_buffers(PAVCodecContext(FAudioCodecContext));
-
-    while TFFmpegApi.av_read_frame(FormatContext, Packet) >= 0 do
-    begin
-      try
-        if Packet.stream_index <> FStreamIndex then
-          Continue;
-        Ret := TFFmpegApi.avcodec_send_packet(CodecContext, Packet);
-        if Ret < 0 then
-          Continue;
-
-        while TFFmpegApi.avcodec_receive_frame(CodecContext, Frame) = 0 do
-        begin
-          CopyFrameToBitmapCached(Frame, Bitmap, FDirectSwsContext,
-            FDirectSwsSrcWidth, FDirectSwsSrcHeight, FDirectSwsSrcFormat,
-            FDirectSwsDstFormat);
-          DecodedAny := True;
-          if (Frame.pts = AV_NOPTS_VALUE) or (Frame.pts >= TargetTs) then
-          begin
-            Result := True;
-            Exit;
-          end;
-        end;
-      finally
-        TFFmpegApi.av_packet_unref(Packet);
+    try
+      TargetTs := StreamTimestampFromMs(Stream, PositionMs);
+      DecodedAny := False;
+      Ret := TFFmpegApi.av_seek_frame(FormatContext, FStreamIndex, TargetTs, AVSEEK_FLAG_BACKWARD);
+      if Ret < 0 then
+      begin
+        if IoTimeoutExpired then
+          ErrorMessage := Format('Timed out while seeking video frame (%d ms).',
+            [DecodeTimeoutMs])
+        else
+          ErrorMessage := TFFmpegApi.ErrorText(Ret);
+        Exit;
       end;
-    end;
+      TFFmpegApi.avcodec_flush_buffers(CodecContext);
+      if FAudioCodecContext <> nil then
+        TFFmpegApi.avcodec_flush_buffers(PAVCodecContext(FAudioCodecContext));
 
-    if DecodedAny then
-    begin
-      Result := True;
-      Exit;
-    end;
+      while TFFmpegApi.av_read_frame(FormatContext, Packet) >= 0 do
+      begin
+        try
+          if Packet.stream_index <> FStreamIndex then
+            Continue;
+          Ret := TFFmpegApi.avcodec_send_packet(CodecContext, Packet);
+          if Ret < 0 then
+            Continue;
 
-    ErrorMessage := 'Frame could not be decoded.';
-  except
-    on E: Exception do
-      ErrorMessage := E.ClassName + ': ' + E.Message;
+          while TFFmpegApi.avcodec_receive_frame(CodecContext, Frame) = 0 do
+          begin
+            CopyFrameToBitmapCached(Frame, Bitmap, FDirectSwsContext,
+              FDirectSwsSrcWidth, FDirectSwsSrcHeight, FDirectSwsSrcFormat,
+              FDirectSwsDstFormat);
+            DecodedAny := True;
+            if (Frame.pts = AV_NOPTS_VALUE) or (Frame.pts >= TargetTs) then
+            begin
+              Result := True;
+              Exit;
+            end;
+          end;
+        finally
+          TFFmpegApi.av_packet_unref(Packet);
+        end;
+      end;
+
+      if DecodedAny then
+      begin
+        Result := True;
+        Exit;
+      end;
+
+      ErrorMessage := 'Frame could not be decoded.';
+    except
+      on E: Exception do
+        ErrorMessage := E.ClassName + ': ' + E.Message;
+    end;
+  finally
+    if (not Result) and IoTimeoutExpired then
+      ErrorMessage := Format('Timed out while decoding video frame (%d ms).',
+        [DecodeTimeoutMs]);
+    EndIoTimeout;
   end;
 end;
 
@@ -817,10 +965,18 @@ end;
 function TFFmpegDecoder.DecodeFrameToBgrx32(PositionMs: Integer; Buffer: Pointer; BufferStride: Integer; out ErrorMessage: string): Boolean;
 begin
   Inc(FDecodeGeneration);
-  SyncContextFromFields;
-  Result := FFmpegDecoderSeekBgrx32.DecodeFrameToBgrx32(
-    FContext, PositionMs, Buffer, BufferStride, ErrorMessage);
-  SyncFieldsFromContext;
+  BeginIoTimeout(DecodeTimeoutMs);
+  try
+    SyncContextFromFields;
+    Result := FFmpegDecoderSeekBgrx32.DecodeFrameToBgrx32(
+      FContext, PositionMs, Buffer, BufferStride, ErrorMessage);
+    if (not Result) and IoTimeoutExpired then
+      ErrorMessage := Format('Timed out while decoding video frame (%d ms).',
+        [DecodeTimeoutMs]);
+  finally
+    SyncFieldsFromContext;
+    EndIoTimeout;
+  end;
 end;
 
 // 指定ミリ秒位置へシークしてフレームを24bit BGRバッファへ直接変換する
@@ -828,45 +984,85 @@ function TFFmpegDecoder.DecodeFrameToBgrx32Fast(PositionMs: Integer;
   Buffer: Pointer; BufferStride: Integer; out ErrorMessage: string): Boolean;
 begin
   Inc(FDecodeGeneration);
-  SyncContextFromFields;
-  Result := FFmpegDecoderSeekBgrx32.DecodeFrameToBgrx32Fast(
-    FContext, PositionMs, Buffer, BufferStride, ErrorMessage);
-  SyncFieldsFromContext;
+  BeginIoTimeout(DecodeTimeoutMs);
+  try
+    SyncContextFromFields;
+    Result := FFmpegDecoderSeekBgrx32.DecodeFrameToBgrx32Fast(
+      FContext, PositionMs, Buffer, BufferStride, ErrorMessage);
+    if (not Result) and IoTimeoutExpired then
+      ErrorMessage := Format('Timed out while decoding video frame (%d ms).',
+        [DecodeTimeoutMs]);
+  finally
+    SyncFieldsFromContext;
+    EndIoTimeout;
+  end;
 end;
 
 function TFFmpegDecoder.DecodeFrameToBgr24(PositionMs: Integer; Buffer: Pointer; BufferStride: Integer; out ErrorMessage: string): Boolean;
 begin
-  SyncContextFromFields;
-  Result := FFmpegDecoderSeekBgr24.DecodeFrameToBgr24(
-    FContext, PositionMs, Buffer, BufferStride, ErrorMessage);
-  SyncFieldsFromContext;
+  BeginIoTimeout(DecodeTimeoutMs);
+  try
+    SyncContextFromFields;
+    Result := FFmpegDecoderSeekBgr24.DecodeFrameToBgr24(
+      FContext, PositionMs, Buffer, BufferStride, ErrorMessage);
+    if (not Result) and IoTimeoutExpired then
+      ErrorMessage := Format('Timed out while decoding video frame (%d ms).',
+        [DecodeTimeoutMs]);
+  finally
+    SyncFieldsFromContext;
+    EndIoTimeout;
+  end;
 end;
 
 // 指定ミリ秒位置へシークしてフレームをYUY2バッファへ直接変換する
 function TFFmpegDecoder.DecodeFrameToYuy2(PositionMs: Integer; Buffer: Pointer; BufferStride: Integer; out ErrorMessage: string): Boolean;
 begin
-  SyncContextFromFields;
-  Result := FFmpegDecoderSeekYuy2.DecodeFrameToYuy2(
-    FContext, PositionMs, Buffer, BufferStride, ErrorMessage);
-  SyncFieldsFromContext;
+  BeginIoTimeout(DecodeTimeoutMs);
+  try
+    SyncContextFromFields;
+    Result := FFmpegDecoderSeekYuy2.DecodeFrameToYuy2(
+      FContext, PositionMs, Buffer, BufferStride, ErrorMessage);
+    if (not Result) and IoTimeoutExpired then
+      ErrorMessage := Format('Timed out while decoding video frame (%d ms).',
+        [DecodeTimeoutMs]);
+  finally
+    SyncFieldsFromContext;
+    EndIoTimeout;
+  end;
 end;
 
 // 指定ミリ秒位置へシークしてフレームをI420バッファへ直接変換する
 function TFFmpegDecoder.DecodeFrameToI420(PositionMs: Integer; Buffer: Pointer; BufferStride: Integer; out ErrorMessage: string): Boolean;
 begin
-  SyncContextFromFields;
-  Result := FFmpegDecoderSeekI420.DecodeFrameToI420(
-    FContext, PositionMs, Buffer, BufferStride, ErrorMessage);
-  SyncFieldsFromContext;
+  BeginIoTimeout(DecodeTimeoutMs);
+  try
+    SyncContextFromFields;
+    Result := FFmpegDecoderSeekI420.DecodeFrameToI420(
+      FContext, PositionMs, Buffer, BufferStride, ErrorMessage);
+    if (not Result) and IoTimeoutExpired then
+      ErrorMessage := Format('Timed out while decoding video frame (%d ms).',
+        [DecodeTimeoutMs]);
+  finally
+    SyncFieldsFromContext;
+    EndIoTimeout;
+  end;
 end;
 
 // 指定ミリ秒位置へシークしてフレームをYC48バッファへ直接変換する
 function TFFmpegDecoder.DecodeFrameToYc48(PositionMs: Integer; Buffer: Pointer; BufferStride: Integer; out ErrorMessage: string): Boolean;
 begin
-  SyncContextFromFields;
-  Result := FFmpegDecoderSeekYc48.DecodeFrameToYc48(
-    FContext, PositionMs, Buffer, BufferStride, ErrorMessage);
-  SyncFieldsFromContext;
+  BeginIoTimeout(DecodeTimeoutMs);
+  try
+    SyncContextFromFields;
+    Result := FFmpegDecoderSeekYc48.DecodeFrameToYc48(
+      FContext, PositionMs, Buffer, BufferStride, ErrorMessage);
+    if (not Result) and IoTimeoutExpired then
+      ErrorMessage := Format('Timed out while decoding video frame (%d ms).',
+        [DecodeTimeoutMs]);
+  finally
+    SyncFieldsFromContext;
+    EndIoTimeout;
+  end;
 end;
 
 // 現在位置から次の映像フレームを順方向デコードする
@@ -895,39 +1091,47 @@ begin
     Exit;
   end;
 
+  BeginIoTimeout(DecodeTimeoutMs);
   try
-    while TFFmpegApi.av_read_frame(FormatContext, Packet) >= 0 do
-    begin
-      try
-        if Packet.stream_index = FAudioStreamIndex then
-        begin
-          Continue;
-        end;
+    try
+      while TFFmpegApi.av_read_frame(FormatContext, Packet) >= 0 do
+      begin
+        try
+          if Packet.stream_index = FAudioStreamIndex then
+          begin
+            Continue;
+          end;
 
-        if Packet.stream_index <> FStreamIndex then
-          Continue;
-        Ret := TFFmpegApi.avcodec_send_packet(CodecContext, Packet);
-        if Ret < 0 then
-          Continue;
+          if Packet.stream_index <> FStreamIndex then
+            Continue;
+          Ret := TFFmpegApi.avcodec_send_packet(CodecContext, Packet);
+          if Ret < 0 then
+            Continue;
 
-        while TFFmpegApi.avcodec_receive_frame(CodecContext, Frame) = 0 do
-        begin
-          CopyFrameToBitmapCached(Frame, Bitmap, FDirectSwsContext,
-            FDirectSwsSrcWidth, FDirectSwsSrcHeight, FDirectSwsSrcFormat,
-            FDirectSwsDstFormat);
-          PositionMs := StreamTimestampToMs(Stream, Frame.pts);
-          Result := True;
-          Exit;
+          while TFFmpegApi.avcodec_receive_frame(CodecContext, Frame) = 0 do
+          begin
+            CopyFrameToBitmapCached(Frame, Bitmap, FDirectSwsContext,
+              FDirectSwsSrcWidth, FDirectSwsSrcHeight, FDirectSwsSrcFormat,
+              FDirectSwsDstFormat);
+            PositionMs := StreamTimestampToMs(Stream, Frame.pts);
+            Result := True;
+            Exit;
+          end;
+        finally
+          TFFmpegApi.av_packet_unref(Packet);
         end;
-      finally
-        TFFmpegApi.av_packet_unref(Packet);
       end;
-    end;
 
-    ErrorMessage := 'End of stream.';
-  except
-    on E: Exception do
-      ErrorMessage := E.ClassName + ': ' + E.Message;
+      ErrorMessage := 'End of stream.';
+    except
+      on E: Exception do
+        ErrorMessage := E.ClassName + ': ' + E.Message;
+    end;
+  finally
+    if (not Result) and IoTimeoutExpired then
+      ErrorMessage := Format('Timed out while reading next video frame (%d ms).',
+        [DecodeTimeoutMs]);
+    EndIoTimeout;
   end;
 end;
 
@@ -940,65 +1144,121 @@ end;
 function TFFmpegDecoder.DecodeNextFrameToBgrx32Optional(Buffer: Pointer; BufferStride: Integer; ConvertFrame: Boolean; out PositionMs: Integer; out ErrorMessage: string): Boolean;
 begin
   Inc(FDecodeGeneration);
-  SyncContextFromFields;
-  Result := FFmpegDecoderNextBgrx32.DecodeNextFrameToBgrx32Optional(
-    FContext, Buffer, BufferStride, ConvertFrame, PositionMs, ErrorMessage);
-  SyncFieldsFromContext;
+  BeginIoTimeout(DecodeTimeoutMs);
+  try
+    SyncContextFromFields;
+    Result := FFmpegDecoderNextBgrx32.DecodeNextFrameToBgrx32Optional(
+      FContext, Buffer, BufferStride, ConvertFrame, PositionMs, ErrorMessage);
+    if (not Result) and IoTimeoutExpired then
+      ErrorMessage := Format('Timed out while reading next video frame (%d ms).',
+        [DecodeTimeoutMs]);
+  finally
+    SyncFieldsFromContext;
+    EndIoTimeout;
+  end;
 end;
 
 function TFFmpegDecoder.DecodeNextFrameToBgr24Optional(Buffer: Pointer; BufferStride: Integer; ConvertFrame: Boolean; out PositionMs: Integer; out ErrorMessage: string): Boolean;
 begin
-  SyncContextFromFields;
-  Result := FFmpegDecoderNextBgr24.DecodeNextFrameToBgr24Optional(
-    FContext, Buffer, BufferStride, ConvertFrame, PositionMs, ErrorMessage);
-  SyncFieldsFromContext;
+  BeginIoTimeout(DecodeTimeoutMs);
+  try
+    SyncContextFromFields;
+    Result := FFmpegDecoderNextBgr24.DecodeNextFrameToBgr24Optional(
+      FContext, Buffer, BufferStride, ConvertFrame, PositionMs, ErrorMessage);
+    if (not Result) and IoTimeoutExpired then
+      ErrorMessage := Format('Timed out while reading next video frame (%d ms).',
+        [DecodeTimeoutMs]);
+  finally
+    SyncFieldsFromContext;
+    EndIoTimeout;
+  end;
 end;
 
 function TFFmpegDecoder.DecodeNextFrameToYuy2Optional(Buffer: Pointer; BufferStride: Integer; ConvertFrame: Boolean; out PositionMs: Integer; out ErrorMessage: string): Boolean;
 begin
-  SyncContextFromFields;
-  Result := FFmpegDecoderNextYuy2.DecodeNextFrameToYuy2Optional(
-    FContext, Buffer, BufferStride, ConvertFrame, PositionMs, ErrorMessage);
-  SyncFieldsFromContext;
+  BeginIoTimeout(DecodeTimeoutMs);
+  try
+    SyncContextFromFields;
+    Result := FFmpegDecoderNextYuy2.DecodeNextFrameToYuy2Optional(
+      FContext, Buffer, BufferStride, ConvertFrame, PositionMs, ErrorMessage);
+    if (not Result) and IoTimeoutExpired then
+      ErrorMessage := Format('Timed out while reading next video frame (%d ms).',
+        [DecodeTimeoutMs]);
+  finally
+    SyncFieldsFromContext;
+    EndIoTimeout;
+  end;
 end;
 
 function TFFmpegDecoder.DecodeNextFrameToI420Optional(Buffer: Pointer; BufferStride: Integer; ConvertFrame: Boolean; out PositionMs: Integer; out ErrorMessage: string): Boolean;
 begin
-  SyncContextFromFields;
-  Result := FFmpegDecoderNextI420.DecodeNextFrameToI420Optional(
-    FContext, Buffer, BufferStride, ConvertFrame, PositionMs, ErrorMessage);
-  SyncFieldsFromContext;
+  BeginIoTimeout(DecodeTimeoutMs);
+  try
+    SyncContextFromFields;
+    Result := FFmpegDecoderNextI420.DecodeNextFrameToI420Optional(
+      FContext, Buffer, BufferStride, ConvertFrame, PositionMs, ErrorMessage);
+    if (not Result) and IoTimeoutExpired then
+      ErrorMessage := Format('Timed out while reading next video frame (%d ms).',
+        [DecodeTimeoutMs]);
+  finally
+    SyncFieldsFromContext;
+    EndIoTimeout;
+  end;
 end;
 
 function TFFmpegDecoder.DecodeNextFrameToYc48Optional(Buffer: Pointer; BufferStride: Integer; ConvertFrame: Boolean; out PositionMs: Integer; out ErrorMessage: string): Boolean;
 begin
-  SyncContextFromFields;
-  Result := FFmpegDecoderNextYc48.DecodeNextFrameToYc48Optional(
-    FContext, Buffer, BufferStride, ConvertFrame, PositionMs, ErrorMessage);
-  SyncFieldsFromContext;
+  BeginIoTimeout(DecodeTimeoutMs);
+  try
+    SyncContextFromFields;
+    Result := FFmpegDecoderNextYc48.DecodeNextFrameToYc48Optional(
+      FContext, Buffer, BufferStride, ConvertFrame, PositionMs, ErrorMessage);
+    if (not Result) and IoTimeoutExpired then
+      ErrorMessage := Format('Timed out while reading next video frame (%d ms).',
+        [DecodeTimeoutMs]);
+  finally
+    SyncFieldsFromContext;
+    EndIoTimeout;
+  end;
 end;
 
 // 開いているファイルの音声を指定サンプル数までPCM16 stereo 48kHzへ順次デコードする
 function TFFmpegDecoder.DecodeAudioPcm16Stereo48kUntil(TargetSampleCount: Integer; var Pcm: TBytes; var SampleCount: Integer; out Finished: Boolean; out ErrorMessage: string): Boolean;
 begin
-  SyncContextFromFields;
-  Result := FFmpegDecoderAudioRead.DecodeAudioPcm16Stereo48kUntil(
-    FContext,
-    TargetSampleCount,
-    Pcm,
-    SampleCount,
-    Finished,
-    ErrorMessage
-  );
-  SyncFieldsFromContext;
+  BeginIoTimeout(DecodeTimeoutMs);
+  try
+    SyncContextFromFields;
+    Result := FFmpegDecoderAudioRead.DecodeAudioPcm16Stereo48kUntil(
+      FContext,
+      TargetSampleCount,
+      Pcm,
+      SampleCount,
+      Finished,
+      ErrorMessage
+    );
+    if (not Result) and IoTimeoutExpired then
+      ErrorMessage := Format('Timed out while reading audio (%d ms).',
+        [DecodeTimeoutMs]);
+  finally
+    SyncFieldsFromContext;
+    EndIoTimeout;
+  end;
 end;
 
 // 一時デコーダで動画情報だけを読む
 function TFFmpegDecoder.SeekAudioToMs(PositionMs: Integer; out ErrorMessage: string): Boolean;
 begin
-  SyncContextFromFields;
-  Result := FFmpegDecoderAudioRead.SeekAudioToMs(FContext, PositionMs, ErrorMessage);
-  SyncFieldsFromContext;
+  BeginIoTimeout(DecodeTimeoutMs);
+  try
+    SyncContextFromFields;
+    Result := FFmpegDecoderAudioRead.SeekAudioToMs(FContext, PositionMs, ErrorMessage);
+    if (not Result) and IoTimeoutExpired then
+      ErrorMessage := Format('Timed out while seeking audio (%d ms).',
+        [DecodeTimeoutMs]);
+  finally
+    SyncFieldsFromContext;
+    EndIoTimeout;
+  end;
 end;
 
 class function TFFmpegDecoder.ReadVideoInfo(const FileName: string; out Info: TVideoInfo; out ErrorMessage: string): Boolean;

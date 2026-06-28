@@ -60,6 +60,9 @@ type
     procedure BeginPlaybackTimerPeriod;
     procedure EndPlaybackTimerPeriod;
     procedure SetPlaybackTimerEnabled(Value: Boolean);
+    function ShouldFinishAtAudioWaitEnd(EndAction: TVideoMinerEndAction;
+      SeekMaxMs, LoopSegmentStartMs, LoopSegmentEndMs,
+      CurrentVideoPositionMs: Integer): Boolean;
   public
     // timer、音声再生、動画ビュー、preview decoder を受け取る
     constructor Create(PlaybackTimer, RestartTimer: TTimer;
@@ -213,6 +216,7 @@ const
   PREVIEW_NEXT_MAX_STEP_MS      = 80;   // preview decoder の順方向読みで代替する最大移動幅 ms
   PREVIEW_POSITION_TOLERANCE_MS = 3;    // preview decoder 位置と表示位置を同一視する許容誤差 ms
   VIDEO_AHEAD_SKIP_TOLERANCE_MS = 5;    // 音声より少し先の映像を進めず待つ許容差 ms
+  AUDIO_WAIT_END_TOLERANCE_MS = 180;    // 末尾で音声が先に終わる短い差を終端到達として扱う ms
 
 constructor TVideoMinerPlaybackController.Create(PlaybackTimer,
   RestartTimer: TTimer; AudioPlayback: TVideoMinerAudioPlayback;
@@ -748,6 +752,25 @@ begin
     FRestartTimer.Enabled := False;
     FRestartTimer.Enabled := True;
   end;
+end;
+
+function TVideoMinerPlaybackController.ShouldFinishAtAudioWaitEnd(
+  EndAction: TVideoMinerEndAction; SeekMaxMs, LoopSegmentStartMs,
+  LoopSegmentEndMs, CurrentVideoPositionMs: Integer): Boolean;
+var
+  EndPositionMs: Integer;
+begin
+  Result := False;
+  if CurrentVideoPositionMs < 0 then
+    Exit;
+
+  EndPositionMs := SeekMaxMs;
+  if (EndAction = eaLoop) and (LoopSegmentStartMs >= 0) and
+     (LoopSegmentEndMs > LoopSegmentStartMs) then
+    EndPositionMs := LoopSegmentEndMs;
+
+  Result := (EndPositionMs > 0) and
+    (CurrentVideoPositionMs + AUDIO_WAIT_END_TOLERANCE_MS >= EndPositionMs);
 end;
 
 procedure TVideoMinerPlaybackController.SetPlaybackRate(Value: Double);
@@ -1481,6 +1504,28 @@ begin
   if (AudioPositionMs >= 0) and (CurrentVideoPositionMs >= 0) and
      (CurrentVideoPositionMs > AudioPositionMs + VIDEO_AHEAD_SKIP_TOLERANCE_MS) then
   begin
+    if ShouldFinishAtAudioWaitEnd(EndAction, SeekMaxMs, LoopSegmentStartMs,
+      LoopSegmentEndMs, CurrentVideoPositionMs) then
+    begin
+      WriteVideoMinerRateLog(Format(
+        'finish_audio_wait_near_end_summary file="%s" action="%s" current_ms=%d audio_ms=%d seek_max_ms=%d segment_start_ms=%d segment_end_ms=%d tolerance_ms=%d pump_ms=%.3f',
+        [ExtractFileName(VideoFile), EndActionText(EndAction),
+         CurrentVideoPositionMs, AudioPositionMs, SeekMaxMs,
+         LoopSegmentStartMs, LoopSegmentEndMs,
+         AUDIO_WAIT_END_TOLERANCE_MS, PumpMs]));
+{$IFDEF DEBUG}
+      WriteVideoMinerSlowLog(Format(
+        'finish_audio_wait_near_end file="%s" action="%s" current_ms=%d audio_ms=%d seek_max_ms=%d segment_start_ms=%d segment_end_ms=%d tolerance_ms=%d pump_ms=%.3f',
+        [ExtractFileName(VideoFile), EndActionText(EndAction),
+         CurrentVideoPositionMs, AudioPositionMs, SeekMaxMs,
+         LoopSegmentStartMs, LoopSegmentEndMs,
+         AUDIO_WAIT_END_TOLERANCE_MS, PumpMs]));
+{$ENDIF}
+      if Assigned(FinishPlaybackAtEnd) then
+        FinishPlaybackAtEnd;
+      Exit;
+    end;
+
     UpdatingSeek := True;
     try
       SeekPositionMs := SeekPositionForTick(CurrentVideoPositionMs,

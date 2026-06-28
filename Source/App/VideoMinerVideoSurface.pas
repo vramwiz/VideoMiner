@@ -123,6 +123,8 @@ type
     procedure DrawMinimalSeekBarFallback(Canvas: TCanvas);
     // 読み込み中であることを示すテキストを描く
     procedure DrawLoadingIndicator(Canvas: TCanvas);
+    // 何も開いていない時の操作案内を描く
+    procedure DrawEmptyOpenHint(Canvas: TCanvas);
     // alpha 確認用の市松模様合成 Bitmap を最新化する
     procedure EnsureAlphaCompositeBitmap;
     // クライアント領域内に動画全体が収まる描画矩形を返す
@@ -2308,6 +2310,7 @@ begin
     end;
     DrawSeekHoverPreview(DrawCanvas);
     DrawTransientStatus(DrawCanvas);
+    DrawEmptyOpenHint(DrawCanvas);
     DrawLoadingIndicator(DrawCanvas);
     if UsePaintBuffer then
       Canvas.Draw(0, 0, FPaintBuffer);
@@ -2469,6 +2472,28 @@ begin
     Canvas.Brush.Style := bsSolid;
   end;
   }
+end;
+
+procedure TVideoMinerVideoSurface.DrawEmptyOpenHint(Canvas: TCanvas);
+var
+  Text: string;
+  TextRect: TRect;
+begin
+  if FLoadingActive then
+    Exit;
+
+  Text := 'Drop a video file here or press Ctrl+O to open a file';
+  TextRect := ClientRect;
+  InflateRect(TextRect, -32, -32);
+  Canvas.Font.Name := 'Segoe UI';
+  Canvas.Font.Size := 14;
+  Canvas.Font.Style := [];
+  Canvas.Font.Color := $00C8D0CC;
+  Canvas.Brush.Style := bsClear;
+  SetBkMode(Canvas.Handle, TRANSPARENT);
+  DrawText(Canvas.Handle, PChar(Text), -1, TextRect,
+    DT_CENTER or DT_VCENTER or DT_WORDBREAK);
+  Canvas.Brush.Style := bsSolid;
 end;
 
 procedure TVideoMinerVideoSurface.EndLoadingIndicator;

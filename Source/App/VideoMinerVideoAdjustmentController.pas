@@ -1,4 +1,4 @@
-unit VideoMinerVideoAdjustmentController;
+﻿unit VideoMinerVideoAdjustmentController;
 
 // 動画本体の一時的な表示補正を扱う。
 // 設定保存はせず、キー入力から D3D 表示補正と左上ステータス表示へ橋渡しする。

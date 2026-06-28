@@ -7,7 +7,7 @@ interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.Classes, System.Generics.Collections,
-  System.Math, System.SysUtils, System.Types, Vcl.Controls, Vcl.ExtCtrls,
+  System.Diagnostics, System.Math, System.SysUtils, System.Types, Vcl.Controls, Vcl.ExtCtrls,
   Vcl.Graphics, FFmpegDecoder, FFmpegDecoderTypes, VideoMinerBitmapRotation,
   VideoMinerDebugLog, VideoMinerMediaList, VideoMinerSettings,
   VideoMinerThumbnailCache, VideoMinerWindowChrome;
@@ -34,12 +34,17 @@ type
     FHoverIndex              : Integer;                    // マウスが重なっているタイル位置
     FMediaList               : TVideoMinerMediaList;       // 表示対象になる同一フォルダ内の動画一覧
     FOnSelected              : TVideoMinerThumbnailSelectedEvent; // タイル選択の通知先
+    FOnClosed                : TNotifyEvent;                      // 一覧モードを閉じた通知先
     FOwnedMediaList          : TVideoMinerMediaList;       // 履歴フォルダ表示用に一時保持する動画一覧
     FPreviewBitmap : TBitmap;            // hover プレビュー中に表示する一時画像
     FPreviewDecoder : TFFmpegDecoder;    // hover 本プレビュー用の一時デコーダ
     FPreviewFileName : string;           // hover 本プレビューで開いているファイル
     FPreviewIndex  : Integer;            // hover プレビュー対象の一覧位置
     FPreviewInfo   : TVideoInfo;         // hover 本プレビュー対象の動画情報
+    FPreviewHoverStartTick : UInt64;     // hover 開始から初回プレビュー表示までの計測用時刻
+    FPreviewPlaybackClock : TStopwatch;  // hover プレビューを実時間速度へ合わせる時計
+    FPreviewPlaybackClockActive : Boolean; // hover プレビュー時計が有効か
+    FPreviewPlaybackStartMs : Integer;   // hover プレビュー時計の起点になる動画位置
     FPreviewStarted : Boolean;           // hover 本プレビューの初回 seek が済んだか
     FPreviewStep   : Integer;            // hover プレビューの更新回数
     FPreviewTimer  : TTimer;             // hover プレビューを更新するタイマー
@@ -52,6 +57,7 @@ type
     FThumbnailStates : TArray<TVideoMinerThumbnailState>; // サムネイル生成状態
     FThumbnails      : TArray<TBitmap>;   // 生成済みサムネイル画像
     FThumbnailTimer  : TTimer;            // サムネイルを少しずつ生成するタイマー
+    FNextThumbnailGenerateTick : UInt64;  // キャッシュ miss 後の新規生成を始めてよい時刻
     FTileHeight      : Integer;           // 現在のタイル高さ px
     FTileWidth       : Integer;           // 現在のタイル幅 px
     FTileRects    : TArray<TRect>;        // 最後にレイアウトした各タイルの表示矩形
@@ -222,6 +228,7 @@ type
     procedure Toggle;
     property OnSelected: TVideoMinerThumbnailSelectedEvent
       read FOnSelected write FOnSelected;
+    property OnClosed: TNotifyEvent read FOnClosed write FOnClosed;
   end;
 
 implementation
@@ -267,12 +274,15 @@ const
   NAME_BAND_HEIGHT               = 28;        // ファイル名を重ねる帯の高さ px
   FOLDER_HISTORY_THUMB_COUNT     = 3;         // フォルダ履歴に並べる代表サムネイル数
   THUMBNAIL_TIMER_INTERVAL       = 80;        // サムネイルを 1 枚ずつ生成する間隔 ms
+  THUMBNAIL_GENERATE_DELAY_MS    = 260;       // キャッシュ miss 後、新規生成を始めるまで待つ時間 ms
+  THUMBNAIL_GENERATE_COOLDOWN_MS = 420;       // 新規生成を 1 枚終えた後、次の生成まで空ける時間 ms
   THUMBNAIL_MAX_WIDTH            = 320;       // 生成サムネイルの最大幅 px
   THUMBNAIL_MAX_HEIGHT           = 180;       // 生成サムネイルの最大高さ px
   THUMBNAIL_CACHE_BURST          = 24;        // 1 tick で読み込むキャッシュ済みサムネイル数
-  PREVIEW_START_DELAY_MS         = 350;       // hover 後にプレビュー開始を待つ時間 ms
-  PREVIEW_THUMBNAIL_WAIT_MS      = 120;       // 通常サムネイル生成中に hover プレビュー開始を延期する時間 ms
-  PREVIEW_FRAME_INTERVAL_MS      = 40;        // hover 本プレビューの更新間隔 ms
+  PREVIEW_START_DELAY_MS         = 160;       // hover 後にプレビュー開始を待つ時間 ms
+  PREVIEW_FRAME_INTERVAL_MS      = 16;        // hover 本プレビューの更新間隔 ms
+  PREVIEW_THUMBNAIL_PAUSE_MS     = 180;       // hover プレビュー中に新規サムネイル生成を先送りする時間 ms
+  PREVIEW_MAX_SKIP_FRAMES        = 8;         // 実時間追従時に 1 tick で読み飛ばす最大フレーム数
   PREVIEW_START_PERCENT          = 10;        // hover 本プレビューの開始位置 %
   HISTORY_RESTORE_DELAY_MS       = 900;       // 空一覧から表示後、履歴フォルダ復元を始めるまでの待ち時間 ms
   HOVER_REAL_PREVIEW_DEFAULT     = True;      // hover 中のタイルで音なし実動画プレビューを行う
@@ -424,6 +434,7 @@ begin
   SetLength(FThumbnailStates, 0);
   SetLength(FThumbnailFiles, 0);
   SetLength(FThumbnailDurationsMs, 0);
+  FNextThumbnailGenerateTick := 0;
 end;
 
 procedure TVideoMinerThumbnailBrowser.ClearThumbnailCache;
@@ -504,8 +515,6 @@ function TVideoMinerThumbnailBrowser.TryLoadCachedThumbnail(Index: Integer;
   const FileName: string): Boolean;
 var
   Dest: TBitmap;
-  ErrorMessage: string;
-  Info: TVideoInfo;
 begin
   Result := False;
   if (Index < 0) or (Index >= Length(FThumbnailStates)) or
@@ -521,17 +530,9 @@ begin
     FThumbnails[Index] := Dest;
     Dest := nil;
     if Index < Length(FThumbnailDurationsMs) then
-    begin
       if not LoadCachedVideoDurationMs(FileName,
         FThumbnailDurationsMs[Index]) then
-      begin
-        if TFFmpegDecoder.ReadVideoInfo(FileName, Info, ErrorMessage) then
-        begin
-          FThumbnailDurationsMs[Index] := Round(Info.DurationSec * 1000);
-          SaveCachedVideoDurationMs(FileName, FThumbnailDurationsMs[Index]);
-        end;
-      end;
-    end;
+        FThumbnailDurationsMs[Index] := -1;
     FThumbnailStates[Index] := tsReady;
     Result := True;
   finally
@@ -648,15 +649,22 @@ var
   ErrorMessage: string;
   PositionMs: Integer;
   Scale: Double;
+  SkipErrorMessage: string;
+  SkipCount: Integer;
+  SkipPositionMs: Integer;
   Source: TBitmap;
   StartMs: Integer;
+  StepWatch: TStopwatch;
+  TargetPreviewMs: Integer;
   ThumbHeight: Integer;
   ThumbWidth: Integer;
+  TotalWatch: TStopwatch;
 begin
   Result := False;
   if (not HoverRealPreviewEnabled) or (Index < 0) or (FileName = '') then
     Exit;
 
+  TotalWatch := TStopwatch.StartNew;
   if (FPreviewDecoder = nil) or (FPreviewFileName <> FileName) then
   begin
     FreeAndNil(FPreviewDecoder);
@@ -666,11 +674,20 @@ begin
 
     FPreviewDecoder := TFFmpegDecoder.Create;
     FPreviewDecoder.Role := fdrThumbnail;
+    StepWatch := TStopwatch.StartNew;
     if not FPreviewDecoder.Open(FileName, FPreviewInfo, ErrorMessage) then
     begin
+      WriteThumbnailLog(Format(
+        'preview_open_failed index=%d elapsed_ms=%.3f err="%s"',
+        [Index, StepWatch.Elapsed.TotalMilliseconds, ErrorMessage]));
       FreeAndNil(FPreviewDecoder);
       Exit;
     end;
+    WriteThumbnailLog(Format(
+      'preview_open index=%d elapsed_ms=%.3f size=%dx%d duration=%.3f file="%s"',
+      [Index, StepWatch.Elapsed.TotalMilliseconds, FPreviewInfo.Width,
+       FPreviewInfo.Height, FPreviewInfo.DurationSec,
+       ExtractFileName(FileName)]));
     FPreviewFileName := FileName;
   end;
 
@@ -701,21 +718,53 @@ begin
       Decoded := False;
       if FPreviewStarted then
       begin
+        if FPreviewPlaybackClockActive then
+        begin
+          SkipCount := 0;
+          TargetPreviewMs := FPreviewPlaybackStartMs +
+            Round(FPreviewPlaybackClock.Elapsed.TotalMilliseconds);
+          while FPreviewDecoder.DecodeNextFrameToBgrx32Optional(nil, 0,
+            False, SkipPositionMs, SkipErrorMessage) do
+          begin
+            Inc(SkipCount);
+            if (TargetPreviewMs <= 0) or (SkipPositionMs >= TargetPreviewMs) then
+              Break;
+            if SkipCount >= PREVIEW_MAX_SKIP_FRAMES then
+              Break;
+          end;
+        end;
+        StepWatch := TStopwatch.StartNew;
         Decoded := FPreviewDecoder.DecodeNextFrameToBgrx32(Buffer,
           BufferStride, PositionMs, ErrorMessage);
+        WriteThumbnailLog(Format(
+          'preview_decode_next index=%d pos_ms=%d elapsed_ms=%.3f ok=%s err="%s"',
+          [Index, PositionMs, StepWatch.Elapsed.TotalMilliseconds,
+           BoolToStr(Decoded, True), ErrorMessage]));
         if not Decoded then
           FPreviewStarted := False;
       end;
 
       if not Decoded then
       begin
-        Decoded := FPreviewDecoder.DecodeFrameToBgrx32(StartMs, Buffer,
-          BufferStride, ErrorMessage);
+        StepWatch := TStopwatch.StartNew;
+        Decoded := FPreviewDecoder.DecodeNextFrameToBgrx32(Buffer,
+          BufferStride, PositionMs, ErrorMessage);
         FPreviewStarted := Decoded;
+        if Decoded then
+        begin
+          FPreviewPlaybackStartMs := PositionMs;
+          FPreviewPlaybackClock := TStopwatch.StartNew;
+          FPreviewPlaybackClockActive := True;
+        end;
+        WriteThumbnailLog(Format(
+          'preview_decode_first index=%d pos_ms=%d start_ms=%d elapsed_ms=%.3f ok=%s err="%s"',
+          [Index, PositionMs, StartMs, StepWatch.Elapsed.TotalMilliseconds,
+           BoolToStr(Decoded, True), ErrorMessage]));
       end;
 
       if not Decoded then
         Exit;
+      StepWatch := TStopwatch.StartNew;
       RotateBitmapByDegrees(Source,
         EffectiveVideoRotationDegrees(FPreviewInfo.RotationDegrees));
 
@@ -734,6 +783,11 @@ begin
         FPreviewBitmap := Dest;
         Dest := nil;
         Result := True;
+        WriteThumbnailLog(Format(
+          'preview_ready index=%d hover_to_ready_ms=%d total_ms=%.3f convert_ms=%.3f thumb=%dx%d',
+          [Index, Integer(GetTickCount64 - FPreviewHoverStartTick),
+           TotalWatch.Elapsed.TotalMilliseconds,
+           StepWatch.Elapsed.TotalMilliseconds, ThumbWidth, ThumbHeight]));
       finally
         Dest.Free;
       end;
@@ -750,6 +804,7 @@ var
   CacheLoads: Integer;
   FileName: string;
   Index: Integer;
+  NowTick: UInt64;
   Updated: Boolean;
 begin
   Updated := False;
@@ -763,7 +818,11 @@ begin
 
     FileName := FThumbnailFiles[Index];
     if not TryLoadCachedThumbnail(Index, FileName) then
+    begin
+      if FNextThumbnailGenerateTick = 0 then
+        FNextThumbnailGenerateTick := GetTickCount64 + THUMBNAIL_GENERATE_DELAY_MS;
       Break;
+    end;
 
     Updated := True;
     Inc(CacheLoads);
@@ -772,21 +831,39 @@ begin
   Index := NextQueuedThumbnailIndex;
   if Index >= 0 then
   begin
-    FileName := FThumbnailFiles[Index];
-    GenerateThumbnail(Index, FileName);
-    Updated := True;
+    NowTick := GetTickCount64;
+    if (FPreviewIndex >= 0) and (FPreviewIndex = FHoverIndex) then
+    begin
+      FNextThumbnailGenerateTick := NowTick + PREVIEW_THUMBNAIL_PAUSE_MS;
+      if Updated then
+        Invalidate;
+      Exit;
+    end;
+    if FNextThumbnailGenerateTick = 0 then
+      FNextThumbnailGenerateTick := NowTick + THUMBNAIL_GENERATE_DELAY_MS;
+    if Int64(NowTick - FNextThumbnailGenerateTick) >= 0 then
+    begin
+      FileName := FThumbnailFiles[Index];
+      GenerateThumbnail(Index, FileName);
+      FNextThumbnailGenerateTick := GetTickCount64 + THUMBNAIL_GENERATE_COOLDOWN_MS;
+      Updated := True;
+    end;
   end;
 
   if Updated then
     Invalidate;
 
   if NextQueuedThumbnailIndex < 0 then
+  begin
+    FNextThumbnailGenerateTick := 0;
     FThumbnailTimer.Enabled := False;
+  end;
 end;
 
 procedure TVideoMinerThumbnailBrowser.PreviewTimer(Sender: TObject);
 var
   FileName: string;
+  UpdateRect: TRect;
 begin
   if (not Visible) or (FMediaList = nil) or (FPreviewIndex < 0) or
      (FPreviewIndex <> FHoverIndex) or (FPreviewIndex >= FMediaList.Count) then
@@ -796,18 +873,21 @@ begin
   end;
 
   Inc(FPreviewStep);
-  if ((FThumbnailTimer <> nil) and FThumbnailTimer.Enabled) or
-     (NextQueuedThumbnailIndex >= 0) then
-  begin
-    FPreviewTimer.Interval := PREVIEW_THUMBNAIL_WAIT_MS;
-    Exit;
-  end;
-
+  WriteThumbnailLog(Format(
+    'preview_timer index=%d step=%d hover_elapsed_ms=%d',
+    [FPreviewIndex, FPreviewStep,
+     Integer(GetTickCount64 - FPreviewHoverStartTick)]));
   FileName := FMediaList.FileAt(FPreviewIndex);
   if GeneratePreviewFrame(FPreviewIndex, FileName) then
   begin
     FPreviewTimer.Interval := PREVIEW_FRAME_INTERVAL_MS;
-    Invalidate;
+    if (FPreviewIndex >= 0) and (FPreviewIndex < Length(FTileRects)) then
+    begin
+      UpdateRect := FTileRects[FPreviewIndex];
+      InvalidateRect(Handle, @UpdateRect, False);
+    end
+    else
+      Invalidate;
   end
   else
     StopPreview;
@@ -831,7 +911,10 @@ begin
     Exit;
 
   FPreviewIndex := Index;
+  FPreviewHoverStartTick := GetTickCount64;
   FPreviewStep := -1;
+  WriteThumbnailLog(Format('preview_reset index=%d delay_ms=%d',
+    [Index, PREVIEW_START_DELAY_MS]));
   if FPreviewTimer <> nil then
   begin
     FPreviewTimer.Interval := PREVIEW_START_DELAY_MS;
@@ -844,6 +927,9 @@ begin
   if FPreviewTimer <> nil then
     FPreviewTimer.Enabled := False;
   FPreviewIndex := -1;
+  FPreviewHoverStartTick := 0;
+  FPreviewPlaybackClockActive := False;
+  FPreviewPlaybackStartMs := 0;
   FPreviewStarted := False;
   FPreviewStep := -1;
   FPreviewFileName := '';
@@ -853,7 +939,10 @@ begin
 end;
 
 procedure TVideoMinerThumbnailBrowser.Close;
+var
+  WasVisible: Boolean;
 begin
+  WasVisible := Visible;
   if FHistoryRestoreTimer <> nil then
     FHistoryRestoreTimer.Enabled := False;
   Inc(FHistoryRestoreGeneration);
@@ -865,6 +954,8 @@ begin
   Visible := False;
   if FThumbnailTimer <> nil then
     FThumbnailTimer.Enabled := False;
+  if WasVisible and Assigned(FOnClosed) then
+    FOnClosed(Self);
 end;
 
 procedure TVideoMinerThumbnailBrowser.DrawDurationBadge(Canvas: TCanvas;
@@ -1832,11 +1923,14 @@ end;
 
 procedure TVideoMinerThumbnailBrowser.Paint;
 var
+  ClipRect: TRect;
   I: Integer;
+  TileClipRect: TRect;
   TextRect: TRect;
 begin
   WriteThumbnailLog(Format('paint_begin visible=%s count=%d',
     [BoolToStr(Visible, True), Length(FThumbnailStates)]));
+  ClipRect := Canvas.ClipRect;
   Canvas.Brush.Color := BROWSER_BACKGROUND_COLOR;
   Canvas.FillRect(ClientRect);
   DrawFolderHistoryRow(Canvas);
@@ -1859,6 +1953,9 @@ begin
   begin
     if (FTileRects[I].Bottom < FolderHistoryRowHeight) or
        (FTileRects[I].Top > ClientHeight) then
+      Continue;
+    if not Winapi.Windows.IntersectRect(TileClipRect, FTileRects[I],
+      ClipRect) then
       Continue;
     DrawTile(Canvas, I, FTileRects[I]);
   end;
@@ -1918,6 +2015,23 @@ begin
 
   if FFolderHistoryHoverIndex >= Length(FFolderHistory) then
     FFolderHistoryHoverIndex := -1;
+
+  StopPreview;
+  ClearThumbnails;
+  FreeAndNil(FOwnedMediaList);
+  FMediaList := nil;
+  FCurrentIndex := -1;
+  FSelectedIndex := -1;
+  FScrollOffset := 0;
+  if FFolderHistorySelectedIndex >= 0 then
+  begin
+    ShowFolderHistory(FFolderHistorySelectedIndex, False);
+    Exit;
+  end;
+
+  EnsureThumbnailSlots;
+  ClampScrollOffset;
+  LayoutTiles;
   Invalidate;
 end;
 
@@ -2336,6 +2450,7 @@ procedure TVideoMinerThumbnailBrowser.ApplyFolderHistoryMediaList(
   MediaList: TVideoMinerMediaList);
 var
   FolderKey: string;
+  I: Integer;
 begin
   FolderKey := IncludeTrailingPathDelimiter(FolderPath);
   if FFolderHistoryMediaListLoading <> nil then
@@ -2350,6 +2465,18 @@ begin
 
   FFolderHistoryMediaLists.AddOrSetValue(FolderKey, MediaList);
   Invalidate;
+  if (FMediaList = nil) and (FFolderHistorySelectedIndex >= 0) then
+  begin
+    for I := 0 to High(FFolderHistory) do
+    begin
+      if (I = FFolderHistorySelectedIndex) and
+         SameText(IncludeTrailingPathDelimiter(FFolderHistory[I]), FolderKey) then
+      begin
+        ShowFolderHistory(I, False);
+        Break;
+      end;
+    end;
+  end;
   WriteThumbnailLog(Format(
     'folder_history_media_list_loaded folder="%s" count=%d',
     [FolderKey, MediaList.Count]));
@@ -2360,11 +2487,14 @@ procedure TVideoMinerThumbnailBrowser.ShowFolderHistory(Index: Integer;
 var
   FileName: string;
   Folder: string;
+  FolderKey: string;
+  KnownMediaList: TVideoMinerMediaList;
 begin
   if (Index < 0) or (Index >= Length(FFolderHistory)) then
     Exit;
 
   Folder := FFolderHistory[Index];
+  FolderKey := IncludeTrailingPathDelimiter(Folder);
   if PromoteHistory then
   begin
     TouchFolderHistory(Folder);
@@ -2374,8 +2504,18 @@ begin
   end;
 
   FileName := KnownFirstFile;
-  if FileName = '' then
-    FileName := TVideoMinerMediaList.FirstMediaFileInFolder(Folder);
+  KnownMediaList := nil;
+  if FFolderHistoryMediaLists.TryGetValue(FolderKey, KnownMediaList) and
+     (KnownMediaList <> nil) and (KnownMediaList.Count > 0) then
+    FileName := KnownMediaList.FileAt(Max(0, KnownMediaList.CurrentIndex))
+  else if FileName = '' then
+  begin
+    FFolderHistorySelectedIndex := Index;
+    FFolderHistoryHoverIndex := -1;
+    QueueFolderHistoryMediaList(Folder);
+    Invalidate;
+    Exit;
+  end;
   if FileName = '' then
   begin
     StopPreview;
@@ -2394,7 +2534,10 @@ begin
   ClearThumbnails;
   FreeAndNil(FOwnedMediaList);
   FOwnedMediaList := TVideoMinerMediaList.Create;
-  FOwnedMediaList.BuildForFile(FileName);
+  if KnownMediaList <> nil then
+    FOwnedMediaList.AssignFrom(KnownMediaList)
+  else
+    FOwnedMediaList.BuildForFile(FileName);
   FMediaList := FOwnedMediaList;
   FCurrentIndex := ActiveFileIndexInMediaList;
   if FCurrentIndex >= 0 then

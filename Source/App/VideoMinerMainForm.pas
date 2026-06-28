@@ -307,6 +307,9 @@ begin
   FThumbnailBrowserController := TVideoMinerThumbnailBrowserController.Create(Self,
     FVideoView.SurfaceControl, FMediaList, FMediaSession);
   FThumbnailBrowserController.OnOpenFile := LoadVideoFile;
+  FThumbnailBrowserController.OnPlaybackActive := PlaybackActiveOrPending;
+  FThumbnailBrowserController.OnPausePlayback := StopPlayback;
+  FThumbnailBrowserController.OnResumePlayback := PlayFromCurrentPosition;
   FSeekHoverPreviewController := TVideoMinerSeekHoverPreviewController.Create(Self,
     FVideoView, FSeekHoverPreviewDecoder);
   FVideoView.OnSurfaceRightClick := SurfaceRightClick;
@@ -772,6 +775,8 @@ end;
 
 procedure TVideoMinerMainForm.OpenFromDialog;
 begin
+  if FStartupOpenController <> nil then
+    FStartupOpenController.Cancel;
   OpenDialogVideo.InitialDir := VideoMinerOpenDialogInitialDir(FMediaSession.VideoFile);
   if OpenDialogVideo.Execute then
     LoadVideoFile(OpenDialogVideo.FileName, False);
@@ -1072,6 +1077,8 @@ begin
   if (FWindowModeController <> nil) and FWindowModeController.BossMode then
     Exit;
 
+  if FStartupOpenController <> nil then
+    FStartupOpenController.Cancel;
   if FThumbnailBrowserController <> nil then
     FThumbnailBrowserController.Toggle;
 end;
