@@ -78,6 +78,8 @@ type
     FPlayPauseButton        : TVideoMinerOverlayPlayPauseButton; // 再生/一時停止の中央ボタン
     FPreviousFileButton     : TVideoMinerOverlayFileNavButton;   // 前動画へ移動する左端ボタン
     FPreviewRect            : TRect;                             // 動画フレームが実際に描画される領域
+    FRightSurfaceClickArmed : Boolean;                           // 右クリック単体のサムネイル切替候補か
+    FSuppressRightClickUp   : Boolean;                           // 右押下中ホイール後の MouseUp を右クリック扱いしないか
     FSafeAreaVisible        : Boolean;                           // 90% セーフエリア確認枠を表示中か
     FSeekBar                : TVideoMinerOverlaySeekBar;         // 下側のシーク/音量/状態操作バー
     FSeekBarLastHitTick     : UInt64;                            // シークバー hover 維持用の最終ヒット tick
@@ -1771,6 +1773,8 @@ begin
   if Button = mbRight then
   begin
     CancelPendingSurfaceClick;
+    FRightSurfaceClickArmed := False;
+    FSuppressRightClickUp := False;
     if FSeekBar <> nil then
     begin
       FSeekBar.UpdateLayout(SeekBarLayoutRect);
@@ -1781,8 +1785,9 @@ begin
         Exit;
       end;
     end;
-    if CanStartSurfaceClick(Point(X, Y)) and Assigned(FOnSurfaceRightClick) then
-      FOnSurfaceRightClick(Self);
+    FRightSurfaceClickArmed := CanStartSurfaceClick(Point(X, Y));
+    if FRightSurfaceClickArmed then
+      MouseCapture := True;
     Exit;
   end;
 
@@ -2031,6 +2036,22 @@ begin
     Exit;
   end;
 
+  if Button = mbRight then
+  begin
+    MouseCapture := False;
+    if FSuppressRightClickUp then
+    begin
+      FSuppressRightClickUp := False;
+      FRightSurfaceClickArmed := False;
+      Exit;
+    end;
+    if FRightSurfaceClickArmed and CanStartSurfaceClick(Point(X, Y)) and
+       Assigned(FOnSurfaceRightClick) then
+      FOnSurfaceRightClick(Self);
+    FRightSurfaceClickArmed := False;
+    Exit;
+  end;
+
   if (Button = mbLeft) and FPanning then
   begin
     FPanning := False;
@@ -2130,6 +2151,7 @@ var
   RatioX: Double;
   RatioY: Double;
   D3DRefreshed: Boolean;
+  CurrentPositionMs: Integer;
   SeekPositionMs: Integer;
   StepMs: Integer;
 begin
@@ -2149,6 +2171,12 @@ begin
   DestRect := FitRect;
   if DestRect.IsEmpty then
     Exit;
+
+  if ssRight in Shift then
+  begin
+    FSuppressRightClickUp := True;
+    FRightSurfaceClickArmed := False;
+  end;
 
   if FSeekBar <> nil then
   begin
@@ -2178,6 +2206,29 @@ begin
 
   if not PtInRect(DestRect, LocalPoint) then
     Exit;
+
+  if (ssRight in Shift) and (FSeekBar <> nil) then
+  begin
+    SetSeekBarVisibleFrom('right_button_wheel_frame_seek', True);
+    if FPlaybackActive and Assigned(FOnPlayPauseClick) then
+      FOnPlayPauseClick(Self);
+    CurrentPositionMs := FSeekBar.CurrentDisplayPositionMs;
+    SeekPositionMs := FSeekBar.WheelPosition(WheelDelta, FSeekWheelFrameStepMs);
+    if SeekPositionMs = CurrentPositionMs then
+    begin
+      Result := True;
+      Exit;
+    end;
+    FSeekBar.SetProgress(SeekPositionMs, FSeekBar.MaxMs);
+    FSeekBarHoverPositionMs := SeekPositionMs;
+    UpdateD3DSeekBarOverlayState;
+    RefreshD3DFramePresentation;
+    if Assigned(FOnSeekByWheel) then
+      FOnSeekByWheel(Self, SeekPositionMs);
+    Result := True;
+    Exit;
+  end;
+
   if not ImagePointFromClient(LocalPoint, ImageX, ImageY) then
     Exit;
 
