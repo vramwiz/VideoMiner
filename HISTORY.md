@@ -2,6 +2,17 @@
 
 日付ごとの実装履歴と調査記録。現在の設計や作業再開時の要点は `note.md` を参照する。
 
+## 2026-06-29 D3D 表示右端 1px ノイズ対策
+- `C:\Users\vramw\Videos\magnific_poRvrC5ehw.mp4` 再生中に動画表示領域の右端 1px に虹色の縦ノイズが見える問題を調査した。
+- 同梱 ffmpeg で対象動画からフレームを抽出し、元動画の右端には同種の縦ノイズが入っていないことを確認した。
+- D3D 動画 viewport の基本 fit 計算を GDI fallback の `FitRect` と同じ整数丸めへ揃え、fractional viewport 境界で端 1px が不安定にならないようにした。
+- NV12/YUV420P shader と BGRX32 shader の両方で texture UV を 0..1 の内側へ clamp し、右端でテクスチャ外側や未定義寄りの値を拾わないようにした。
+- 対象動画の通常再生では GDI fallback 経路も使われるため、GDI 描画後の右端 1px を直前の列でならすガードを追加した。
+- 確認:
+  - Win64 Debug: 成功、警告 0 / エラー 0。
+  - Win64 Release: 成功、エラー 0。既存の hint warning 18 件のみ。
+  - `tools\EnsureUtf8Bom.ps1 -Check`: 成功。
+
 ## 2026-06-28 セーフエリア緑枠の D3D 描画対応
 - G / Ctrl+G で表示する 90% セーフエリア確認枠が D3D 表示のブロック理由になっており、再生中に GDI fallback 描画へ落ちてちらつく問題を修正した。
 - セーフエリア矩形の計算を GDI/D3D 共通にし、D3D overlay state へ渡して backbuffer 上に黒縁付きの緑枠を描くようにした。

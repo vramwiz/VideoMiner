@@ -371,21 +371,22 @@ procedure TNv12TextureProbe.BuildVideoViewport(FrameWidth, FrameHeight: Integer;
   out Viewport: D3D11_VIEWPORT; out ViewLeft, ViewTop, ViewWidth,
   ViewHeight: Double);
 var
+  BaseHeight: Integer;
+  BaseLeft  : Integer;
+  BaseTop   : Integer;
+  BaseWidth : Integer;
+  Scale     : Double;
   Zoom: TD3D11VideoZoomState;
 begin
-  ViewWidth := FTargetWidth;
-  ViewHeight := FTargetWidth * FrameHeight / FrameWidth;
-  if ViewHeight > FTargetHeight then
-  begin
-    ViewHeight := FTargetHeight;
-    ViewWidth := FTargetHeight * FrameWidth / FrameHeight;
-  end;
-  if ViewWidth < 1 then
-    ViewWidth := 1;
-  if ViewHeight < 1 then
-    ViewHeight := 1;
-  ViewLeft := (FTargetWidth - ViewWidth) / 2;
-  ViewTop := (FTargetHeight - ViewHeight) / 2;
+  Scale := Min(FTargetWidth / FrameWidth, FTargetHeight / FrameHeight);
+  BaseWidth := Max(1, Round(FrameWidth * Scale));
+  BaseHeight := Max(1, Round(FrameHeight * Scale));
+  BaseLeft := (FTargetWidth - BaseWidth) div 2;
+  BaseTop := (FTargetHeight - BaseHeight) div 2;
+  ViewLeft := BaseLeft;
+  ViewTop := BaseTop;
+  ViewWidth := BaseWidth;
+  ViewHeight := BaseHeight;
 
   Zoom := GlobalD3DVideoZoom;
   if Zoom.Active and (Zoom.Width > 0.0001) and (Zoom.Height > 0.0001) then
@@ -593,6 +594,7 @@ const
     'SamplerState samp0 : register(s0);' + #10 +
     'cbuffer ColorAdjust : register(b0) { float brightness; float contrast; float2 colorPad; };' + #10 +
     'float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {' + #10 +
+    '  uv = clamp(uv, float2(0.0, 0.0), float2(0.999999, 0.999999));' + #10 +
     '  float y = saturate((yTex.Sample(samp0, uv).r - (16.0 / 255.0)) * (255.0 / 219.0));' + #10 +
     '  float2 chroma = (uvTex.Sample(samp0, uv).rg - float2(128.0 / 255.0, 128.0 / 255.0)) * (255.0 / 224.0);' + #10 +
     '  float r = y + 1.5748 * chroma.y;' + #10 +
@@ -758,6 +760,7 @@ const
     'SamplerState samp0 : register(s0);' + #10 +
     'cbuffer ColorAdjust : register(b0) { float brightness; float contrast; float2 colorPad; };' + #10 +
     'float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {' + #10 +
+    '  uv = clamp(uv, float2(0.0, 0.0), float2(0.999999, 0.999999));' + #10 +
     '  float3 rgb = frameTex.Sample(samp0, uv).rgb;' + #10 +
     '  rgb = saturate((rgb - 0.5) * contrast + 0.5 + brightness);' + #10 +
     '  return float4(rgb, 1.0);' + #10 +

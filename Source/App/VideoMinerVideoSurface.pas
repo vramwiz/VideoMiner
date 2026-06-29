@@ -998,6 +998,10 @@ begin
   if FZoomScale <= MIN_ZOOM then
   begin
     Canvas.StretchDraw(DestRect, FrameBitmap);
+    if DestRect.Width > 1 then
+      Canvas.CopyRect(Rect(DestRect.Right - 1, DestRect.Top, DestRect.Right,
+        DestRect.Bottom), Canvas, Rect(DestRect.Right - 2, DestRect.Top,
+        DestRect.Right - 1, DestRect.Bottom));
     Exit;
   end;
 
@@ -1019,6 +1023,10 @@ begin
     OffsetRect(SourceRect, 0, FBitmap.Height - SourceRect.Bottom);
 
   Canvas.CopyRect(DestRect, FrameBitmap.Canvas, SourceRect);
+  if DestRect.Width > 1 then
+    Canvas.CopyRect(Rect(DestRect.Right - 1, DestRect.Top, DestRect.Right,
+      DestRect.Bottom), Canvas, Rect(DestRect.Right - 2, DestRect.Top,
+      DestRect.Right - 1, DestRect.Bottom));
 end;
 
 function TVideoMinerVideoSurface.SafeAreaGuideRect(
