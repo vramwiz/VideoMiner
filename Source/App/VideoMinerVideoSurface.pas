@@ -20,6 +20,7 @@ type
     FAlphaMin               : Byte;                              // 現在フレームの最小 alpha 値
     FAlphaPixelCount        : Int64;                             // 現在フレームで alpha が 255 未満のピクセル数
     FBossExitButtonRect     : TRect;                             // 偽装画面の解除ボタン位置
+    FBossGitHubLinkRect     : TRect;                             // 偽装ヘルプ画面の GitHub リンク位置
     FBossGestureDetector    : TVideoMinerBossGestureDetector;    // ボスが来たモード発動用のマウスジェスチャー検出器
     FBossHelpPageIndex      : Integer;                           // ボスが来たモード中に表示するヘルプページ
     FBossMode               : Boolean;                           // 動画を隠して偽装画面を表示中か
@@ -50,6 +51,7 @@ type
     FSurfaceClickTimer      : TTimer;                            // ダブルクリック猶予後に再生切替を発火するタイマー
     FSuppressSurfaceClickUp : Boolean;                           // ダブルクリック成立後の MouseUp で単クリック扱いしないか
     FOnBossExitClick        : TNotifyEvent;                      // 偽装画面の解除ボタンが押された通知先
+    FOnBossGitHubClick      : TNotifyEvent;                      // 偽装ヘルプ画面の GitHub リンクが押された通知先
     FOnBossGesture          : TNotifyEvent;                      // ボスが来たジェスチャー成立の通知先
     FOnAddChapterClick      : TNotifyEvent;                      // チャプター追加ボタンの通知先
     FOnCheckClick           : TNotifyEvent;                      // Check ボタンの通知先
@@ -204,6 +206,8 @@ type
     procedure SetOnFirstFrameClick(Value: TNotifyEvent);
     // 偽装画面解除ボタンの通知先を設定する
     procedure SetOnBossExitClick(Value: TNotifyEvent);
+    // 偽装ヘルプ画面の GitHub リンク通知先を設定する
+    procedure SetOnBossGitHubClick(Value: TNotifyEvent);
     // ボスが来たジェスチャー成立の通知先を設定する
     procedure SetOnBossGesture(Value: TNotifyEvent);
     // チャプター追加ボタンの通知先を設定する
@@ -356,6 +360,7 @@ type
     property FullScreen: Boolean write SetFullScreen;
     property SeekWheelFrameStepMs: Integer write SetSeekWheelFrameStepMs;
     property OnBossExitClick: TNotifyEvent read FOnBossExitClick write SetOnBossExitClick;
+    property OnBossGitHubClick: TNotifyEvent read FOnBossGitHubClick write SetOnBossGitHubClick;
     property OnBossGesture: TNotifyEvent read FOnBossGesture write SetOnBossGesture;
     property OnAddChapterClick: TNotifyEvent read FOnAddChapterClick write SetOnAddChapterClick;
     property OnCheckClick: TNotifyEvent read FOnCheckClick write SetOnCheckClick;
@@ -1871,7 +1876,13 @@ begin
   ResetMouseCursorAutoHide(MousePoint);
 
   if FBossMode then
+  begin
+    if PtInRect(FBossGitHubLinkRect, MousePoint) then
+      Cursor := crHandPoint
+    else
+      Cursor := crDefault;
     Exit;
+  end;
 
   if FPanning then
   begin
@@ -2024,6 +2035,9 @@ begin
     if (Button = mbLeft) and PtInRect(FBossExitButtonRect, Point(X, Y)) and
        Assigned(FOnBossExitClick) then
       FOnBossExitClick(Self);
+    if (Button = mbLeft) and PtInRect(FBossGitHubLinkRect, Point(X, Y)) and
+       Assigned(FOnBossGitHubClick) then
+      FOnBossGitHubClick(Self);
     Exit;
   end;
 
@@ -2325,7 +2339,8 @@ begin
 
   if FBossMode then
   begin
-    DrawVideoMinerBossOverlay(Canvas, ClientRect, FBossHelpPageIndex, FBossExitButtonRect);
+    DrawVideoMinerBossOverlay(Canvas, ClientRect, FBossHelpPageIndex,
+      FBossExitButtonRect, FBossGitHubLinkRect);
     Exit;
   end;
 
@@ -3000,6 +3015,11 @@ end;
 procedure TVideoMinerVideoSurface.SetOnBossExitClick(Value: TNotifyEvent);
 begin
   FOnBossExitClick := Value;
+end;
+
+procedure TVideoMinerVideoSurface.SetOnBossGitHubClick(Value: TNotifyEvent);
+begin
+  FOnBossGitHubClick := Value;
 end;
 
 procedure TVideoMinerVideoSurface.SetOnBossGesture(Value: TNotifyEvent);

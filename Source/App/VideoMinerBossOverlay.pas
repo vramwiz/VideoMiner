@@ -14,7 +14,7 @@ function VideoMinerBossHelpPageCount: Integer;
 
 // 動画面全体へ偽装ヘルプ画面を描き、解除ボタンの矩形を返す
 procedure DrawVideoMinerBossOverlay(Canvas: TCanvas; const Bounds: TRect;
-  PageIndex: Integer; out ExitButtonRect: TRect);
+  PageIndex: Integer; out ExitButtonRect, GitHubLinkRect: TRect);
 
 implementation
 
@@ -38,6 +38,7 @@ const
   COLOR_STATUS        = $00A5642A; // ステータスバー背景
   COLOR_TEXT          = $00D6D0C4; // 通常文字
   COLOR_DIM_TEXT      = $009A9388; // 補助文字
+  COLOR_LINK_TEXT     = $0038E8FF; // GitHub リンク文字
   COLOR_LINE_NO       = $007A746B; // 行番号
   COLOR_BUTTON        = $00413B34; // Return ボタン背景
   COLOR_BUTTON_BORDER = $00665D52; // Return ボタン枠線
@@ -261,13 +262,16 @@ begin
 end;
 
 procedure DrawVideoMinerBossOverlay(Canvas: TCanvas; const Bounds: TRect;
-  PageIndex: Integer; out ExitButtonRect: TRect);
+  PageIndex: Integer; out ExitButtonRect, GitHubLinkRect: TRect);
 var
   ActivityRect: TRect;
   CodeLineRect: TRect;
   EditorRect: TRect;
   I: Integer;
   Page: TBossHelpPage;
+  LinkText: string;
+  LinkTextLeft: Integer;
+  LinkTextWidth: Integer;
   PageText: string;
   SafePageIndex: Integer;
   SidebarWidth: Integer;
@@ -277,6 +281,7 @@ var
   TopBarRect: TRect;
 begin
   ExitButtonRect := TRect.Empty;
+  GitHubLinkRect := TRect.Empty;
   if Bounds.IsEmpty then
     Exit;
 
@@ -344,6 +349,27 @@ begin
 
   ExitButtonRect := Rect(Bounds.Right - 102, StatusRect.Top + 4,
     Bounds.Right - 12, StatusRect.Bottom - 4);
+  GitHubLinkRect := Rect(Max(StatusRect.Left + 10, ExitButtonRect.Left - 190),
+    StatusRect.Top + 4, ExitButtonRect.Left - 12, StatusRect.Bottom - 4);
+  Canvas.Brush.Color := COLOR_BUTTON;
+  Canvas.Brush.Style := bsSolid;
+  Canvas.Pen.Style := psSolid;
+  Canvas.Pen.Color := COLOR_BUTTON_BORDER;
+  Canvas.RoundRect(GitHubLinkRect.Left, GitHubLinkRect.Top,
+    GitHubLinkRect.Right, GitHubLinkRect.Bottom, 6, 6);
+  LinkText := 'vramwiz/VideoMiner';
+  ClipText(Canvas, Rect(GitHubLinkRect.Left + 12, GitHubLinkRect.Top,
+    GitHubLinkRect.Right - 12, GitHubLinkRect.Bottom), LinkText,
+    COLOR_LINK_TEXT, 9);
+  SetTextStyle(Canvas, 9, COLOR_LINK_TEXT, False);
+  LinkTextLeft := GitHubLinkRect.Left + 12;
+  LinkTextWidth := Min(Canvas.TextWidth(LinkText),
+    GitHubLinkRect.Right - GitHubLinkRect.Left - 24);
+  Canvas.Pen.Style := psSolid;
+  Canvas.Pen.Color := COLOR_LINK_TEXT;
+  Canvas.MoveTo(LinkTextLeft, GitHubLinkRect.Bottom - 7);
+  Canvas.LineTo(LinkTextLeft + LinkTextWidth, GitHubLinkRect.Bottom - 7);
+
   Canvas.Brush.Color := COLOR_BUTTON;
   Canvas.Brush.Style := bsSolid;
   Canvas.Pen.Style := psSolid;
@@ -357,7 +383,7 @@ begin
   PageText := Format('  Page %d/%d  -  Up/Down or PageUp/PageDown',
     [SafePageIndex + 1, Length(HELP_PAGES)]);
   ClipText(Canvas, Rect(StatusRect.Left + 10, StatusRect.Top,
-    ExitButtonRect.Left - 12, StatusRect.Bottom), Page.StatusText + PageText,
+    GitHubLinkRect.Left - 12, StatusRect.Bottom), Page.StatusText + PageText,
     clWhite, 9);
 end;
 

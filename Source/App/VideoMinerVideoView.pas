@@ -78,6 +78,8 @@ type
     procedure SetMuted(Value: Boolean);
     // ボスが来たモード解除ボタンのクリック先を設定する
     procedure SetOnBossExitClick(Value: TNotifyEvent);
+    // ボスが来たモードの GitHub リンククリック先を設定する
+    procedure SetOnBossGitHubClick(Value: TNotifyEvent);
     // ボスが来たモード発動ジェスチャーの通知先を設定する
     procedure SetOnBossGesture(Value: TNotifyEvent);
     // チャプター追加ボタンのクリック先を設定する
@@ -210,6 +212,7 @@ type
     property EndActionText: string write SetEndActionText;
     property FullScreen: Boolean write SetFullScreen;
     property OnBossExitClick: TNotifyEvent write SetOnBossExitClick;
+    property OnBossGitHubClick: TNotifyEvent write SetOnBossGitHubClick;
     property OnBossGesture: TNotifyEvent write SetOnBossGesture;
     property OnAddChapterClick: TNotifyEvent write SetOnAddChapterClick;
     property OnCheckClick: TNotifyEvent write SetOnCheckClick;
@@ -688,6 +691,12 @@ procedure TVideoMinerVideoView.SetOnBossExitClick(Value: TNotifyEvent);
 begin
   if FSurface <> nil then
     FSurface.OnBossExitClick := Value;
+end;
+
+procedure TVideoMinerVideoView.SetOnBossGitHubClick(Value: TNotifyEvent);
+begin
+  if FSurface <> nil then
+    FSurface.OnBossGitHubClick := Value;
 end;
 
 procedure TVideoMinerVideoView.SetOnBossGesture(Value: TNotifyEvent);

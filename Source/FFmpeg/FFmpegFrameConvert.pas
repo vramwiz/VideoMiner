@@ -296,8 +296,8 @@ var
   DstFormat   : Integer;                // FFmpeg の出力ピクセル形式
   RowBytes    : Integer;                // 1 行分の表示バイト数
   TempStride  : Integer;                // 一時出力先の stride
-  TempResized : Boolean;                // 一時バッファを今回リサイズしたか
 {$IFDEF DEBUG}
+  TempResized : Boolean;                // 一時バッファを今回リサイズしたか
   TotalWatch  : TStopwatch;             // BGRX32 変換全体の計測
   StepWatch   : TStopwatch;             // sws/copy 個別の計測
   SwsMs       : Double;                 // sws_scale にかかった時間
@@ -314,7 +314,9 @@ begin
   DstFormat := AV_PIX_FMT_BGRA;
   RowBytes := Frame.width * 4;
   TempStride := RowBytes;
+{$IFDEF DEBUG}
   TempResized := False;
+{$ENDIF}
 
   if BufferStride < 0 then
   begin
@@ -325,7 +327,9 @@ begin
       SetLength(TempBuffer, NativeInt(TempStride) * Frame.height);
       CachedTempStride := TempStride;
       CachedTempHeight := Frame.height;
+{$IFDEF DEBUG}
       TempResized := True;
+{$ENDIF}
     end;
   end
   else if Length(TempBuffer) > 0 then

@@ -6,7 +6,8 @@
 interface
 
 uses
-  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
+  Winapi.Windows, Winapi.Messages, Winapi.ShellAPI,
+  System.SysUtils, System.Variants, System.Classes,
   System.Diagnostics, System.Math, System.Types,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
   Vcl.ExtCtrls, Vcl.Graphics, Vcl.StdCtrls, FFmpegDecoder,
@@ -148,6 +149,8 @@ type
     procedure ConfigureLoopSegment(PositionMs: Integer);
     // 偽装画面の Return ボタンからボスが来たモードを解除する
     procedure BossExitClick(Sender: TObject);
+    // 偽装ヘルプ画面の GitHub リンクを既定ブラウザで開く
+    procedure BossGitHubClick(Sender: TObject);
     // マウス往復ジェスチャー成立時にボスが来たモードへ入る
     procedure BossGesture(Sender: TObject);
     // 動画面右クリックからサムネイル一覧を開閉する
@@ -241,6 +244,7 @@ const
   CAPTION_BUTTON_HOVER_COLOR    = $00232323; // 最小化/最大化ボタン hover 時の背景色
   MIN_FORM_WIDTH                = 520;        // 下部操作バーが破綻しない最小フォーム幅
   MIN_FORM_HEIGHT               = 360;        // 動画表示と下部操作バーを残せる最小フォーム高さ
+  VIDEOMINER_GITHUB_URL         = 'https://github.com/vramwiz/VideoMiner';
 
 {$R *.dfm}
 
@@ -371,6 +375,7 @@ begin
   if FThumbnailBrowserController <> nil then
     FThumbnailBrowserController.AttachResizeEdges(VIDEO_MINER_RESIZE_BORDER);
   FVideoView.OnBossExitClick := BossExitClick;
+  FVideoView.OnBossGitHubClick := BossGitHubClick;
   FVideoView.OnBossGesture := BossGesture;
   FChapterController.RefreshOverlay;
 {$IFDEF DEBUG}
@@ -1091,6 +1096,13 @@ end;
 procedure TVideoMinerMainForm.BossExitClick(Sender: TObject);
 begin
   FWindowModeController.ExitBossMode;
+end;
+
+procedure TVideoMinerMainForm.BossGitHubClick(Sender: TObject);
+begin
+  if ShellExecute(Handle, 'open', PChar(VIDEOMINER_GITHUB_URL), nil, nil,
+    SW_SHOWNORMAL) <= 32 then
+    FInfoController.SetStatusCaption('Failed to open: ' + VIDEOMINER_GITHUB_URL);
 end;
 
 // 再生を停止する

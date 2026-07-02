@@ -179,6 +179,9 @@ VideoMiner は、ユーザー設定を次の場所に保存します。
 
 VideoMiner は [GNU General Public License version 3](LICENSE) に従って配布します。
 
+GPL-3.0 の条件に従う限り、商用利用や営利目的での利用も可能です。
+改変版の配布や再配布を行う場合は、GPL-3.0 の条件を守ってください。
+
 動画の読み込みとデコードには FFmpeg を使用します。FFmpeg は VideoMiner 本体とは別の著作物であり、FFmpeg 側のライセンス条件が適用されます。
 
 - [FFmpeg](https://ffmpeg.org/)

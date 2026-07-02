@@ -141,3 +141,4 @@ powershell -ExecutionPolicy Bypass -File tools\EnsureUtf8Bom.ps1 -Check
 - このファイルには課題以外の最新状態説明を増やさない。
 - 日付付きの記録は `HISTORY.md` へ移す。
 - 完了した課題は `HISTORY.md` へ移して、このファイルから削る。
+- README のライセンス欄では、GPL-3.0 の条件に従えば商用利用・営利目的利用も可能であることを明記する。

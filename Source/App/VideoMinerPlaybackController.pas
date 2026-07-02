@@ -577,11 +577,14 @@ begin
   finally
     UpdatingSeek := False;
   end;
-  FrameShown := Assigned(ShowFrameAtMs) and ShowFrameAtMs(StopFrameMs);
 {$IFDEF DEBUG}
+  FrameShown := Assigned(ShowFrameAtMs) and ShowFrameAtMs(StopFrameMs);
   WriteVideoMinerSlowLog(Format(
     'finish_at_end_stop seek_max_ms=%d last_frame_ms=%d shown=%s',
     [SeekMaxMs, StopFrameMs, BoolToStr(FrameShown, True)]));
+{$ELSE}
+  if Assigned(ShowFrameAtMs) then
+    ShowFrameAtMs(StopFrameMs);
 {$ENDIF}
   StopAtEnd;
   if Assigned(UpdateInfo) then
@@ -1152,11 +1155,15 @@ var
   VideoSeekMs: Double;
   AudioStartMs: Double;
   VideoReopened: Boolean;
+{$IFDEF DEBUG}
   DebugLogEnabled: Boolean;
+{$ENDIF}
 begin
   Result := False;
   ErrorMessage := '';
+{$IFDEF DEBUG}
   DebugLogEnabled := VideoMinerDebugLogEnabled;
+{$ENDIF}
 
   if VideoFile = '' then
     Exit;
@@ -1218,8 +1225,8 @@ begin
       Decoder.Close;
       if not Decoder.Open(VideoFile, OpenInfo, ErrorMessage) then
       begin
-        VideoPrepareMs := StepWatch.Elapsed.TotalMilliseconds;
 {$IFDEF DEBUG}
+        VideoPrepareMs := StepWatch.Elapsed.TotalMilliseconds;
         if DebugLogEnabled then
           WriteVideoMinerDebugLog(Format(
             'start_playback_failed step="video_open_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f total_ms=%.3f err="%s"',
@@ -1244,8 +1251,8 @@ begin
       if not FVideoView.ShowFrameAt(Decoder, TargetMs, ErrorMessage,
         not FrameAlreadyShown, FastSeek) then
       begin
-        VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
 {$IFDEF DEBUG}
+        VideoSeekMs := StepWatch.Elapsed.TotalMilliseconds;
         if DebugLogEnabled then
           WriteVideoMinerDebugLog(Format(
             'start_playback_failed step="video_seek_fallback" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f total_ms=%.3f err="%s"',
@@ -1273,8 +1280,8 @@ begin
   if not FAudioPlayback.StartAt(VideoFile, VideoInfo, TargetMs,
     ErrorMessage) then
   begin
-    AudioStartMs := StepWatch.Elapsed.TotalMilliseconds;
 {$IFDEF DEBUG}
+    AudioStartMs := StepWatch.Elapsed.TotalMilliseconds;
     if DebugLogEnabled then
       WriteVideoMinerDebugLog(Format(
         'start_playback_failed step="audio_start" file="%s" target_ms=%d video_prepare_ms=%.3f video_seek_ms=%.3f audio_start_ms=%.3f total_ms=%.3f err="%s"',
@@ -1791,10 +1798,10 @@ begin
            0]));
     end;
   end;
+{$IFDEF DEBUG}
   if SlowLogEnabled then
   begin
     TotalMs := TotalWatch.Elapsed.TotalMilliseconds;
-{$IFDEF DEBUG}
     if (TotalMs >= SLOW_TICK_LOG_MS) or (PumpMs >= SLOW_TICK_LOG_MS) or
        (DecodeMs >= SLOW_TICK_LOG_MS) or (SyncMs >= SLOW_TICK_LOG_MS) then
       WriteVideoMinerSlowLog(Format(
@@ -1802,8 +1809,8 @@ begin
         [ExtractFileName(VideoFile), AudioPositionMs, PositionMs, LagMs,
          DropCount, BoolToStr(DidSeekToAudio, True), PumpMs, DecodeMs, SyncMs,
          TotalMs]));
-{$ENDIF}
   end;
+{$ENDIF}
 end;
 
 procedure TVideoMinerPlaybackController.StopForSeek;
