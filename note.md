@@ -3,7 +3,7 @@
 作業再開時に最初に見るメモ。ここには現在の課題、開発方法、ルールだけを置く。
 
 - 日付付きの作業記録、試行錯誤、計測結果は `HISTORY.md` へ置く。
-- 仕様、操作説明、構成説明は `README.md` へ置く。
+- 利用者向けの仕様、操作説明、配布説明は `README.md` へ置く。
 - 課題が完了したら、完了内容を `HISTORY.md` へ移し、このファイルから削る。
 
 ## 優先課題
@@ -44,6 +44,22 @@
    - 残りはスピーカー、倍速表示、全画面アイコンだけ微調整が必要。
    - 調整対象は主に `Source\FFmpeg\FFmpegD3D11TextureProbe.pas` の D3D overlay 側。GDI 側 `Source\App\VideoMinerOverlay.pas` にも Debug 用水平ラインが残っている。
    - 完了時は Debug 用水平ラインを削除または無効化し、`HISTORY.md` に移す。
+
+## プロジェクト構成
+
+- `VideoMiner.dpr` / `VideoMiner.dproj`: Delphi プロジェクト本体。
+- `Source\App`: フォーム、動画表示、オーバーレイ、設定、音声再生ラッパ、メディア一覧、各 controller など VideoMiner 固有の処理。
+- `Source\Decode`: FFmpeg を使った動画/音声デコード、シーク、音声 PCM 読み取り、フレーム取得。
+- `Source\FFmpeg`: FFmpeg API 宣言、フレーム変換、QSV 関連、ストリーム情報取得などの低レベル処理。
+- `Source\Lib`: ドラッグ&ドロップ、ショートカット、透明リサイズエッジ、タイマー、フォルダ監視などの補助処理。
+- `ffmpeg-8.1.1-full_build-shared`: 実行時に使う FFmpeg DLL 群。
+- `Win64`: Debug / Release のビルド出力先。
+
+## 実装責務
+
+- `VideoMinerMainForm.pas` は、フォーム生成/破棄、VCL イベント入口、Windows message 入口、controller 接続、再生/シークの最小限の橋渡しに留める。
+- 表示状態、操作の意味づけ、再生、シーク、一覧、overlay、チャプター、外部 open、ファイル再読み込みなどは機能単位の controller / session へ分離する。
+- 大きな機能追加前後には、MainForm へ処理が戻りすぎていないか確認する。
 
 ## 後続課題
 
@@ -118,10 +134,33 @@ Debug Win64 ビルド例:
 cmd /c "call ""C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat"" && msbuild VideoMiner.dproj /t:Build /p:Config=Debug /p:Platform=Win64"
 ```
 
+Release Win64 ビルド例:
+
+```powershell
+cmd /c "call ""C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat"" && msbuild VideoMiner.dproj /t:Build /p:Config=Release /p:Platform=Win64"
+```
+
+`rsvars.bat` を使わない場合の Debug Win64 ビルド例:
+
+```powershell
+$env:BDS='C:\Program Files (x86)\Embarcadero\Studio\37.0'
+& 'C:\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe' `
+  'D:\DelphiProg\test\VideoMiner\VideoMiner.dproj' `
+  /t:Build /p:Config=Debug /p:Platform=Win64
+```
+
 文字コード確認:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\EnsureUtf8Bom.ps1 -Check
+```
+
+管理対象の `.pas` / `.dfm` / `.dpr` / `.dproj` / `.inc` / `.rc` / `.md` / `.txt` / `.ps1` / `.bat` / `.cmd` は UTF-8 BOM 付き、改行 CRLF で保存する。
+
+変換が必要な場合:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\EnsureUtf8Bom.ps1
 ```
 
 ## コメントルール
