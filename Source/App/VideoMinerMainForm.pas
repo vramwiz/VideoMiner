@@ -116,6 +116,8 @@ type
     procedure CyclePlaybackRate;
     // 表示だけを90度ずつ回転する
     procedure RotateDisplay90;
+    // 表示だけを左右反転する
+    procedure ToggleHorizontalMirror;
     // overlay の終端動作ボタンから切り替えを実行する
     procedure EndActionOverlayClick(Sender: TObject);
     // 全画面表示を切り替える
@@ -349,6 +351,7 @@ begin
   FCommandController.OnPlaybackRateCycle := CyclePlaybackRate;
   FCommandController.OnPlayFromCurrentPosition := PlayFromCurrentPosition;
   FCommandController.OnRotateDisplay := RotateDisplay90;
+  FCommandController.OnToggleHorizontalMirror := ToggleHorizontalMirror;
   FCommandController.OnSaveAudioSettings := SaveAudioPlaybackSettings;
   FCommandController.OnSeekByMs := SeekByMs;
   FCommandController.OnSeekByWheel := SeekByWheelToMs;
@@ -751,6 +754,42 @@ begin
   if FInfoController <> nil then
     FInfoController.SetStatusCaption(Format('Display rotation: +%d degrees.',
       [FVideoView.DisplayRotationOffset]));
+end;
+
+procedure TVideoMinerMainForm.ToggleHorizontalMirror;
+var
+  FrameShown: Boolean;
+  PositionMs: Integer;
+  StatusText: string;
+  WasPlaying: Boolean;
+begin
+  if FVideoView = nil then
+    Exit;
+
+  WasPlaying := PlaybackActiveOrPending;
+  PositionMs := CurrentPlaybackPositionMs;
+  if FPlaybackController <> nil then
+    FPlaybackController.StopForSeek;
+  FVideoView.ToggleHorizontalMirror;
+  if FSeekHoverPreviewController <> nil then
+    FSeekHoverPreviewController.Clear;
+
+  if FMediaSession.VideoFile <> '' then
+  begin
+    PositionMs := Max(0, Min(FMediaSession.SeekMaxMs, PositionMs));
+    FrameShown := ShowFrameAtMs(PositionMs);
+    if WasPlaying then
+      StartPlaybackAtMs(PositionMs, FrameShown)
+    else if FInfoController <> nil then
+      FInfoController.UpdateInfo;
+  end;
+
+  if FVideoView.HorizontalMirror then
+    StatusText := 'Display mirror: horizontal on.'
+  else
+    StatusText := 'Display mirror: horizontal off.';
+  if FInfoController <> nil then
+    FInfoController.SetStatusCaption(StatusText);
 end;
 
 procedure TVideoMinerMainForm.EndActionOverlayClick(Sender: TObject);

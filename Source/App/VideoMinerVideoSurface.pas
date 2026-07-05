@@ -35,6 +35,7 @@ type
     FLastD3DStateLogText    : string;                            // 直近に出した D3D 表示判定ログ
     FLastD3DStateLogTick    : UInt64;                            // 直近に D3D 表示判定ログを出した時刻
     FForceCompactSeekBarPaint : Boolean;                         // ループ再開中の一時 GDI 表示でも D3D 風に描くか
+    FHorizontalMirror       : Boolean;                           // 動画表示だけを左右反転しているか
     FLiveResizeActive       : Boolean;                           // フォームのドラッグリサイズ中か
     FLastSeekBarPaintLogText: string;                            // 直近に出した GDI seek bar 描画ログ
     FLastSeekBarPaintLogTick: UInt64;                            // 直近に GDI seek bar 描画ログを出した時刻
@@ -112,12 +113,17 @@ type
     function CanStartPan(const Point: TPoint): Boolean;
     // 指定位置から動画面の単クリック操作を開始できるか返す
     function CanStartSurfaceClick(const Point: TPoint): Boolean;
+    // 指定位置から動画面の右クリック操作を開始できるか返す
+    function CanStartSurfaceRightClick(const Point: TPoint): Boolean;
     // 次動画ボタンに当たっているか返す
     function HitNextFileButton(const Point: TPoint): Boolean;
     // 前動画ボタンに当たっているか返す
     function HitPreviousFileButton(const Point: TPoint): Boolean;
     // 現在のズーム状態に従って動画フレームを描画する
     procedure DrawFrame(Canvas: TCanvas; const DestRect: TRect);
+    // 現在の左右反転状態に従って source 矩形を動画表示矩形へ描画する
+    procedure DrawFrameBitmap(Canvas: TCanvas; Bitmap: TBitmap;
+      const DestRect, SourceRect: TRect);
     // 動画座標の中央 90% を確認用ガイドとして描く
     procedure DrawSafeAreaGuide(Canvas: TCanvas; const DestRect: TRect);
     // シークバー hover 位置のフレームプレビューを描く
@@ -300,6 +306,8 @@ type
     procedure ChangeBossHelpPage(Delta: Integer);
     // 外部から渡されたホイール操作をこの表示面で処理する
     function HandleMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean;
+    // 表示だけを左右反転する
+    procedure ToggleHorizontalMirror;
     // 停止状態から再生へ入る直前に、停止中 overlay の残りを閉じる
     procedure HidePlaybackStartOverlays;
     // 現在表示中フレームの四隅が暗いか返す
@@ -358,6 +366,7 @@ type
     property Chapters: TVideoMinerOverlayChapters write SetChapters;
     property EndActionText: string write SetEndActionText;
     property FullScreen: Boolean write SetFullScreen;
+    property HorizontalMirror: Boolean read FHorizontalMirror;
     property SeekWheelFrameStepMs: Integer write SetSeekWheelFrameStepMs;
     property OnBossExitClick: TNotifyEvent read FOnBossExitClick write SetOnBossExitClick;
     property OnBossGitHubClick: TNotifyEvent read FOnBossGitHubClick write SetOnBossGitHubClick;
@@ -684,12 +693,13 @@ begin
 
   Text := Format(
     'd3d_surface_state context=%s ready=%s reason=%s playback=%s seek_bar=%s ' +
-    'seek_preview=%s overlay=%s safe_area=%s loading=%s zoom=%.3f alpha=%s ' +
+    'seek_preview=%s overlay=%s safe_area=%s loading=%s zoom=%.3f mirror=%s alpha=%s ' +
     'prev_nav=%s next_nav=%s client=%dx%d',
     [Context, BoolToStr(D3DReady, True), Reason, BoolToStr(FPlaybackActive, True),
      BoolToStr(FSeekBarVisible, True), BoolToStr(FSeekPreviewVisible, True),
      BoolToStr(FOverlayVisible, True), BoolToStr(FSafeAreaVisible, True),
-     BoolToStr(FLoadingActive, True), FZoomScale, BoolToStr(FSourceHasAlpha, True),
+     BoolToStr(FLoadingActive, True), FZoomScale, BoolToStr(FHorizontalMirror, True),
+     BoolToStr(FSourceHasAlpha, True),
      BoolToStr((FPreviousFileButton <> nil) and FPreviousFileButton.Visible, True),
      BoolToStr((FNextFileButton <> nil) and FNextFileButton.Visible, True),
      ClientWidth, ClientHeight]);
@@ -983,6 +993,31 @@ begin
   FAlphaCompositeDirty := False;
 end;
 
+procedure TVideoMinerVideoSurface.DrawFrameBitmap(Canvas: TCanvas;
+  Bitmap: TBitmap; const DestRect, SourceRect: TRect);
+var
+  OldStretchMode: Integer;
+begin
+  if (Bitmap = nil) or DestRect.IsEmpty or SourceRect.IsEmpty then
+    Exit;
+
+  OldStretchMode := SetStretchBltMode(Canvas.Handle, COLORONCOLOR);
+  try
+    if FHorizontalMirror then
+      StretchBlt(Canvas.Handle, DestRect.Right, DestRect.Top,
+        -DestRect.Width, DestRect.Height, Bitmap.Canvas.Handle,
+        SourceRect.Left, SourceRect.Top, SourceRect.Width, SourceRect.Height,
+        SRCCOPY)
+    else
+      StretchBlt(Canvas.Handle, DestRect.Left, DestRect.Top,
+        DestRect.Width, DestRect.Height, Bitmap.Canvas.Handle,
+        SourceRect.Left, SourceRect.Top, SourceRect.Width, SourceRect.Height,
+        SRCCOPY);
+  finally
+    SetStretchBltMode(Canvas.Handle, OldStretchMode);
+  end;
+end;
+
 procedure TVideoMinerVideoSurface.DrawFrame(Canvas: TCanvas; const DestRect: TRect);
 var
   FrameBitmap : TBitmap;
@@ -1004,7 +1039,8 @@ begin
 
   if FZoomScale <= MIN_ZOOM then
   begin
-    Canvas.StretchDraw(DestRect, FrameBitmap);
+    DrawFrameBitmap(Canvas, FrameBitmap, DestRect,
+      Rect(0, 0, FrameBitmap.Width, FrameBitmap.Height));
     if DestRect.Width > 1 then
       Canvas.CopyRect(Rect(DestRect.Right - 1, DestRect.Top, DestRect.Right,
         DestRect.Bottom), Canvas, Rect(DestRect.Right - 2, DestRect.Top,
@@ -1029,7 +1065,7 @@ begin
   if SourceRect.Bottom > FBitmap.Height then
     OffsetRect(SourceRect, 0, FBitmap.Height - SourceRect.Bottom);
 
-  Canvas.CopyRect(DestRect, FrameBitmap.Canvas, SourceRect);
+  DrawFrameBitmap(Canvas, FrameBitmap, DestRect, SourceRect);
   if DestRect.Width > 1 then
     Canvas.CopyRect(Rect(DestRect.Right - 1, DestRect.Top, DestRect.Right,
       DestRect.Bottom), Canvas, Rect(DestRect.Right - 2, DestRect.Top,
@@ -1300,8 +1336,12 @@ begin
   SourceHeight := FBitmap.Height / FZoomScale;
   SourceLeft := FZoomCenterX - SourceWidth / 2;
   SourceTop := FZoomCenterY - SourceHeight / 2;
-  ImageX := SourceLeft + (Point.X - DestRect.Left) / Max(1, DestRect.Width) *
-    SourceWidth;
+  if FHorizontalMirror then
+    ImageX := SourceLeft + (1.0 - (Point.X - DestRect.Left) /
+      Max(1, DestRect.Width)) * SourceWidth
+  else
+    ImageX := SourceLeft + (Point.X - DestRect.Left) / Max(1, DestRect.Width) *
+      SourceWidth;
   ImageY := SourceTop + (Point.Y - DestRect.Top) / Max(1, DestRect.Height) *
     SourceHeight;
   ImageX := Max(0.0, Min(FBitmap.Width - 1.0, ImageX));
@@ -1598,6 +1638,7 @@ var
   State: TD3D11VideoZoomState;
 begin
   State := Default(TD3D11VideoZoomState);
+  State.MirrorHorizontal := FHorizontalMirror;
   if (FBitmap = nil) or (FBitmap.Width <= 0) or (FBitmap.Height <= 0) or
      (FZoomScale <= MIN_ZOOM) then
   begin
@@ -1629,11 +1670,22 @@ begin
     OffsetRect(SourceRect, 0, FBitmap.Height - SourceRect.Bottom);
 
   State.Active := True;
-  State.Left := SourceRect.Left / FBitmap.Width;
+  if FHorizontalMirror then
+    State.Left := (FBitmap.Width - SourceRect.Right) / FBitmap.Width
+  else
+    State.Left := SourceRect.Left / FBitmap.Width;
   State.Top := SourceRect.Top / FBitmap.Height;
   State.Width := Max(1, SourceRect.Width) / FBitmap.Width;
   State.Height := Max(1, SourceRect.Height) / FBitmap.Height;
   SetNv12TextureD3DVideoZoom(State);
+end;
+
+procedure TVideoMinerVideoSurface.ToggleHorizontalMirror;
+begin
+  FHorizontalMirror := not FHorizontalMirror;
+  UpdateD3DVideoZoomState;
+  if not RefreshD3DFramePresentation then
+    Invalidate;
 end;
 
 function TVideoMinerVideoSurface.RefreshD3DFramePresentation: Boolean;
@@ -1665,6 +1717,16 @@ begin
   Result := not ((FSeekBarVisible or ((FSeekBar <> nil) and FSeekBar.Dragging)) and
     HitSeekBar(Point)) and
     not HitAnyOverlayButton(Point) and
+    not ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible and
+      HitPreviousFileButton(Point)) and
+    not ((FNextFileButton <> nil) and FNextFileButton.Visible and
+      HitNextFileButton(Point));
+end;
+
+function TVideoMinerVideoSurface.CanStartSurfaceRightClick(
+  const Point: TPoint): Boolean;
+begin
+  Result := not HitAnyOverlayButton(Point) and
     not ((FPreviousFileButton <> nil) and FPreviousFileButton.Visible and
       HitPreviousFileButton(Point)) and
     not ((FNextFileButton <> nil) and FNextFileButton.Visible and
@@ -1790,7 +1852,7 @@ begin
         Exit;
       end;
     end;
-    FRightSurfaceClickArmed := CanStartSurfaceClick(Point(X, Y));
+    FRightSurfaceClickArmed := CanStartSurfaceRightClick(Point(X, Y));
     if FRightSurfaceClickArmed then
       MouseCapture := True;
     Exit;
@@ -2059,7 +2121,7 @@ begin
       FRightSurfaceClickArmed := False;
       Exit;
     end;
-    if FRightSurfaceClickArmed and CanStartSurfaceClick(Point(X, Y)) and
+    if FRightSurfaceClickArmed and CanStartSurfaceRightClick(Point(X, Y)) and
        Assigned(FOnSurfaceRightClick) then
       FOnSurfaceRightClick(Self);
     FRightSurfaceClickArmed := False;

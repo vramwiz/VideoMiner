@@ -57,16 +57,16 @@ const
         '| Ctrl+Left / Ctrl+Right | Previous / next chapter |',
         '| Home / End | First / last frame area |',
         '| R | Rotate display 90 degrees |',
+        '| H | Mirror display horizontally |',
         '| S | Playback speed 1.0x / 1.5x / 2.0x |',
         '| Ctrl+Up / Ctrl+Down | Brightness |',
         '| Shift+Up / Shift+Down | Contrast |',
         '| Up / Down | Volume |',
         '| M | Mute |',
         '| F1/F11/Esc | Help / full screen / exit |',
-        '| Right click / right+wheel | Thumbnails / frame step |',
-        '',
         'Mouse:',
-        '- Click: play/stop, double: full screen, wheel: zoom, drag: pan');
+        '- Click: play/stop, double: full screen, wheel: zoom, drag: pan',
+        '- Right click / right+wheel: thumbnails / frame step');
       StatusText: 'help/basic  Ln 1, Col 1  Markdown  UTF-8'
     ),
     (

@@ -40,6 +40,8 @@ type
     procedure LogD3DDecodeState(ConvertFrame, D3DAllowed: Boolean; EffectiveRotation: Integer);
     // フォーム側で親子関係やフォーカス対象として扱うサーフェスを返す
     function GetSurfaceControl: TWinControl;
+    // 表示だけを左右反転しているか返す
+    function GetHorizontalMirror: Boolean;
     // 現在表示中の動画フレーム Bitmap を返す
     function GetCurrentFrameBitmap: TBitmap;
     // Bitmap を BGRX32 デコード先として使える状態にする
@@ -148,6 +150,8 @@ type
       CaptureCurrentFrame: Boolean = False);
     // 表示だけを90度ずつ回転し、以降の再生フレームにも反映する
     procedure RotateDisplay90;
+    // 表示だけを左右反転し、以降の再生フレームにも反映する
+    procedure ToggleHorizontalMirror;
     // ボスが来たモード中のヘルプページを前後へ切り替える
     procedure ChangeBossHelpPage(Delta: Integer);
     // 指定位置のフレームをデコードし、必要なら表示へ反映する
@@ -242,6 +246,7 @@ type
     property SeekWheelFrameStepMs: Integer write SetSeekWheelFrameStepMs;
     property CurrentFrameBitmap: TBitmap read GetCurrentFrameBitmap;
     property DisplayRotationOffset: Integer read FDisplayRotationOffset;
+    property HorizontalMirror: Boolean read GetHorizontalMirror;
     property SurfaceControl: TWinControl read GetSurfaceControl;
     property Muted: Boolean write SetMuted;
     property VolumePercent: Integer write SetVolumePercent;
@@ -252,6 +257,11 @@ implementation
 function TVideoMinerVideoView.GetSurfaceControl: TWinControl;
 begin
   Result := FSurface;
+end;
+
+function TVideoMinerVideoView.GetHorizontalMirror: Boolean;
+begin
+  Result := (FSurface <> nil) and FSurface.HorizontalMirror;
 end;
 
 function TVideoMinerVideoView.GetCurrentFrameBitmap: TBitmap;
@@ -559,6 +569,14 @@ end;
 procedure TVideoMinerVideoView.RotateDisplay90;
 begin
   FDisplayRotationOffset := (FDisplayRotationOffset + 90) mod 360;
+  ClearShownFrameCache;
+  ClearLoopFrameCache;
+end;
+
+procedure TVideoMinerVideoView.ToggleHorizontalMirror;
+begin
+  if FSurface <> nil then
+    FSurface.ToggleHorizontalMirror;
   ClearShownFrameCache;
   ClearLoopFrameCache;
 end;

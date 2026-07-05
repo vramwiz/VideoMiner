@@ -18,6 +18,7 @@ type
     NavigateNext     : TShortcutActionProc; // フォルダ内の次の動画へ移動する
     CyclePlaybackRate: TShortcutActionProc; // 再生速度を切り替える
     RotateDisplay    : TShortcutActionProc; // 表示だけを90度ずつ回転する
+    ToggleHorizontalMirror: TShortcutActionProc; // 表示だけを左右反転する
     SeekToFirstFrame : TShortcutActionProc; // 先頭フレームへ移動する
     SeekToLastFrame  : TShortcutActionProc; // 末尾フレームへ移動する
     ShowHelp         : TShortcutActionProc; // ヘルプ表示を開く
@@ -57,6 +58,7 @@ begin
   Shortcuts.Add(VK_PRIOR  , []      , Handlers.NavigatePrevious);
   Shortcuts.Add(VK_NEXT   , []      , Handlers.NavigateNext);
   Shortcuts.Add(Ord('R')  , []      , Handlers.RotateDisplay);
+  Shortcuts.Add(Ord('H')  , []      , Handlers.ToggleHorizontalMirror);
   Shortcuts.Add(Ord('S')  , []      , Handlers.CyclePlaybackRate);
   Shortcuts.Add(VK_HOME   , []      , Handlers.SeekToFirstFrame);
   Shortcuts.Add(VK_END    , []      , Handlers.SeekToLastFrame);

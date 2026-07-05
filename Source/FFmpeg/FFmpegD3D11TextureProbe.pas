@@ -66,6 +66,7 @@ type
 
   TD3D11VideoZoomState = record
     Active: Boolean; // 動画 texture の一部を拡大表示するか
+    MirrorHorizontal: Boolean; // 動画 texture を左右反転して表示するか
     Left  : Double;  // 表示する source 矩形の左端。0.0..1.0 の正規化座標
     Top   : Double;  // 表示する source 矩形の上端。0.0..1.0 の正規化座標
     Width : Double;  // 表示する source 矩形の幅。0.0..1.0 の正規化座標
@@ -360,7 +361,10 @@ begin
 
   Constants[0] := GlobalD3DColorAdjustment.Brightness;
   Constants[1] := GlobalD3DColorAdjustment.Contrast;
-  Constants[2] := 0;
+  if GlobalD3DVideoZoom.MirrorHorizontal then
+    Constants[2] := 1.0
+  else
+    Constants[2] := 0.0;
   Constants[3] := 0;
   FDeviceContext.UpdateSubresource(FColorAdjustBuffer, 0, nil,
     @Constants[0], 0, 0);
@@ -592,8 +596,9 @@ const
     'Texture2D yTex : register(t0);' + #10 +
     'Texture2D uvTex : register(t1);' + #10 +
     'SamplerState samp0 : register(s0);' + #10 +
-    'cbuffer ColorAdjust : register(b0) { float brightness; float contrast; float2 colorPad; };' + #10 +
+    'cbuffer ColorAdjust : register(b0) { float brightness; float contrast; float mirrorHorizontal; float colorPad; };' + #10 +
     'float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {' + #10 +
+    '  if (mirrorHorizontal > 0.5) uv.x = 1.0 - uv.x;' + #10 +
     '  uv = clamp(uv, float2(0.0, 0.0), float2(0.999999, 0.999999));' + #10 +
     '  float y = saturate((yTex.Sample(samp0, uv).r - (16.0 / 255.0)) * (255.0 / 219.0));' + #10 +
     '  float2 chroma = (uvTex.Sample(samp0, uv).rg - float2(128.0 / 255.0, 128.0 / 255.0)) * (255.0 / 224.0);' + #10 +
@@ -758,8 +763,9 @@ const
   PIXEL_SHADER_SOURCE: AnsiString =
     'Texture2D frameTex : register(t0);' + #10 +
     'SamplerState samp0 : register(s0);' + #10 +
-    'cbuffer ColorAdjust : register(b0) { float brightness; float contrast; float2 colorPad; };' + #10 +
+    'cbuffer ColorAdjust : register(b0) { float brightness; float contrast; float mirrorHorizontal; float colorPad; };' + #10 +
     'float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {' + #10 +
+    '  if (mirrorHorizontal > 0.5) uv.x = 1.0 - uv.x;' + #10 +
     '  uv = clamp(uv, float2(0.0, 0.0), float2(0.999999, 0.999999));' + #10 +
     '  float3 rgb = frameTex.Sample(samp0, uv).rgb;' + #10 +
     '  rgb = saturate((rgb - 0.5) * contrast + 0.5 + brightness);' + #10 +
