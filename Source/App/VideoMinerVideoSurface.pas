@@ -91,6 +91,7 @@ type
     FSeekPreviewAnchor      : TPoint;                            // hover プレビューを寄せるクライアント座標
     FSeekPreviewBitmap      : TBitmap;                           // シークバー hover 用の小型プレビュー
     FSeekPreviewPositionMs  : Integer;                           // hover プレビューの対象位置 ms
+    FSeekPreviewSuppressUntilTick: UInt64;                        // seek bar 表示直後の誤 hover preview 抑止期限
     FSeekPreviewVisible     : Boolean;                           // シークバー hover プレビューを表示中か
     FSeekWheelFrameStepMs   : Integer;                           // フレーム単位ホイールシークの 1 ステップ幅 ms
     FSkipBackwardButton     : TVideoMinerOverlaySkipButton;      // 10 秒戻しの中央ボタン
@@ -1826,10 +1827,19 @@ begin
   LogD3DFramePresentationState('seek_bar_visible', True);
   if FSeekBar <> nil then
     FSeekBar.Visible := Value;
+  if Value then
+  begin
+    FSeekBarHoverPositionMs := -1;
+    FSeekPreviewSuppressUntilTick := GetTickCount64 + 300;
+    ClearSeekHoverPreview;
+    if Assigned(FOnSeekHoverPreviewEnd) then
+      FOnSeekHoverPreviewEnd(Self);
+  end;
   if not Value then
   begin
     FSeekBarLastHitTick := 0;
     FSeekBarHoverPositionMs := -1;
+    FSeekPreviewSuppressUntilTick := 0;
     ClearSeekHoverPreview;
     if Assigned(FOnSeekHoverPreviewEnd) then
       FOnSeekHoverPreviewEnd(Self);
@@ -2110,6 +2120,8 @@ begin
   end;
 
   if ((not FPlaybackActive) and FSeekBarVisible and (FSeekBar <> nil) and
+      ((FSeekPreviewSuppressUntilTick = 0) or
+       (GetTickCount64 >= FSeekPreviewSuppressUntilTick)) and
       (not FSeekBar.Dragging) and
       FSeekBar.HoverPositionFromPoint(MousePoint, HoverPositionMs)) then
   begin
