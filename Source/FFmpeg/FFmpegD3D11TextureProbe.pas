@@ -2565,6 +2565,7 @@ var
   KnobInnerRadius: Integer;
   MarkerRect: TRect;
   MarkerX: Integer;
+  PositionVisible: Boolean;
   PositionRatio: Double;
   StepWatch: TStopwatch;
 {$IFDEF DEBUG}
@@ -2649,14 +2650,19 @@ begin
       TrackRect.Right + 1, TrackRect.Bottom + 3), 0, 0, 0, 0.24);
     DrawOverlayRect(TrackRect, 1, 1, 1, 0.32);
 
+    PositionVisible := (State.PositionMs >= SeekBarTimeViewStartMs(State)) and
+      (State.PositionMs <= SeekBarTimeViewEndMs(State));
     PositionRatio := SeekBarTimeViewRatio(State, State.PositionMs);
     MarkerX := TrackRect.Left + Round(TrackRect.Width * PositionRatio);
-    FilledRect := TrackRect;
-    FilledRect.Right := Max(FilledRect.Left + 1, MarkerX);
-    DrawOverlayRect(FilledRect, 0.25, 0.63, 0.94, 0.90);
-    HighlightRect := FilledRect;
-    HighlightRect.Bottom := Min(HighlightRect.Bottom, HighlightRect.Top + 2);
-    DrawOverlayRect(HighlightRect, 0.58, 0.84, 1.0, 0.52);
+    if PositionVisible then
+    begin
+      FilledRect := TrackRect;
+      FilledRect.Right := Max(FilledRect.Left + 1, MarkerX);
+      DrawOverlayRect(FilledRect, 0.25, 0.63, 0.94, 0.90);
+      HighlightRect := FilledRect;
+      HighlightRect.Bottom := Min(HighlightRect.Bottom, HighlightRect.Top + 2);
+      DrawOverlayRect(HighlightRect, 0.58, 0.84, 1.0, 0.52);
+    end;
     DrawSeekBarTimeRuler(State);
 
     if (State.HoverPositionMs >= SeekBarTimeViewStartMs(State)) and
@@ -2706,32 +2712,35 @@ begin
       end;
     end;
 
-    MarkerX := TrackRect.Left + Round(TrackRect.Width * PositionRatio);
-    KnobCenterY := TrackRect.Top + TrackRect.Height div 2;
-    if State.Dragging then
+    if PositionVisible then
     begin
-      KnobHaloRadius := 24;
-      KnobCoreRadius := 13;
-      KnobInnerRadius := 8;
-    end
-    else if (State.HoverPositionMs >= 0) and (State.HoverPositionMs <= State.MaxMs) then
-    begin
-      KnobHaloRadius := 22;
-      KnobCoreRadius := 12;
-      KnobInnerRadius := 7;
-    end
-    else
-    begin
-      KnobHaloRadius := 20;
-      KnobCoreRadius := 11;
-      KnobInnerRadius := 6;
+      MarkerX := TrackRect.Left + Round(TrackRect.Width * PositionRatio);
+      KnobCenterY := TrackRect.Top + TrackRect.Height div 2;
+      if State.Dragging then
+      begin
+        KnobHaloRadius := 24;
+        KnobCoreRadius := 13;
+        KnobInnerRadius := 8;
+      end
+      else if (State.HoverPositionMs >= 0) and (State.HoverPositionMs <= State.MaxMs) then
+      begin
+        KnobHaloRadius := 22;
+        KnobCoreRadius := 12;
+        KnobInnerRadius := 7;
+      end
+      else
+      begin
+        KnobHaloRadius := 20;
+        KnobCoreRadius := 11;
+        KnobInnerRadius := 6;
+      end;
+      DrawOverlayCircleApprox(MarkerX, KnobCenterY, KnobHaloRadius,
+        0.25, 0.63, 0.94, 0.18);
+      DrawOverlayCircleApprox(MarkerX, KnobCenterY, KnobCoreRadius,
+        0.25, 0.63, 0.94, 0.96);
+      DrawOverlayCircleApprox(MarkerX, KnobCenterY, KnobInnerRadius,
+        0.52, 0.82, 1.0, 1.0);
     end;
-    DrawOverlayCircleApprox(MarkerX, KnobCenterY, KnobHaloRadius,
-      0.25, 0.63, 0.94, 0.18);
-    DrawOverlayCircleApprox(MarkerX, KnobCenterY, KnobCoreRadius,
-      0.25, 0.63, 0.94, 0.96);
-    DrawOverlayCircleApprox(MarkerX, KnobCenterY, KnobInnerRadius,
-      0.52, 0.82, 1.0, 1.0);
 
     if DRAW_D3D_SEEKBAR_TOOL_ROW then
     begin

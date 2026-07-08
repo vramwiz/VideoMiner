@@ -237,6 +237,7 @@ type
     function PositionFromPoint(const Point: TPoint): Integer;
     function TimeViewActive: Boolean;
     function TimeViewEndMs: Integer;
+    function TimeViewPositionVisible(PositionMs: Integer): Boolean;
     function TimeViewPositionRatio(PositionMs: Integer): Double;
     function TimeViewSpanMs: Integer;
     function SecondaryToolButtonsVisible: Boolean;
@@ -246,7 +247,6 @@ type
     procedure DrawTimeRuler(Canvas: TCanvas; const Track: TRect);
     procedure DrawTextButton(Canvas: TCanvas; const ButtonRect: TRect;
       const Text: string; Active, Hovered, Pressed: Boolean; ActiveColor: TColor);
-    procedure EnsureTimeViewContains(PositionMs: Integer);
     procedure PanTimeViewToPoint(const Point: TPoint);
     procedure ResetTimeView;
     procedure SetEndActionText(const Value: string);
@@ -1271,6 +1271,15 @@ begin
     Result := Min(FMaxMs, FTimeViewStartMs + FTimeViewSpanMs)
   else
     Result := FMaxMs;
+end;
+
+function TVideoMinerOverlaySeekBar.TimeViewPositionVisible(
+  PositionMs: Integer): Boolean;
+begin
+  Result := (FMaxMs > 0) and (PositionMs >= 0) and (PositionMs <= FMaxMs);
+  if Result and TimeViewActive then
+    Result := (PositionMs >= FTimeViewStartMs) and
+      (PositionMs <= TimeViewEndMs);
 end;
 
 function TVideoMinerOverlaySeekBar.TimeViewPositionRatio(
@@ -2313,6 +2322,7 @@ var
   ShadowRadius: Integer;
   MuteRect: TRect;
   PlaybackRateRect: TRect;
+  PositionVisible: Boolean;
   Text: string;
   TextSize: TSize;
   TextTop: Integer;
@@ -2347,6 +2357,7 @@ begin
   MuteRect := MuteButtonRect;
   PlaybackRateRect := PlaybackRateButtonRect;
 
+  PositionVisible := TimeViewPositionVisible(DisplayPositionMs);
   PositionRatio := TimeViewPositionRatio(DisplayPositionMs);
   KnobCenterX := Track.Left + Round(Track.Width * PositionRatio);
   TrackCenterY := Track.Top + Track.Height div 2;
@@ -2358,32 +2369,38 @@ begin
       Track.Right + 1, Track.Bottom + 3), Track.Height + 3, 62, clBlack);
     DrawAlphaRoundRect(Canvas, Track, Track.Height, 82);
 
-    FilledRect := Track;
-    FilledRect.Right := Max(FilledRect.Left + Track.Height, KnobCenterX);
-    DrawAlphaRoundRect(Canvas, FilledRect, Track.Height, 230, SEEK_ACCENT_COLOR);
-    if FilledRect.Right > FilledRect.Left then
-      DrawAlphaRoundRect(Canvas, Rect(FilledRect.Left, FilledRect.Top,
-        FilledRect.Right, Min(FilledRect.Bottom, FilledRect.Top + 2)),
-        1, 132, $00FFD68F);
+    if PositionVisible then
+    begin
+      FilledRect := Track;
+      FilledRect.Right := Max(FilledRect.Left + Track.Height, KnobCenterX);
+      DrawAlphaRoundRect(Canvas, FilledRect, Track.Height, 230, SEEK_ACCENT_COLOR);
+      if FilledRect.Right > FilledRect.Left then
+        DrawAlphaRoundRect(Canvas, Rect(FilledRect.Left, FilledRect.Top,
+          FilledRect.Right, Min(FilledRect.Bottom, FilledRect.Top + 2)),
+          1, 132, $00FFD68F);
+    end;
     DrawChapterMarkers(Canvas, Track);
     DrawTimeRuler(Canvas, Track);
 
-    ShadowRadius := 20;
-    KnobRadius := 11;
-    if FDragging then
+    if PositionVisible then
     begin
-      ShadowRadius := 24;
-      KnobRadius := 13;
+      ShadowRadius := 20;
+      KnobRadius := 11;
+      if FDragging then
+      begin
+        ShadowRadius := 24;
+        KnobRadius := 13;
+      end;
+      DrawAlphaEllipse(Canvas, Rect(KnobCenterX - ShadowRadius,
+        TrackCenterY - ShadowRadius, KnobCenterX + ShadowRadius,
+        TrackCenterY + ShadowRadius), 46, SEEK_ACCENT_COLOR);
+      DrawAlphaEllipse(Canvas, Rect(KnobCenterX - KnobRadius,
+        TrackCenterY - KnobRadius, KnobCenterX + KnobRadius,
+        TrackCenterY + KnobRadius), 245, SEEK_ACCENT_COLOR);
+      DrawAlphaEllipse(Canvas, Rect(KnobCenterX - 6,
+        TrackCenterY - 6, KnobCenterX + 6, TrackCenterY + 6),
+        255, $00FFD18A);
     end;
-    DrawAlphaEllipse(Canvas, Rect(KnobCenterX - ShadowRadius,
-      TrackCenterY - ShadowRadius, KnobCenterX + ShadowRadius,
-      TrackCenterY + ShadowRadius), 46, SEEK_ACCENT_COLOR);
-    DrawAlphaEllipse(Canvas, Rect(KnobCenterX - KnobRadius,
-      TrackCenterY - KnobRadius, KnobCenterX + KnobRadius,
-      TrackCenterY + KnobRadius), 245, SEEK_ACCENT_COLOR);
-    DrawAlphaEllipse(Canvas, Rect(KnobCenterX - 6,
-      TrackCenterY - 6, KnobCenterX + 6, TrackCenterY + 6),
-      255, $00FFD18A);
 
     Text := Format('%s / %s', [FormatTimeMs(DisplayPositionMs),
       FormatTimeMs(FMaxMs)]);
@@ -2448,23 +2465,29 @@ begin
 
   DrawAlphaRoundRect(Canvas, Track, Track.Height, 85);
 
-  FilledRect := Track;
-  FilledRect.Right := Max(FilledRect.Left + Track.Height, KnobCenterX);
-  DrawAlphaRoundRect(Canvas, FilledRect, Track.Height, 230, SEEK_ACCENT_COLOR);
+  if PositionVisible then
+  begin
+    FilledRect := Track;
+    FilledRect.Right := Max(FilledRect.Left + Track.Height, KnobCenterX);
+    DrawAlphaRoundRect(Canvas, FilledRect, Track.Height, 230, SEEK_ACCENT_COLOR);
+  end;
   DrawChapterMarkers(Canvas, Track);
   DrawTimeRuler(Canvas, Track);
 
-  ShadowRadius := 22;
-  DrawAlphaEllipse(Canvas, Rect(KnobCenterX - ShadowRadius,
-    TrackCenterY - ShadowRadius, KnobCenterX + ShadowRadius,
-    TrackCenterY + ShadowRadius), 70, SEEK_ACCENT_COLOR);
+  if PositionVisible then
+  begin
+    ShadowRadius := 22;
+    DrawAlphaEllipse(Canvas, Rect(KnobCenterX - ShadowRadius,
+      TrackCenterY - ShadowRadius, KnobCenterX + ShadowRadius,
+      TrackCenterY + ShadowRadius), 70, SEEK_ACCENT_COLOR);
 
-  KnobRadius := 11;
-  if FHovered or FDragging then
-    KnobRadius := 12;
-  DrawAlphaEllipse(Canvas, Rect(KnobCenterX - KnobRadius,
-    TrackCenterY - KnobRadius, KnobCenterX + KnobRadius,
-    TrackCenterY + KnobRadius), 245, SEEK_ACCENT_COLOR);
+    KnobRadius := 11;
+    if FHovered or FDragging then
+      KnobRadius := 12;
+    DrawAlphaEllipse(Canvas, Rect(KnobCenterX - KnobRadius,
+      TrackCenterY - KnobRadius, KnobCenterX + KnobRadius,
+      TrackCenterY + KnobRadius), 245, SEEK_ACCENT_COLOR);
+  end;
 
   if FCheckEnabled then
     Text := Format('Frame %d / %d',
@@ -2620,9 +2643,7 @@ begin
     ResetTimeView;
   FPositionMs := Max(0, Min(FMaxMs, PositionMs));
   if FMaxMs <= 0 then
-    ResetTimeView
-  else if TimeViewActive then
-    EnsureTimeViewContains(FPositionMs);
+    ResetTimeView;
   if not FDragging then
     FDragPositionMs := FPositionMs;
 end;
@@ -2634,19 +2655,6 @@ begin
   FTimeViewPanning := False;
   FTimeViewPanStartMs := 0;
   FTimeViewPanStartX := 0;
-end;
-
-procedure TVideoMinerOverlaySeekBar.EnsureTimeViewContains(PositionMs: Integer);
-begin
-  if not TimeViewActive then
-    Exit;
-
-  if PositionMs < FTimeViewStartMs then
-    FTimeViewStartMs := PositionMs
-  else if PositionMs > TimeViewEndMs then
-    FTimeViewStartMs := PositionMs - FTimeViewSpanMs;
-
-  FTimeViewStartMs := Max(0, Min(FMaxMs - FTimeViewSpanMs, FTimeViewStartMs));
 end;
 
 procedure TVideoMinerOverlaySeekBar.PanTimeViewToPoint(const Point: TPoint);

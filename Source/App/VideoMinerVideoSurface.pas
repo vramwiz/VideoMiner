@@ -1252,6 +1252,7 @@ var
   KnobY: Integer;
   MaxMs: Integer;
   PositionMs: Integer;
+  PositionVisible: Boolean;
   PositionRatio: Double;
   ViewEndMs: Integer;
   ViewSpanMs: Integer;
@@ -1282,6 +1283,7 @@ begin
     ViewEndMs := MaxMs;
   end;
   ViewSpanMs := Max(1, ViewEndMs - ViewStartMs);
+  PositionVisible := (PositionMs >= ViewStartMs) and (PositionMs <= ViewEndMs);
   PositionRatio := Max(0.0, Min(1.0, (PositionMs - ViewStartMs) /
     ViewSpanMs));
   KnobX := TrackRect.Left + Round(TrackRect.Width * PositionRatio);
@@ -1297,11 +1299,14 @@ begin
   Canvas.RoundRect(TrackRect.Left, TrackRect.Top, TrackRect.Right,
     TrackRect.Bottom, TrackRect.Height, TrackRect.Height);
 
-  FilledRect := TrackRect;
-  FilledRect.Right := Max(FilledRect.Left + TrackRect.Height, KnobX);
-  Canvas.Brush.Color := SEEK_FALLBACK_ACCENT_COLOR;
-  Canvas.RoundRect(FilledRect.Left, FilledRect.Top, FilledRect.Right,
-    FilledRect.Bottom, TrackRect.Height, TrackRect.Height);
+  if PositionVisible then
+  begin
+    FilledRect := TrackRect;
+    FilledRect.Right := Max(FilledRect.Left + TrackRect.Height, KnobX);
+    Canvas.Brush.Color := SEEK_FALLBACK_ACCENT_COLOR;
+    Canvas.RoundRect(FilledRect.Left, FilledRect.Top, FilledRect.Right,
+      FilledRect.Bottom, TrackRect.Height, TrackRect.Height);
+  end;
 
   HoverMs := FSeekBarHoverPositionMs;
   if (HoverMs < 0) and FSeekPreviewVisible then
@@ -1318,12 +1323,15 @@ begin
     Canvas.Pen.Style := psClear;
   end;
 
-  KnobRadius := 9;
-  Canvas.Brush.Color := SEEK_FALLBACK_ACCENT_COLOR;
-  Canvas.Ellipse(KnobX - KnobRadius, KnobY - KnobRadius,
-    KnobX + KnobRadius, KnobY + KnobRadius);
-  Canvas.Brush.Color := $00FFD18A;
-  Canvas.Ellipse(KnobX - 4, KnobY - 4, KnobX + 4, KnobY + 4);
+  if PositionVisible then
+  begin
+    KnobRadius := 9;
+    Canvas.Brush.Color := SEEK_FALLBACK_ACCENT_COLOR;
+    Canvas.Ellipse(KnobX - KnobRadius, KnobY - KnobRadius,
+      KnobX + KnobRadius, KnobY + KnobRadius);
+    Canvas.Brush.Color := $00FFD18A;
+    Canvas.Ellipse(KnobX - 4, KnobY - 4, KnobX + 4, KnobY + 4);
+  end;
 
   Canvas.Pen.Style := psSolid;
   Canvas.Brush.Style := bsSolid;
