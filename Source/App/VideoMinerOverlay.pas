@@ -1918,7 +1918,7 @@ begin
       if TickX - LabelSize.cx div 2 > LastLabelRight + 8 then
       begin
         Canvas.TextOut(Bounds.Left + TickX - LabelSize.cx div 2,
-          Bounds.Top + TickY + 9, LabelText);
+          Bounds.Top + TickY + 12, LabelText);
         LastLabelRight := TickX + LabelSize.cx div 2;
       end;
     end

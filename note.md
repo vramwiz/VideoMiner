@@ -46,6 +46,11 @@
 
 ## 後続課題
 
+- 起動直後にシークバーを表示した時、D3D overlay ではなく小さい fallback seek bar が出る場合がある。
+  - カーソルを起動直後にシークバー位置へ移動した場合に発生しやすい。
+  - シークバーを一度消して再表示すると直る。
+  - 初回表示時の D3D frame presented 状態、hover/preview 抑止、`RefreshD3DFramePresentation` のタイミングを確認する。
+
 - D3D 表示に乗らない動画、または初回だけ D3D 表示に乗らない動画を切り分ける。
   - 動画形式、pixel format、alpha、回転、色空間などの動画仕様側の問題か、初回だけの同期遅れ/drop 判定かを分ける。
   - 同じ動画を最初に開いた時、別動画を表示した後に再度開いた時、一時停止後に再生した時で、`d3d_decode_state`、`convert_frame_false`、`d3d11_display_present_*`、`lagging_video_sync_for_d3d_overlay` を比較する。

@@ -2318,13 +2318,31 @@ begin
     if FSeekBar.BoundsHitTest(LocalPoint) then
     begin
       SetSeekBarVisibleFrom('mouse_wheel_seekbar', True);
-      if FSeekBar.ZoomTimeViewAtPoint(LocalPoint, WheelDelta) then
+      if FSeekBar.TimeRulerHitTest(LocalPoint) then
       begin
-        if not FSeekBar.HoverPositionFromPoint(LocalPoint, FSeekBarHoverPositionMs) then
-          FSeekBarHoverPositionMs := -1;
-        UpdateD3DSeekBarOverlayState;
-        RefreshD3DFramePresentation;
-        InvalidateOverlayControl(FSeekBar);
+        if FSeekBar.ZoomTimeViewAtPoint(LocalPoint, WheelDelta) then
+        begin
+          if not FSeekBar.HoverPositionFromPoint(LocalPoint, FSeekBarHoverPositionMs) then
+            FSeekBarHoverPositionMs := -1;
+          UpdateD3DSeekBarOverlayState;
+          RefreshD3DFramePresentation;
+          InvalidateOverlayControl(FSeekBar);
+        end;
+      end
+      else
+      begin
+        CurrentPositionMs := FSeekBar.CurrentDisplayPositionMs;
+        SeekPositionMs := FSeekBar.WheelPosition(WheelDelta, FSeekWheelFrameStepMs);
+        if SeekPositionMs <> CurrentPositionMs then
+        begin
+          FSeekBar.SetProgress(SeekPositionMs, FSeekBar.MaxMs);
+          FSeekBarHoverPositionMs := SeekPositionMs;
+          UpdateD3DSeekBarOverlayState;
+          RefreshD3DFramePresentation;
+          InvalidateOverlayControl(FSeekBar);
+          if Assigned(FOnSeekByWheel) then
+            FOnSeekByWheel(Self, SeekPositionMs);
+        end;
       end;
       Result := True;
       Exit;

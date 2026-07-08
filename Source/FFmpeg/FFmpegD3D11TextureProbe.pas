@@ -2090,9 +2090,9 @@ begin
       LabelWidth := OverlayTextWidth(LabelText, 1);
       if TickX - LabelWidth div 2 > LastLabelRight + 8 then
       begin
-        DrawOverlayText(TickX - LabelWidth div 2 + 1, TickY + 10, 1,
+        DrawOverlayText(TickX - LabelWidth div 2 + 1, TickY + 13, 1,
           LabelText, 0, 0, 0, 0.55);
-        DrawOverlayText(TickX - LabelWidth div 2, TickY + 9, 1,
+        DrawOverlayText(TickX - LabelWidth div 2, TickY + 12, 1,
           LabelText, 1, 1, 1, 0.70);
         LastLabelRight := TickX + LabelWidth div 2;
       end;
