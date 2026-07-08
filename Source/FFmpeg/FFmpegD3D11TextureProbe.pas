@@ -22,6 +22,9 @@ type
     Track          : TRect;   // progress track の client 座標
     PositionMs     : Integer; // 表示する現在位置 ms
     MaxMs          : Integer; // 動画長 ms
+    TimeViewActive : Boolean; // シークバーの時間軸を拡大表示中か
+    TimeViewStartMs: Integer; // 拡大表示中の左端位置 ms
+    TimeViewEndMs  : Integer; // 拡大表示中の右端位置 ms
     HoverPositionMs: Integer; // hover/drag で指している位置 ms、なしなら -1
     Dragging       : Boolean; // シークバーをドラッグ中か
     CheckEnabled   : Boolean; // Check 中は時刻ではなくフレーム番号表示にする
@@ -102,6 +105,8 @@ uses
 const
   DRAW_D3D_SEEKBAR_TOOL_ROW = True; // 下段の音量/速度/Check/Loop 等を D3D 側で描く
   SEEKBAR_TOOL_VISUAL_NUDGE_Y = -2; // スピーカー/速度/全画面の見た目中心を基準線へ合わせる補正
+  SEEKBAR_TIME_RULER_MAJOR_MIN_PX = 92; // 長い目盛り同士の最小間隔
+  SEEKBAR_TIME_RULER_MINOR_MIN_PX = 24; // 短い目盛り同士の最小間隔
 
 type
   TNv12TextureProbe = class
@@ -188,6 +193,7 @@ type
     procedure DrawSeekBarTimeText(const State: TD3D11SeekBarOverlayState);
     procedure DrawSeekBarVolume(const State: TD3D11SeekBarOverlayState);
     procedure DrawSeekBarPlaybackRate(const State: TD3D11SeekBarOverlayState);
+    procedure DrawSeekBarTimeRuler(const State: TD3D11SeekBarOverlayState);
     procedure DrawSeekBarEndAction(const State: TD3D11SeekBarOverlayState);
     procedure DrawSeekBarChapterButtons(const State: TD3D11SeekBarOverlayState);
     procedure DrawSeekBarFullScreen(const State: TD3D11SeekBarOverlayState);
@@ -1436,6 +1442,73 @@ begin
      Max(1, Max(0, MaxMs) div SafeStepMs + 1)]);
 end;
 
+function SeekBarTimeViewStartMs(const State: TD3D11SeekBarOverlayState): Integer;
+begin
+  if State.TimeViewActive then
+    Result := Max(0, State.TimeViewStartMs)
+  else
+    Result := 0;
+end;
+
+function SeekBarTimeViewEndMs(const State: TD3D11SeekBarOverlayState): Integer;
+begin
+  if State.TimeViewActive then
+    Result := Max(0, Min(State.MaxMs, State.TimeViewEndMs))
+  else
+    Result := State.MaxMs;
+end;
+
+function SeekBarTimeViewSpanMs(const State: TD3D11SeekBarOverlayState): Integer;
+begin
+  Result := Max(1, SeekBarTimeViewEndMs(State) - SeekBarTimeViewStartMs(State));
+end;
+
+function SeekBarTimeViewRatio(const State: TD3D11SeekBarOverlayState;
+  PositionMs: Integer): Double;
+begin
+  Result := (PositionMs - SeekBarTimeViewStartMs(State)) /
+    SeekBarTimeViewSpanMs(State);
+  Result := Max(0.0, Min(1.0, Result));
+end;
+
+function SeekBarNiceTimeTickMs(TargetMs: Double): Integer;
+const
+  STEPS: array[0..17] of Integer = (1000, 2000, 5000, 10000, 15000,
+    30000, 60000, 120000, 300000, 600000, 900000, 1800000, 3600000,
+    7200000, 14400000, 21600000, 43200000, 86400000);
+var
+  Step: Integer;
+begin
+  Result := STEPS[High(STEPS)];
+  for Step in STEPS do
+  begin
+    if Step >= TargetMs then
+    begin
+      Result := Step;
+      Break;
+    end;
+  end;
+end;
+
+function SeekBarNiceMinorTimeTickMs(MajorMs: Integer; TargetMs: Double): Integer;
+const
+  STEPS: array[0..20] of Integer = (100, 200, 500, 1000, 2000, 5000,
+    10000, 15000, 30000, 60000, 120000, 300000, 600000, 900000,
+    1800000, 3600000, 7200000, 14400000, 21600000, 43200000, 86400000);
+var
+  Step: Integer;
+begin
+  Result := MajorMs;
+  for Step in STEPS do
+  begin
+    if (Step >= TargetMs) and (Step < MajorMs) and ((MajorMs mod Step) = 0) then
+    begin
+      Result := Step;
+      Break;
+    end;
+  end;
+end;
+
 function OverlayTextWidth(const Text: string; Scale: Integer): Integer;
 var
   Ch: Char;
@@ -1973,6 +2046,78 @@ begin
     DrawOverlayText(X, Y, Scale, Text, 1, 1, 1, 0.72);
 end;
 
+procedure TNv12TextureProbe.DrawSeekBarTimeRuler(
+  const State: TD3D11SeekBarOverlayState);
+var
+  EndMs: Integer;
+  LabelText: string;
+  LabelWidth: Integer;
+  LastLabelRight: Integer;
+  MajorMs: Integer;
+  MinorMs: Integer;
+  Ratio: Double;
+  StartMs: Integer;
+  TickMs: Integer;
+  TickX: Integer;
+  TickY: Integer;
+  TrackRect: TRect;
+begin
+  if State.Track.IsEmpty or (State.Track.Width <= 0) or (State.MaxMs <= 0) then
+    Exit;
+
+  TrackRect := State.Track;
+  StartMs := SeekBarTimeViewStartMs(State);
+  EndMs := SeekBarTimeViewEndMs(State);
+  MajorMs := SeekBarNiceTimeTickMs(SeekBarTimeViewSpanMs(State) /
+    Max(1, TrackRect.Width) * SEEKBAR_TIME_RULER_MAJOR_MIN_PX);
+  MinorMs := SeekBarNiceMinorTimeTickMs(MajorMs,
+    SeekBarTimeViewSpanMs(State) / Max(1, TrackRect.Width) *
+    SEEKBAR_TIME_RULER_MINOR_MIN_PX);
+
+  TickY := TrackRect.Bottom + 6;
+  LastLabelRight := TrackRect.Left - 1000;
+  TickMs := (StartMs div MinorMs) * MinorMs;
+  if TickMs < StartMs then
+    Inc(TickMs, MinorMs);
+  while TickMs <= EndMs do
+  begin
+    Ratio := SeekBarTimeViewRatio(State, TickMs);
+    TickX := TrackRect.Left + Round(TrackRect.Width * Ratio);
+    if (TickMs mod MajorMs) = 0 then
+    begin
+      DrawOverlayLine(TickX, TickY, TickX, TickY + 8, 2, 1, 1, 1, 0.64);
+      LabelText := SeekBarTimeText(TickMs);
+      LabelWidth := OverlayTextWidth(LabelText, 1);
+      if TickX - LabelWidth div 2 > LastLabelRight + 8 then
+      begin
+        DrawOverlayText(TickX - LabelWidth div 2 + 1, TickY + 10, 1,
+          LabelText, 0, 0, 0, 0.55);
+        DrawOverlayText(TickX - LabelWidth div 2, TickY + 9, 1,
+          LabelText, 1, 1, 1, 0.70);
+        LastLabelRight := TickX + LabelWidth div 2;
+      end;
+    end
+    else if MinorMs < MajorMs then
+      DrawOverlayLine(TickX, TickY, TickX, TickY + 4, 2, 1, 1, 1, 0.42);
+    Inc(TickMs, MinorMs);
+  end;
+
+  if State.TimeViewActive and (StartMs > 0) then
+  begin
+    DrawOverlayLine(TrackRect.Left, TickY + 1, TrackRect.Left + 7,
+      TickY + 5, 1, 1, 1, 1, 0.65);
+    DrawOverlayLine(TrackRect.Left + 7, TickY + 5, TrackRect.Left,
+      TickY + 9, 1, 1, 1, 1, 0.65);
+  end;
+  if State.TimeViewActive and (EndMs < State.MaxMs) then
+  begin
+    DrawOverlayLine(TrackRect.Right, TickY + 1, TrackRect.Right - 7,
+      TickY + 5, 1, 1, 1, 1, 0.65);
+    DrawOverlayLine(TrackRect.Right - 7, TickY + 5, TrackRect.Right,
+      TickY + 9, 1, 1, 1, 1, 0.65);
+  end;
+end;
+
 procedure TNv12TextureProbe.DrawSeekBarEndAction(
   const State: TD3D11SeekBarOverlayState);
 var
@@ -2504,8 +2649,7 @@ begin
       TrackRect.Right + 1, TrackRect.Bottom + 3), 0, 0, 0, 0.24);
     DrawOverlayRect(TrackRect, 1, 1, 1, 0.32);
 
-    PositionRatio := State.PositionMs / State.MaxMs;
-    PositionRatio := Max(0.0, Min(1.0, PositionRatio));
+    PositionRatio := SeekBarTimeViewRatio(State, State.PositionMs);
     MarkerX := TrackRect.Left + Round(TrackRect.Width * PositionRatio);
     FilledRect := TrackRect;
     FilledRect.Right := Max(FilledRect.Left + 1, MarkerX);
@@ -2513,11 +2657,12 @@ begin
     HighlightRect := FilledRect;
     HighlightRect.Bottom := Min(HighlightRect.Bottom, HighlightRect.Top + 2);
     DrawOverlayRect(HighlightRect, 0.58, 0.84, 1.0, 0.52);
+    DrawSeekBarTimeRuler(State);
 
-    if (State.HoverPositionMs >= 0) and (State.HoverPositionMs <= State.MaxMs) then
+    if (State.HoverPositionMs >= SeekBarTimeViewStartMs(State)) and
+       (State.HoverPositionMs <= SeekBarTimeViewEndMs(State)) then
     begin
-      HoverRatio := State.HoverPositionMs / State.MaxMs;
-      HoverRatio := Max(0.0, Min(1.0, HoverRatio));
+      HoverRatio := SeekBarTimeViewRatio(State, State.HoverPositionMs);
       HoverX := TrackRect.Left + Round(TrackRect.Width * HoverRatio);
       if State.Dragging then
         HoverGuideRect := Rect(HoverX - 2, TrackRect.Top - 17, HoverX + 3,
@@ -2533,9 +2678,11 @@ begin
 
     for Chapter in State.Chapters do
     begin
-      if (Chapter.PositionMs < 0) or (Chapter.PositionMs > State.MaxMs) then
+      if (Chapter.PositionMs < SeekBarTimeViewStartMs(State)) or
+         (Chapter.PositionMs > SeekBarTimeViewEndMs(State)) then
         Continue;
-      MarkerX := TrackRect.Left + Round(TrackRect.Width * Chapter.PositionMs / State.MaxMs);
+      MarkerX := TrackRect.Left + Round(TrackRect.Width *
+        SeekBarTimeViewRatio(State, Chapter.PositionMs));
       MarkerRect := Rect(MarkerX - 1, TrackRect.Top - 6, MarkerX + 2, TrackRect.Bottom + 9);
       case Chapter.Severity of
         2:

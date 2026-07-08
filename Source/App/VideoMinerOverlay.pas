@@ -192,6 +192,11 @@ type
     FPlaybackRateButtonPressed  : Boolean;                     // 再生速度ボタンを押下中か
     FPlaybackRateText           : string;                      // 再生速度ボタンに表示する文字列
     FPositionMs                 : Integer;                     // 通常表示中の現在位置 ms
+    FTimeViewStartMs            : Integer;                     // 拡大表示中の左端位置 ms
+    FTimeViewSpanMs             : Integer;                     // 拡大表示中に見えている長さ ms
+    FTimeViewPanning            : Boolean;                     // 目盛り領域ドラッグで表示範囲を移動中か
+    FTimeViewPanStartMs         : Integer;                     // 表示範囲 pan 開始時の左端 ms
+    FTimeViewPanStartX          : Integer;                     // 表示範囲 pan 開始時の mouse X
     FVolumeDragging             : Boolean;                     // 音量バーをドラッグ中か
     FVolumeHovered              : Boolean;                     // 音量バー上にマウスがあるか
     FVolumePercent              : Integer;                     // 音量パーセント
@@ -230,12 +235,20 @@ type
     function PlaybackRateButtonHitTest(const Point: TPoint): Boolean;
     function PlaybackRateButtonRect: TRect;
     function PositionFromPoint(const Point: TPoint): Integer;
+    function TimeViewActive: Boolean;
+    function TimeViewEndMs: Integer;
+    function TimeViewPositionRatio(PositionMs: Integer): Double;
+    function TimeViewSpanMs: Integer;
     function SecondaryToolButtonsVisible: Boolean;
     function ToolRowCenterY: Integer;
     function ToolRowRect(Left, Width, Height: Integer): TRect;
     procedure DrawChapterMarkers(Canvas: TCanvas; const Track: TRect);
+    procedure DrawTimeRuler(Canvas: TCanvas; const Track: TRect);
     procedure DrawTextButton(Canvas: TCanvas; const ButtonRect: TRect;
       const Text: string; Active, Hovered, Pressed: Boolean; ActiveColor: TColor);
+    procedure EnsureTimeViewContains(PositionMs: Integer);
+    procedure PanTimeViewToPoint(const Point: TPoint);
+    procedure ResetTimeView;
     procedure SetEndActionText(const Value: string);
     procedure SetCheckEnabled(Value: Boolean);
     procedure SetChapters(const Value: TVideoMinerOverlayChapters);
@@ -259,7 +272,9 @@ type
     function CurrentDisplayPositionMs: Integer;
     function CurrentTrackRect: TRect;
     function HoverPositionFromPoint(const Point: TPoint; out PositionMs: Integer): Boolean;
+    function TimeRulerHitTest(const Point: TPoint): Boolean;
     procedure SetProgress(PositionMs, MaxMs: Integer);
+    function ZoomTimeViewAtPoint(const Point: TPoint; WheelDelta: Integer): Boolean;
     function WheelPosition(WheelDelta, StepMs: Integer): Integer;
     property CheckEnabled: Boolean read FCheckEnabled write SetCheckEnabled;
     property AddChapterButtonHovered: Boolean read FAddChapterButtonHovered;
@@ -280,6 +295,11 @@ type
     property FullScreenButtonPressed: Boolean read FFullScreenButtonPressed;
     property FrameStepMs: Integer read FFrameStepMs write SetFrameStepMs;
     property MaxMs: Integer read FMaxMs;
+    property TimeViewEndMsValue: Integer read TimeViewEndMs;
+    property TimeViewPanning: Boolean read FTimeViewPanning;
+    property TimeViewStartMs: Integer read FTimeViewStartMs;
+    property TimeViewSpanMsValue: Integer read TimeViewSpanMs;
+    property TimeViewZoomActive: Boolean read TimeViewActive;
     property OnAddChapterClick: TNotifyEvent read FOnAddChapterClick write FOnAddChapterClick;
     property OnCheckClick: TNotifyEvent read FOnCheckClick write FOnCheckClick;
     property OnDeleteChapterClick: TNotifyEvent read FOnDeleteChapterClick write FOnDeleteChapterClick;
@@ -304,6 +324,10 @@ implementation
 const
   SECONDARY_TOOL_BUTTONS_MIN_WIDTH = 520; // 補助ツールボタンを下部バーへ表示する最小幅
   SEEK_ACCENT_COLOR = $0000A5FF;          // 旧/GDI seek bar を識別しやすくするオレンジ
+  SEEK_TIME_RULER_MAJOR_MIN_PX = 92;      // 長い目盛り同士の最小間隔
+  SEEK_TIME_RULER_MINOR_MIN_PX = 24;      // 短い目盛り同士の最小間隔
+  SEEK_TIME_VIEW_MIN_SPAN_MS = 1000;      // 最大拡大時に見せる最小時間幅
+  SEEK_TIME_VIEW_ZOOM_STEP = 1.28;        // シークバー上ホイール 1 段あたりの拡大率
 
 type
   TRgbTripleArray = array[0..MaxInt div SizeOf(TRGBTriple) - 1] of TRGBTriple;
@@ -335,6 +359,44 @@ function OverlayCenterButtonSize(const PreviewRect: TRect): Integer;
 begin
   Result := Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.115);
   Result := Max(42, Min(104, Result));
+end;
+
+function NiceTimeTickMs(TargetMs: Double): Integer;
+const
+  STEPS: array[0..17] of Integer = (1000, 2000, 5000, 10000, 15000,
+    30000, 60000, 120000, 300000, 600000, 900000, 1800000, 3600000,
+    7200000, 14400000, 21600000, 43200000, 86400000);
+var
+  Step: Integer;
+begin
+  Result := STEPS[High(STEPS)];
+  for Step in STEPS do
+  begin
+    if Step >= TargetMs then
+    begin
+      Result := Step;
+      Break;
+    end;
+  end;
+end;
+
+function NiceMinorTimeTickMs(MajorMs: Integer; TargetMs: Double): Integer;
+const
+  STEPS: array[0..20] of Integer = (100, 200, 500, 1000, 2000, 5000,
+    10000, 15000, 30000, 60000, 120000, 300000, 600000, 900000,
+    1800000, 3600000, 7200000, 14400000, 21600000, 43200000, 86400000);
+var
+  Step: Integer;
+begin
+  Result := MajorMs;
+  for Step in STEPS do
+  begin
+    if (Step >= TargetMs) and (Step < MajorMs) and ((MajorMs mod Step) = 0) then
+    begin
+      Result := Step;
+      Break;
+    end;
+  end;
 end;
 
 procedure DrawAlphaBlackRect(Canvas: TCanvas; const DrawRect: TRect;
@@ -1162,7 +1224,7 @@ begin
   if PreviewRect.IsEmpty then
     Exit;
 
-  Height := 82;
+  Height := 96;
   Width := Round(PreviewRect.Width * 0.88);
   Width := Max(160, Min(PreviewRect.Width - 32, Width));
   BottomOffset := Max(18, Round(Min(PreviewRect.Width, PreviewRect.Height) * 0.075));
@@ -1186,6 +1248,77 @@ begin
     Result := 0
   else if Result > FMaxMs then
     Result := FMaxMs;
+end;
+
+function TVideoMinerOverlaySeekBar.TimeViewActive: Boolean;
+begin
+  Result := (FMaxMs > 0) and (FTimeViewSpanMs > 0) and
+    (FTimeViewSpanMs < FMaxMs);
+end;
+
+function TVideoMinerOverlaySeekBar.TimeViewSpanMs: Integer;
+begin
+  if TimeViewActive then
+    Result := FTimeViewSpanMs
+  else
+    Result := FMaxMs;
+  Result := Max(0, Result);
+end;
+
+function TVideoMinerOverlaySeekBar.TimeViewEndMs: Integer;
+begin
+  if TimeViewActive then
+    Result := Min(FMaxMs, FTimeViewStartMs + FTimeViewSpanMs)
+  else
+    Result := FMaxMs;
+end;
+
+function TVideoMinerOverlaySeekBar.TimeViewPositionRatio(
+  PositionMs: Integer): Double;
+var
+  SpanMs: Integer;
+  StartMs: Integer;
+begin
+  if FMaxMs <= 0 then
+  begin
+    Result := 0;
+    Exit;
+  end;
+
+  if TimeViewActive then
+  begin
+    StartMs := FTimeViewStartMs;
+    SpanMs := FTimeViewSpanMs;
+  end
+  else
+  begin
+    StartMs := 0;
+    SpanMs := FMaxMs;
+  end;
+
+  Result := (PositionMs - StartMs) / Max(1, SpanMs);
+  Result := Max(0.0, Min(1.0, Result));
+end;
+
+function TVideoMinerOverlaySeekBar.TimeRulerHitTest(
+  const Point: TPoint): Boolean;
+var
+  HitRect: TRect;
+  LocalPoint: TPoint;
+  Track: TRect;
+begin
+  Result := False;
+  if (FMaxMs <= 0) or (not BoundsHitTest(Point)) then
+    Exit;
+
+  Track := TrackRect;
+  if Track.IsEmpty then
+    Exit;
+
+  HitRect := Rect(Track.Left, Track.Bottom + 4, Track.Right,
+    Max(Track.Bottom + 24, ToolRowCenterY - 14));
+  LocalPoint := System.Types.Point(Point.X - Bounds.Left, Point.Y - Bounds.Top);
+  Result := PtInRect(HitRect, LocalPoint);
 end;
 
 function TVideoMinerOverlaySeekBar.FormatTimeMs(ValueMs: Integer): string;
@@ -1707,8 +1840,10 @@ begin
   TipY := Track.Bottom + 5;
   for Chapter in FChapters do
   begin
-    Ratio := Chapter.PositionMs / FMaxMs;
-    Ratio := Max(0.0, Min(1.0, Ratio));
+    if TimeViewActive and ((Chapter.PositionMs < FTimeViewStartMs) or
+       (Chapter.PositionMs > TimeViewEndMs)) then
+      Continue;
+    Ratio := TimeViewPositionRatio(Chapter.PositionMs);
     MarkerX := Track.Left + Round(Track.Width * Ratio);
     MarkerColor := ChapterColor(Chapter.Severity);
     Canvas.Brush.Color := MarkerColor;
@@ -1719,6 +1854,90 @@ begin
       Point(Bounds.Left + MarkerX - 5, Bounds.Top + TriangleBaseY),
       Point(Bounds.Left + MarkerX + 5, Bounds.Top + TriangleBaseY)]);
   end;
+end;
+
+procedure TVideoMinerOverlaySeekBar.DrawTimeRuler(Canvas: TCanvas;
+  const Track: TRect);
+var
+  EndMs: Integer;
+  LabelText: string;
+  LabelSize: TSize;
+  LastLabelRight: Integer;
+  MajorMs: Integer;
+  MinorMs: Integer;
+  TickMs: Integer;
+  TickX: Integer;
+  TickY: Integer;
+  Ratio: Double;
+  StartMs: Integer;
+begin
+  if Track.IsEmpty or (Track.Width <= 0) or (FMaxMs <= 0) then
+    Exit;
+
+  StartMs := FTimeViewStartMs;
+  EndMs := TimeViewEndMs;
+  MajorMs := NiceTimeTickMs(TimeViewSpanMs / Max(1, Track.Width) *
+    SEEK_TIME_RULER_MAJOR_MIN_PX);
+  MinorMs := NiceMinorTimeTickMs(MajorMs, TimeViewSpanMs /
+    Max(1, Track.Width) * SEEK_TIME_RULER_MINOR_MIN_PX);
+
+  TickY := Track.Bottom + 6;
+  Canvas.Pen.Style := psSolid;
+  Canvas.Pen.Width := 1;
+  SetBkMode(Canvas.Handle, TRANSPARENT);
+  Canvas.Font.Name := 'Segoe UI';
+  Canvas.Font.Size := 8;
+  Canvas.Font.Style := [];
+  Canvas.Font.Color := clWhite;
+  LastLabelRight := Track.Left - 1000;
+
+  TickMs := (StartMs div MinorMs) * MinorMs;
+  if TickMs < StartMs then
+    Inc(TickMs, MinorMs);
+  while TickMs <= EndMs do
+  begin
+    Ratio := TimeViewPositionRatio(TickMs);
+    TickX := Track.Left + Round(Track.Width * Ratio);
+    if (TickMs mod MajorMs) = 0 then
+    begin
+      Canvas.Pen.Width := 2;
+      Canvas.Pen.Color := $00D0D0D0;
+      Canvas.MoveTo(Bounds.Left + TickX, Bounds.Top + TickY);
+      Canvas.LineTo(Bounds.Left + TickX, Bounds.Top + TickY + 8);
+      LabelText := FormatTimeMs(TickMs);
+      LabelSize := Canvas.TextExtent(LabelText);
+      if TickX - LabelSize.cx div 2 > LastLabelRight + 8 then
+      begin
+        Canvas.TextOut(Bounds.Left + TickX - LabelSize.cx div 2,
+          Bounds.Top + TickY + 9, LabelText);
+        LastLabelRight := TickX + LabelSize.cx div 2;
+      end;
+    end
+    else if MinorMs < MajorMs then
+    begin
+      Canvas.Pen.Width := 2;
+      Canvas.Pen.Color := $00B8B8B8;
+      Canvas.MoveTo(Bounds.Left + TickX, Bounds.Top + TickY);
+      Canvas.LineTo(Bounds.Left + TickX, Bounds.Top + TickY + 4);
+    end;
+    Inc(TickMs, MinorMs);
+  end;
+
+  if TimeViewActive and (FTimeViewStartMs > 0) then
+  begin
+    Canvas.Pen.Color := $00D0D0D0;
+    Canvas.MoveTo(Bounds.Left + Track.Left, Bounds.Top + TickY + 1);
+    Canvas.LineTo(Bounds.Left + Track.Left + 7, Bounds.Top + TickY + 5);
+    Canvas.LineTo(Bounds.Left + Track.Left, Bounds.Top + TickY + 9);
+  end;
+  if TimeViewActive and (TimeViewEndMs < FMaxMs) then
+  begin
+    Canvas.Pen.Color := $00D0D0D0;
+    Canvas.MoveTo(Bounds.Left + Track.Right, Bounds.Top + TickY + 1);
+    Canvas.LineTo(Bounds.Left + Track.Right - 7, Bounds.Top + TickY + 5);
+    Canvas.LineTo(Bounds.Left + Track.Right, Bounds.Top + TickY + 9);
+  end;
+  Canvas.Pen.Style := psClear;
 end;
 
 procedure TVideoMinerOverlaySeekBar.DrawTextButton(Canvas: TCanvas;
@@ -1826,6 +2045,18 @@ begin
     Exit;
   end;
 
+  if TimeRulerHitTest(Point) then
+  begin
+    FHovered := True;
+    if TimeViewActive then
+    begin
+      FTimeViewPanning := True;
+      FTimeViewPanStartMs := FTimeViewStartMs;
+      FTimeViewPanStartX := Point.X;
+    end;
+    Exit;
+  end;
+
   FDragging := True;
   FHovered := True;
   FDragPositionMs := PositionFromPoint(Point);
@@ -1844,7 +2075,8 @@ var
   NewVolume: Integer;
   NewVolumeHovered: Boolean;
 begin
-  NewHovered := FDragging or FVolumeDragging or BoundsHitTest(Point);
+  NewHovered := FDragging or FTimeViewPanning or FVolumeDragging or
+    BoundsHitTest(Point);
   Result := NewHovered <> FHovered;
   FHovered := NewHovered;
 
@@ -1914,6 +2146,12 @@ begin
     end;
   end;
 
+  if FTimeViewPanning then
+  begin
+    PanTimeViewToPoint(Point);
+    Result := True;
+  end;
+
   if FVolumeDragging then
   begin
     NewVolume := VolumeFromPoint(Point);
@@ -1938,7 +2176,8 @@ var
   PlaybackRateButtonClicked: Boolean;
   SeekPositionMs: Integer;
 begin
-  Result := FDragging or FVolumeDragging or BoundsHitTest(Point);
+  Result := FDragging or FTimeViewPanning or FVolumeDragging or
+    BoundsHitTest(Point);
 
   if FFullScreenButtonPressed then
   begin
@@ -2028,6 +2267,14 @@ begin
     Exit;
   end;
 
+  if FTimeViewPanning then
+  begin
+    PanTimeViewToPoint(Point);
+    FTimeViewPanning := False;
+    FHovered := BoundsHitTest(Point);
+    Exit;
+  end;
+
   if not FDragging then
     Exit;
 
@@ -2100,11 +2347,7 @@ begin
   MuteRect := MuteButtonRect;
   PlaybackRateRect := PlaybackRateButtonRect;
 
-  if FMaxMs > 0 then
-    PositionRatio := DisplayPositionMs / FMaxMs
-  else
-    PositionRatio := 0;
-  PositionRatio := Max(0.0, Min(1.0, PositionRatio));
+  PositionRatio := TimeViewPositionRatio(DisplayPositionMs);
   KnobCenterX := Track.Left + Round(Track.Width * PositionRatio);
   TrackCenterY := Track.Top + Track.Height div 2;
 
@@ -2123,6 +2366,7 @@ begin
         FilledRect.Right, Min(FilledRect.Bottom, FilledRect.Top + 2)),
         1, 132, $00FFD68F);
     DrawChapterMarkers(Canvas, Track);
+    DrawTimeRuler(Canvas, Track);
 
     ShadowRadius := 20;
     KnobRadius := 11;
@@ -2208,6 +2452,7 @@ begin
   FilledRect.Right := Max(FilledRect.Left + Track.Height, KnobCenterX);
   DrawAlphaRoundRect(Canvas, FilledRect, Track.Height, 230, SEEK_ACCENT_COLOR);
   DrawChapterMarkers(Canvas, Track);
+  DrawTimeRuler(Canvas, Track);
 
   ShadowRadius := 22;
   DrawAlphaEllipse(Canvas, Rect(KnobCenterX - ShadowRadius,
@@ -2305,7 +2550,8 @@ begin
   else if LocalX > Track.Right then
     LocalX := Track.Right;
 
-  Result := Round((LocalX - Track.Left) / Max(1, Track.Width) * FMaxMs);
+  Result := FTimeViewStartMs + Round((LocalX - Track.Left) /
+    Max(1, Track.Width) * TimeViewSpanMs);
   Result := Max(0, Min(FMaxMs, Result));
 end;
 
@@ -2365,11 +2611,108 @@ begin
 end;
 
 procedure TVideoMinerOverlaySeekBar.SetProgress(PositionMs, MaxMs: Integer);
+var
+  OldMaxMs: Integer;
 begin
+  OldMaxMs := FMaxMs;
   FMaxMs := Max(0, MaxMs);
+  if FMaxMs <> OldMaxMs then
+    ResetTimeView;
   FPositionMs := Max(0, Min(FMaxMs, PositionMs));
+  if FMaxMs <= 0 then
+    ResetTimeView
+  else if TimeViewActive then
+    EnsureTimeViewContains(FPositionMs);
   if not FDragging then
     FDragPositionMs := FPositionMs;
+end;
+
+procedure TVideoMinerOverlaySeekBar.ResetTimeView;
+begin
+  FTimeViewStartMs := 0;
+  FTimeViewSpanMs := 0;
+  FTimeViewPanning := False;
+  FTimeViewPanStartMs := 0;
+  FTimeViewPanStartX := 0;
+end;
+
+procedure TVideoMinerOverlaySeekBar.EnsureTimeViewContains(PositionMs: Integer);
+begin
+  if not TimeViewActive then
+    Exit;
+
+  if PositionMs < FTimeViewStartMs then
+    FTimeViewStartMs := PositionMs
+  else if PositionMs > TimeViewEndMs then
+    FTimeViewStartMs := PositionMs - FTimeViewSpanMs;
+
+  FTimeViewStartMs := Max(0, Min(FMaxMs - FTimeViewSpanMs, FTimeViewStartMs));
+end;
+
+procedure TVideoMinerOverlaySeekBar.PanTimeViewToPoint(const Point: TPoint);
+var
+  DeltaMs: Integer;
+  DeltaX: Integer;
+  Track: TRect;
+begin
+  if (not FTimeViewPanning) or (not TimeViewActive) then
+    Exit;
+
+  Track := TrackRect;
+  if Track.IsEmpty then
+    Exit;
+
+  DeltaX := Point.X - FTimeViewPanStartX;
+  DeltaMs := Round(DeltaX / Max(1, Track.Width) * FTimeViewSpanMs);
+  FTimeViewStartMs := FTimeViewPanStartMs - DeltaMs;
+  FTimeViewStartMs := Max(0, Min(FMaxMs - FTimeViewSpanMs, FTimeViewStartMs));
+end;
+
+function TVideoMinerOverlaySeekBar.ZoomTimeViewAtPoint(const Point: TPoint;
+  WheelDelta: Integer): Boolean;
+var
+  AnchorMs: Integer;
+  AnchorRatio: Double;
+  LocalX: Integer;
+  MinSpanMs: Integer;
+  NewSpanMs: Integer;
+  OldSpanMs: Integer;
+  Track: TRect;
+begin
+  Result := False;
+  if FMaxMs <= 0 then
+    Exit;
+
+  Track := TrackRect;
+  if Track.IsEmpty then
+    Exit;
+
+  OldSpanMs := TimeViewSpanMs;
+  if OldSpanMs <= 0 then
+    OldSpanMs := FMaxMs;
+
+  if WheelDelta > 0 then
+    NewSpanMs := Round(OldSpanMs / SEEK_TIME_VIEW_ZOOM_STEP)
+  else
+    NewSpanMs := Round(OldSpanMs * SEEK_TIME_VIEW_ZOOM_STEP);
+
+  MinSpanMs := Max(SEEK_TIME_VIEW_MIN_SPAN_MS, FFrameStepMs * 12);
+  MinSpanMs := Min(FMaxMs, MinSpanMs);
+  NewSpanMs := Max(MinSpanMs, Min(FMaxMs, NewSpanMs));
+  if NewSpanMs >= FMaxMs - 1 then
+  begin
+    Result := TimeViewActive;
+    ResetTimeView;
+    Exit;
+  end;
+
+  LocalX := Max(Track.Left, Min(Track.Right, Point.X - Bounds.Left));
+  AnchorRatio := (LocalX - Track.Left) / Max(1, Track.Width);
+  AnchorMs := PositionFromPoint(Point);
+  FTimeViewSpanMs := NewSpanMs;
+  FTimeViewStartMs := AnchorMs - Round(NewSpanMs * AnchorRatio);
+  FTimeViewStartMs := Max(0, Min(FMaxMs - FTimeViewSpanMs, FTimeViewStartMs));
+  Result := True;
 end;
 
 procedure TVideoMinerOverlaySeekBar.SetFullScreen(Value: Boolean);
@@ -2427,7 +2770,7 @@ begin
   TrackHeight := 7;
   if FHovered or FDragging then
     TrackHeight := 8;
-  TrackY := 17;
+  TrackY := 12;
   Result := Rect(PadX, TrackY, Bounds.Width - PadX, TrackY + TrackHeight);
 end;
 

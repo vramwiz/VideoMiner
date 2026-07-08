@@ -1253,6 +1253,9 @@ var
   MaxMs: Integer;
   PositionMs: Integer;
   PositionRatio: Double;
+  ViewEndMs: Integer;
+  ViewSpanMs: Integer;
+  ViewStartMs: Integer;
   TrackRect: TRect;
 begin
   if (FSeekBar = nil) or (not FSeekBarVisible) then
@@ -1268,7 +1271,19 @@ begin
     Exit;
 
   PositionMs := FSeekBar.CurrentDisplayPositionMs;
-  PositionRatio := Max(0.0, Min(1.0, PositionMs / MaxMs));
+  if FSeekBar.TimeViewZoomActive then
+  begin
+    ViewStartMs := FSeekBar.TimeViewStartMs;
+    ViewEndMs := FSeekBar.TimeViewEndMsValue;
+  end
+  else
+  begin
+    ViewStartMs := 0;
+    ViewEndMs := MaxMs;
+  end;
+  ViewSpanMs := Max(1, ViewEndMs - ViewStartMs);
+  PositionRatio := Max(0.0, Min(1.0, (PositionMs - ViewStartMs) /
+    ViewSpanMs));
   KnobX := TrackRect.Left + Round(TrackRect.Width * PositionRatio);
   KnobY := TrackRect.Top + TrackRect.Height div 2;
 
@@ -1291,9 +1306,9 @@ begin
   HoverMs := FSeekBarHoverPositionMs;
   if (HoverMs < 0) and FSeekPreviewVisible then
     HoverMs := FSeekPreviewPositionMs;
-  if (HoverMs >= 0) and (HoverMs <= MaxMs) then
+  if (HoverMs >= ViewStartMs) and (HoverMs <= ViewEndMs) then
   begin
-    HoverRatio := Max(0.0, Min(1.0, HoverMs / MaxMs));
+    HoverRatio := Max(0.0, Min(1.0, (HoverMs - ViewStartMs) / ViewSpanMs));
     HoverX := TrackRect.Left + Round(TrackRect.Width * HoverRatio);
     Canvas.Pen.Style := psSolid;
     Canvas.Pen.Width := 1;
@@ -1586,6 +1601,9 @@ begin
     State.Track := TrackRect;
     State.PositionMs := FSeekBar.CurrentDisplayPositionMs;
     State.MaxMs := FSeekBar.MaxMs;
+    State.TimeViewActive := FSeekBar.TimeViewZoomActive;
+    State.TimeViewStartMs := FSeekBar.TimeViewStartMs;
+    State.TimeViewEndMs := FSeekBar.TimeViewEndMsValue;
     State.HoverPositionMs := FSeekBarHoverPositionMs;
     State.Dragging := FSeekBar.Dragging;
     State.CheckEnabled := FSeekBar.CheckEnabled;
@@ -1888,7 +1906,10 @@ begin
       FOnSeekHoverPreviewEnd(Self);
     if FSeekBar.MouseDown(Point(X, Y)) then
     begin
-      FSeekBarHoverPositionMs := FSeekBar.CurrentDisplayPositionMs;
+      if FSeekBar.Dragging then
+        FSeekBarHoverPositionMs := FSeekBar.CurrentDisplayPositionMs
+      else if not FSeekBar.HoverPositionFromPoint(Point(X, Y), FSeekBarHoverPositionMs) then
+        FSeekBarHoverPositionMs := -1;
       UpdateD3DSeekBarOverlayState;
       InvalidateOverlayControl(FSeekBar);
     end;
@@ -1973,10 +1994,14 @@ begin
     Exit;
   end;
 
+  if (FSeekBar <> nil) and FSeekBar.TimeViewPanning then
+    Cursor := crSizeWE;
+
   if (FBossGestureDetector <> nil) and
      FBossGestureDetector.MouseMove(MousePoint, (Shift = []) and
        not FSeekBarVisible and
-       not ((FSeekBar <> nil) and FSeekBar.Dragging)) then
+       not ((FSeekBar <> nil) and (FSeekBar.Dragging or
+         FSeekBar.TimeViewPanning))) then
   begin
     CancelPendingSurfaceClick;
     if Assigned(FOnBossGesture) then
@@ -1990,10 +2015,15 @@ begin
   if SeekBarHit or KeepAliveHit then
     FSeekBarLastHitTick := GetTickCount64;
   KeepSeekBarVisible := SeekBarHit or KeepAliveHit or
-    ((FSeekBar <> nil) and FSeekBar.Dragging) or
+    ((FSeekBar <> nil) and (FSeekBar.Dragging or FSeekBar.TimeViewPanning)) or
     (FSeekBarVisible and (FSeekBarLastHitTick > 0) and
       (GetTickCount64 - FSeekBarLastHitTick <= 350));
   SetSeekBarVisibleFrom('mouse_move_keepalive', KeepSeekBarVisible);
+  if (Cursor = crSizeWE) and
+     ((FSeekBar = nil) or
+      (not FSeekBar.TimeViewPanning and
+       not (FSeekBarVisible and FSeekBar.TimeRulerHitTest(MousePoint)))) then
+    Cursor := crDefault;
 
   NavOverlayChanged := False;
   if FPreviousFileButton <> nil then
@@ -2047,6 +2077,8 @@ begin
   if FSeekBarVisible and (FSeekBar <> nil) then
   begin
     FSeekBar.UpdateLayout(SeekBarLayoutRect);
+    if FSeekBar.TimeViewPanning or FSeekBar.TimeRulerHitTest(MousePoint) then
+      Cursor := crSizeWE;
     if FSeekBar.HoverPositionFromPoint(MousePoint, HoverPositionMs) then
       FSeekBarHoverPositionMs := HoverPositionMs
     else if not FSeekBar.Dragging then
@@ -2054,7 +2086,10 @@ begin
     if FSeekBar.MouseMove(MousePoint) then
     begin
       if FSeekBar.Dragging then
-        FSeekBarHoverPositionMs := FSeekBar.CurrentDisplayPositionMs;
+        FSeekBarHoverPositionMs := FSeekBar.CurrentDisplayPositionMs
+      else if FSeekBar.TimeViewPanning and
+        (not FSeekBar.HoverPositionFromPoint(MousePoint, FSeekBarHoverPositionMs)) then
+        FSeekBarHoverPositionMs := -1;
       UpdateD3DSeekBarOverlayState;
       RefreshD3DFramePresentation;
       InvalidateOverlayControl(FSeekBar);
@@ -2143,12 +2178,16 @@ begin
   end;
 
   if (Button = mbLeft) and (FSeekBar <> nil) and
-     (FSeekBarVisible or FSeekBar.Dragging) then
+     (FSeekBarVisible or FSeekBar.Dragging or FSeekBar.TimeViewPanning) then
   begin
     if FSeekBar.MouseUp(Point(X, Y)) then
     begin
       if not FSeekBar.HoverPositionFromPoint(Point(X, Y), FSeekBarHoverPositionMs) then
         FSeekBarHoverPositionMs := -1;
+      if FSeekBar.TimeRulerHitTest(Point(X, Y)) then
+        Cursor := crSizeWE
+      else
+        Cursor := crDefault;
       UpdateD3DSeekBarOverlayState;
       InvalidateOverlayControl(FSeekBar);
     end;
@@ -2229,7 +2268,6 @@ var
   D3DRefreshed: Boolean;
   CurrentPositionMs: Integer;
   SeekPositionMs: Integer;
-  StepMs: Integer;
 begin
   Result := False;
 
@@ -2260,21 +2298,14 @@ begin
     if FSeekBar.BoundsHitTest(LocalPoint) then
     begin
       SetSeekBarVisibleFrom('mouse_wheel_seekbar', True);
-      if FSeekBar.CheckEnabled or (not FPlaybackActive) then
-        StepMs := FSeekWheelFrameStepMs
-      else
-        StepMs := SEEK_WHEEL_STEP_MS;
-      SeekPositionMs := FSeekBar.WheelPosition(WheelDelta, StepMs);
-      if SeekPositionMs < FSeekBar.CurrentDisplayPositionMs then
+      if FSeekBar.ZoomTimeViewAtPoint(LocalPoint, WheelDelta) then
       begin
-        FSeekBar.SetProgress(SeekPositionMs, FSeekBar.MaxMs);
-        FSeekBarHoverPositionMs := SeekPositionMs;
+        if not FSeekBar.HoverPositionFromPoint(LocalPoint, FSeekBarHoverPositionMs) then
+          FSeekBarHoverPositionMs := -1;
         UpdateD3DSeekBarOverlayState;
         RefreshD3DFramePresentation;
         InvalidateOverlayControl(FSeekBar);
       end;
-      if Assigned(FOnSeekByWheel) then
-        FOnSeekByWheel(Self, SeekPositionMs);
       Result := True;
       Exit;
     end;
