@@ -1495,6 +1495,7 @@ function TVideoMinerVideoSurface.ChapterMarkerToleranceMs(MaxMs,
   PixelTolerance: Integer): Integer;
 var
   TrackRect: TRect;
+  VisibleSpanMs: Integer;
 begin
   Result := 0;
   if (FSeekBar = nil) or (MaxMs <= 0) or (PixelTolerance <= 0) then
@@ -1505,7 +1506,8 @@ begin
   if TrackRect.Width <= 0 then
     Exit;
 
-  Result := Ceil(Int64(MaxMs) * PixelTolerance / TrackRect.Width);
+  VisibleSpanMs := FSeekBar.TimeViewSpanMsValue;
+  Result := Ceil(Int64(VisibleSpanMs) * PixelTolerance / TrackRect.Width);
   Result := Max(1, Result);
 end;
 
